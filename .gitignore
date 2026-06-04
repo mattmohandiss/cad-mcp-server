@@ -1,0 +1,4 @@
+# Local/generated project artifacts present in this repo
+.direnv/
+dist/
+node_modules/

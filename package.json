@@ -1,0 +1,51 @@
+{
+  "name": "cad-mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server for CAD STEP file analysis",
+  "type": "module",
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "!dist/tests",
+    "README.md"
+  ],
+  "bin": {
+    "cad-mcp-server": "dist/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "watch": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "fmt": "prettier --write src/",
+    "lint": "eslint \"src/**/*.ts\""
+  },
+  "keywords": [
+    "mcp",
+    "cad",
+    "step"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "occt-wasm": "^3.2.3",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^8.60.1",
+    "@typescript-eslint/parser": "^8.60.1",
+    "eslint": "^8.55.0",
+    "prettier": "^3.1.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.3.3",
+    "typescript-language-server": "^5.1.3",
+    "vitest": "^4.1.8"
+  }
+}
