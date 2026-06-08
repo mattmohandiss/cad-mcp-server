@@ -39,7 +39,7 @@ export interface AagModel {
 
 export interface AagProvider {
   name: string;
-  capabilities: AagCapability[];
+  capabilities: readonly AagCapability[];
   build(input: AagInput, options?: AagOptions): Promise<AagModel>;
   recognizeFeatures?(input: AagModel): Promise<FeatureCandidate[]>;
 }

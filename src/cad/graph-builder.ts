@@ -114,7 +114,12 @@ export function buildCadKnowledgeGraph(input: BuildInput): CadKnowledgeGraph {
       schema: semantic.schema,
       applicationProtocol: semantic.applicationProtocol,
       productNames: semantic.productNames,
+      productCount: semantic.productCount,
       authoringSystem: semantic.authoringSystem,
+      organizationName: semantic.organizationName,
+      hasAssembly: semantic.hasAssembly,
+      toleranceEntityCount: semantic.toleranceEntityCount,
+      shapeRepresentationCount: semantic.shapeRepresentationCount,
       pmi: semantic.pmi,
       entityCounts: semantic.entityCounts,
     },
@@ -123,10 +128,55 @@ export function buildCadKnowledgeGraph(input: BuildInput): CadKnowledgeGraph {
 
   facts.push(
     fact('fact:schema', 'exchange', 'schema', semantic.schema ?? 'unknown', ['exchange:metadata']),
-    fact('fact:pmi-summary', 'exchange', 'pmi_summary', semantic.pmi, ['exchange:metadata'])
+    fact('fact:pmi-summary', 'exchange', 'pmi_summary', semantic.pmi, ['exchange:metadata']),
+    fact('fact:product-count', 'exchange', 'product_count', semantic.productCount, [
+      'exchange:metadata',
+    ]),
+    fact('fact:has-assembly', 'exchange', 'has_assembly', semantic.hasAssembly, [
+      'exchange:metadata',
+    ]),
+    fact(
+      'fact:tolerance-count',
+      'exchange',
+      'tolerance_entity_count',
+      semantic.toleranceEntityCount,
+      ['exchange:metadata']
+    )
   );
 
-  if (!aag.available) {
+  if (aag.available) {
+    for (const aagNode of aag.nodes) {
+      nodes.push({
+        id: aagNode.id,
+        type: 'face',
+        category: 'topology',
+        label: `Face ${aagNode.attributes['index']}`,
+        attributes: aagNode.attributes as Record<string, unknown>,
+      });
+      edges.push(edge(`edge:file-aag-face-${aagNode.id}`, 'aag_contains', 'file:0', aagNode.id));
+    }
+
+    for (const aagEdge of aag.edges) {
+      edges.push({
+        id: aagEdge.id,
+        type: 'adjacent',
+        from: aagEdge.from,
+        to: aagEdge.to,
+        attributes: aagEdge.attributes as Record<string, unknown>,
+      });
+    }
+
+    facts.push(
+      fact('fact:aag-face-count', 'topology', 'aag_face_count', aag.nodes.length, [
+        'file:0',
+        ...aag.nodes.map((n) => n.id),
+      ]),
+      fact('fact:aag-adjacency-count', 'topology', 'aag_adjacency_count', aag.edges.length, [
+        'file:0',
+        ...aag.edges.map((e) => e.id),
+      ])
+    );
+  } else {
     const warning: Warning = {
       id: makeWarningId('aag_unavailable'),
       type: 'aag_unavailable',

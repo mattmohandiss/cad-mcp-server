@@ -63,6 +63,12 @@ export function geometrySummary(graph: CadKnowledgeGraph) {
     faceCount: graph.brep.faceCount,
     edgeStatistics: graph.brep.edgeStatistics,
     bodies: graph.brep.bodies,
+    aag: graph.aag.available
+      ? {
+          faceCount: graph.aag.nodes.length,
+          adjacencyCount: graph.aag.edges.length,
+        }
+      : { available: false },
   };
 }
 
@@ -71,7 +77,12 @@ export function exchangeSummary(graph: CadKnowledgeGraph) {
     schema: graph.semantic.schema,
     applicationProtocol: graph.semantic.applicationProtocol,
     productNames: graph.semantic.productNames,
+    productCount: graph.semantic.productCount,
     authoringSystem: graph.semantic.authoringSystem,
+    organizationName: graph.semantic.organizationName,
+    hasAssembly: graph.semantic.hasAssembly,
+    toleranceEntityCount: graph.semantic.toleranceEntityCount,
+    shapeRepresentationCount: graph.semantic.shapeRepresentationCount,
     pmi: graph.semantic.pmi,
   };
 }

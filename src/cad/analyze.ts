@@ -1,11 +1,11 @@
-import { UnavailableAagProvider } from '../providers/unavailable-aag.js';
 import { LightweightStepSemanticProvider } from '../providers/lightweight-step/semantic-provider.js';
+import { OcctWasmAagProvider } from '../providers/occt-wasm/aag-provider.js';
 import { OcctWasmBRepProvider } from '../providers/occt-wasm/brep-provider.js';
 import type { AnalysisOptions, CadKnowledgeGraph } from './schema.js';
 import { buildCadKnowledgeGraph } from './graph-builder.js';
 
 const brepProvider = new OcctWasmBRepProvider();
-const aagProvider = new UnavailableAagProvider();
+const aagProvider = new OcctWasmAagProvider();
 const semanticProvider = new LightweightStepSemanticProvider();
 
 export async function analyzeStepFile(

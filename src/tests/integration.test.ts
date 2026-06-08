@@ -71,7 +71,7 @@ describe('CAD MCP five-tool surface', () => {
     expect(result.error.message).toContain('STEP import failed');
   });
 
-  it('inspects a known block with provider limitations', async () => {
+  it('inspects a known block with providers and AAG summary', async () => {
     const result = expectSuccess(await handleInspectStepFile(blockStepFile));
     const facts = result.data.facts as Record<string, Record<string, unknown>>;
     const geometry = facts.geometry as Record<string, unknown>;
@@ -83,27 +83,67 @@ describe('CAD MCP five-tool surface', () => {
     expect(geometry.volume).toBeCloseTo(6000, 6);
     expect(geometry.surfaceArea).toBeCloseTo(2200, 6);
     expect(geometry.bodyCount).toBe(1);
-    expect(result.data.providers).toBeTypeOf('object');
+
+    const aag = geometry.aag as Record<string, unknown>;
+    expect(aag.faceCount).toBe(6);
+    expect(aag.adjacencyCount).toBe(12);
+
+    const providers = result.data.providers as { providers: unknown[] };
+    expect(providers.providers.length).toBe(3);
+
+    const exchange = facts.exchange as Record<string, unknown>;
+    expect(exchange.productCount).toBe(1);
   });
 
-  it('analyzes selected detail categories', async () => {
+  it('analyzes selected detail categories with AAG and semantic data', async () => {
     const result = expectSuccess(
       await handleAnalyzeStepDetail(blockStepFile, ['geometry', 'topology', 'health'], 'full')
     );
     expect(Array.isArray(result.data.facts)).toBe(true);
     expect(Array.isArray(result.data.nodes)).toBe(true);
     expect(Array.isArray(result.data.warnings)).toBe(true);
+
+    const topologyFacts = (result.data.facts as Array<{ category: string }>).filter(
+      (f) => f.category === 'topology'
+    );
+    expect(topologyFacts.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('queries AAG face adjacency from a simple block', async () => {
+    const result = expectSuccess(
+      await handleQueryStepGraph(blockStepFile, {
+        find: 'nodes',
+        type: 'face',
+      })
+    );
+    const results = result.data.results as Array<Record<string, unknown>>;
+    expect(results.length).toBe(6);
+  });
+
+  it('queries adjacency edges from AAG', async () => {
+    const result = expectSuccess(
+      await handleQueryStepGraph(blockStepFile, {
+        find: 'edges',
+        type: 'adjacent',
+      })
+    );
+    const results = result.data.results as Array<Record<string, unknown>>;
+    expect(results.length).toBe(12);
+    for (const edge of results) {
+      expect(edge.type).toBe('adjacent');
+    }
   });
 
   it('queries feature candidates from a block with a through-hole', async () => {
     const result = expectSuccess(
       await handleQueryStepGraph(blockHoleStepFile, {
         find: 'features',
-        where: { type: 'hole_candidate' },
       })
     );
-    const results = result.data.results as unknown[];
+    const results = result.data.results as Array<Record<string, unknown>>;
     expect(results.length).toBeGreaterThan(0);
+    const holeFeature = results.find((r) => String(r.type).includes('hole'));
+    expect(holeFeature).toBeDefined();
   });
 
   it('compares two files with metric deltas', async () => {
@@ -134,5 +174,8 @@ describe('CAD MCP five-tool surface', () => {
     const geometry = facts.geometry as Record<string, unknown>;
     expect(Number(geometry.bodyCount)).toBeGreaterThan(0);
     expect(Number(geometry.volume)).toBeGreaterThan(0);
+    const aag = geometry.aag as Record<string, unknown>;
+    expect(aag.faceCount).toBeGreaterThan(0);
+    expect(aag.adjacencyCount).toBeGreaterThan(0);
   });
 });

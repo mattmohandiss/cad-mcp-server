@@ -30,8 +30,7 @@ export class OcctWasmBRepProvider implements BRepProvider {
           name: this.name,
           capabilities: [...this.capabilities],
           limitations: [
-            'Does not expose true AAG face adjacency/vexity in this provider path.',
-            'Feature candidates are heuristic B-rep hints, not authoritative design intent.',
+            'Feature candidates in the B-rep path are heuristic B-rep hints. AAG-backed features are available via the AAG provider.',
           ],
         },
         filePath,

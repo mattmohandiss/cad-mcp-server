@@ -1,6 +1,14 @@
 import type { Limitation, ProviderInfo, Provenance, UnitSystem } from './schema.js';
 
-export type SemanticCapability = 'step_header' | 'schema_detection' | 'product_names' | 'pmi_hints';
+export type SemanticCapability =
+  | 'step_header'
+  | 'schema_detection'
+  | 'product_names'
+  | 'pmi_hints'
+  | 'product_structure'
+  | 'authoring_info'
+  | 'tolerance_detection'
+  | 'assembly_hints';
 
 export interface SemanticOptions {
   includeEntityCounts?: boolean;
@@ -28,7 +36,12 @@ export interface SemanticModel {
   applicationProtocol?: string;
   units?: UnitSystem;
   productNames: string[];
+  productCount: number;
   authoringSystem?: string;
+  organizationName?: string;
+  hasAssembly: boolean;
+  toleranceEntityCount: number;
+  shapeRepresentationCount: number;
   pmi: PmiSummary;
   entityCounts: Record<string, number>;
   facts: SemanticFact[];
