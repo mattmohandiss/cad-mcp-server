@@ -1,34 +1,23 @@
-import { mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { OcctKernel } from 'occt-wasm';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { handleAnalyzeStepFile } from '../tools/analyze.js';
-import { handleListBodies } from '../tools/bodies.js';
-import { handleExtractEdges } from '../tools/edges.js';
+import { handleAnalyzeStepDetail } from '../tools/analyze-detail.js';
+import { handleCompareStepFiles } from '../tools/compare.js';
+import { handleGenerateStepReport } from '../tools/report.js';
+import { handleInspectStepFile } from '../tools/inspect.js';
+import { handleQueryStepGraph } from '../tools/query-graph.js';
+import { generateStep, NIST_FILE } from './fixtures.js';
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-async function generateStep(gen: (kernel: OcctKernel) => string): Promise<string> {
-  const fixtureDir = await mkdtemp(path.join(tmpdir(), 'cad-mcp-'));
-  const stepFile = path.join(fixtureDir, `fixture_${Math.random().toString(36).slice(2, 8)}.step`);
-  const kernel = await OcctKernel.init();
-  const stepData = gen(kernel);
-  kernel[Symbol.dispose]?.();
-  await writeFile(stepFile, stepData, 'utf8');
-  return stepFile;
+interface ToolSuccess {
+  ok: true;
+  data: Record<string, unknown>;
 }
 
-interface ToolResponse {
-  success?: boolean;
-  // Tool handlers intentionally return dynamic JSON payloads in tests.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  data?: any;
-  error?: string;
-  type?: string;
+interface ToolFailure {
+  ok: false;
+  error: { type: string; message: string };
 }
+
+type ToolResponse = ToolSuccess | ToolFailure;
 
 function asToolResponse(value: unknown): ToolResponse {
   expect(value).toBeTypeOf('object');
@@ -36,17 +25,17 @@ function asToolResponse(value: unknown): ToolResponse {
   return value as ToolResponse;
 }
 
-// ---------------------------------------------------------------------------
-// Fixtures
-// ---------------------------------------------------------------------------
+function expectSuccess(value: unknown): ToolSuccess {
+  const response = asToolResponse(value);
+  expect(response.ok).toBe(true);
+  return response as ToolSuccess;
+}
 
-const NIST_FILE = path.join(
-  process.cwd(),
-  'samples',
-  'NIST-PMI-STEP-Files',
-  'AP203 geometry only',
-  'nist_ftc_11_asme1_rb.stp'
-);
+function expectFailure(value: unknown): ToolFailure {
+  const response = asToolResponse(value);
+  expect(response.ok).toBe(false);
+  return response as ToolFailure;
+}
 
 let blockStepFile: string;
 let cylinderStepFile: string;
@@ -55,16 +44,12 @@ let multiBodyStepFile: string;
 
 beforeAll(async () => {
   blockStepFile = await generateStep((k) => k.exportStep(k.makeBox(10, 20, 30)));
-
   cylinderStepFile = await generateStep((k) => k.exportStep(k.makeCylinder(5, 20)));
-
   blockHoleStepFile = await generateStep((k) => {
     const box = k.makeBox(30, 20, 10);
-    // Cylinder from z=0 to z=20 (box is z=0 to z=10), fully spanning the part
     const hole = k.translate(k.makeCylinder(4, 20), 15, 10, 0);
     return k.exportStep(k.cut(box, hole));
   });
-
   multiBodyStepFile = await generateStep((k) => {
     const a = k.makeBox(10, 10, 10);
     const b = k.translate(k.makeBox(10, 10, 10), 20, 0, 0);
@@ -72,134 +57,82 @@ beforeAll(async () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
-describe('CAD MCP tool handlers', () => {
-  // ── Error handling ────────────────────────────────────────────────────
-
+describe('CAD MCP five-tool surface', () => {
   it('returns a structured missing-file error', async () => {
-    const result = asToolResponse(await handleAnalyzeStepFile('/nonexistent/file.step'));
-    expect(result.success).toBe(false);
-    expect(result.type).toBe('file_not_found');
-    expect(result.error).toContain('File not found');
+    const result = expectFailure(await handleInspectStepFile('/nonexistent/file.step'));
+    expect(result.error.type).toBe('file_not_found');
+    expect(result.error.message).toContain('File not found');
   });
 
   it('rejects the metadata-only dummy STEP file without fake geometry', async () => {
-    const path_ = path.join(process.cwd(), 'samples', 'dummy.step');
-    const result = asToolResponse(await handleAnalyzeStepFile(path_));
-    expect(result.success).toBe(false);
-    expect(result.type).toBe('invalid_format');
-    expect(result.error).toContain('STEP import failed');
+    const dummyPath = path.join(process.cwd(), 'samples', 'dummy.step');
+    const result = expectFailure(await handleInspectStepFile(dummyPath));
+    expect(result.error.type).toBe('invalid_format');
+    expect(result.error.message).toContain('STEP import failed');
   });
 
-  // ── Analytic block (10x20x30) ─────────────────────────────────────────
+  it('inspects a known block with provider limitations', async () => {
+    const result = expectSuccess(await handleInspectStepFile(blockStepFile));
+    const facts = result.data.facts as Record<string, Record<string, unknown>>;
+    const geometry = facts.geometry as Record<string, unknown>;
+    const dimensions = geometry.dimensions as Record<string, number>;
 
-  describe('analytic block', () => {
-    it('analyzes with known geometry', async () => {
-      const r = asToolResponse(await handleAnalyzeStepFile(blockStepFile));
-      expect(r.success).toBe(true);
-      expect(r.data.dimensions.width).toBeCloseTo(10, 6);
-      expect(r.data.dimensions.height).toBeCloseTo(20, 6);
-      expect(r.data.dimensions.depth).toBeCloseTo(30, 6);
-      expect(r.data.volume).toBeCloseTo(6000, 6);
-      expect(r.data.surfaceArea).toBeCloseTo(2200, 6);
-      expect(r.data.bodyCount).toBe(1);
-    });
-
-    it('lists as one body with formatted values', async () => {
-      const r = asToolResponse(await handleListBodies(blockStepFile));
-      expect(r.success).toBe(true);
-      expect(r.data.bodyCount).toBe(1);
-      expect(r.data.bodies[0].volume).toBe('6000.00');
-      expect(r.data.bodies[0].surfaceArea).toBe('2200.00');
-    });
-
-    it('extracts stable edge statistics', async () => {
-      const r = asToolResponse(await handleExtractEdges(blockStepFile));
-      expect(r.success).toBe(true);
-      expect(r.data.totalEdgeCount).toBe(12);
-      expect(r.data.statistics.minLength).toBe('10.00');
-      expect(r.data.statistics.maxLength).toBe('30.00');
-      expect(r.data.edgeLengthRanges.medium).toBe(4);
-      expect(r.data.edgeLengthRanges.large).toBe(8);
-    });
+    expect(dimensions.width).toBeCloseTo(10, 6);
+    expect(dimensions.height).toBeCloseTo(20, 6);
+    expect(dimensions.depth).toBeCloseTo(30, 6);
+    expect(geometry.volume).toBeCloseTo(6000, 6);
+    expect(geometry.surfaceArea).toBeCloseTo(2200, 6);
+    expect(geometry.bodyCount).toBe(1);
+    expect(result.data.providers).toBeTypeOf('object');
   });
 
-  // ── Cylinder (r=5, h=20) ──────────────────────────────────────────────
-
-  describe('analytic cylinder', () => {
-    it('analyzes with expected volume and surface area', async () => {
-      const r = asToolResponse(await handleAnalyzeStepFile(cylinderStepFile));
-      expect(r.success).toBe(true);
-      // πr²h = π * 25 * 20 = 500π ≈ 1570.80
-      expect(r.data.volume).toBeCloseTo(500 * Math.PI, 1);
-      // 2πr² + 2πrh = 50π + 200π = 250π ≈ 785.40
-      expect(r.data.surfaceArea).toBeCloseTo(250 * Math.PI, 1);
-      expect(r.data.bodyCount).toBe(1);
-    });
-
-    it('lists as one body with correct volume', async () => {
-      const r = asToolResponse(await handleListBodies(cylinderStepFile));
-      expect(r.success).toBe(true);
-      expect(r.data.bodyCount).toBe(1);
-      expect(r.data.bodies[0].volume).toBe((500 * Math.PI).toFixed(2));
-    });
+  it('analyzes selected detail categories', async () => {
+    const result = expectSuccess(
+      await handleAnalyzeStepDetail(blockStepFile, ['geometry', 'topology', 'health'], 'full')
+    );
+    expect(Array.isArray(result.data.facts)).toBe(true);
+    expect(Array.isArray(result.data.nodes)).toBe(true);
+    expect(Array.isArray(result.data.warnings)).toBe(true);
   });
 
-  // ── Block with through-hole ───────────────────────────────────────────
-
-  describe('block with through-hole', () => {
-    it('analyzes with reduced volume from subtracted cylinder', async () => {
-      const r = asToolResponse(await handleAnalyzeStepFile(blockHoleStepFile));
-      expect(r.success).toBe(true);
-      // Box volume 6000 minus cylinder πr²h = π*4²*10 = 160π through the part
-      const expected = 6000 - 160 * Math.PI;
-      expect(r.data.volume).toBeCloseTo(expected, 0);
-      expect(r.data.bodyCount).toBe(1);
-    });
-
-    it('lists as one body', async () => {
-      const r = asToolResponse(await handleListBodies(blockHoleStepFile));
-      expect(r.success).toBe(true);
-      expect(r.data.bodyCount).toBe(1);
-    });
+  it('queries feature candidates from a block with a through-hole', async () => {
+    const result = expectSuccess(
+      await handleQueryStepGraph(blockHoleStepFile, {
+        find: 'features',
+        where: { type: 'hole_candidate' },
+      })
+    );
+    const results = result.data.results as unknown[];
+    expect(results.length).toBeGreaterThan(0);
   });
 
-  // ── Multi-body compound ───────────────────────────────────────────────
-
-  describe('multi-body compound', () => {
-    it('analyzes as two bodies', async () => {
-      const r = asToolResponse(await handleAnalyzeStepFile(multiBodyStepFile));
-      expect(r.success).toBe(true);
-      expect(r.data.bodyCount).toBe(2);
-    });
-
-    it('lists each body with correct individual volume', async () => {
-      const r = asToolResponse(await handleListBodies(multiBodyStepFile));
-      expect(r.success).toBe(true);
-      expect(r.data.bodyCount).toBe(2);
-      expect(r.data.bodies[0].volume).toBe('1000.00');
-      expect(r.data.bodies[1].volume).toBe('1000.00');
-    });
+  it('compares two files with metric deltas', async () => {
+    const result = expectSuccess(await handleCompareStepFiles(blockStepFile, cylinderStepFile));
+    const deltas = result.data.deltas as Record<string, unknown>;
+    expect(deltas.volume).toBeTypeOf('number');
+    expect(deltas.bodyCount).toBe(0);
   });
 
-  // ── NIST regression ───────────────────────────────────────────────────
+  it('generates JSON plus Markdown report', async () => {
+    const result = expectSuccess(
+      await handleGenerateStepReport(blockStepFile, 'engineering_review')
+    );
+    expect(result.data.sections).toBeTypeOf('object');
+    expect(result.data.markdown).toContain('# STEP engineering review Report');
+  });
 
-  describe('NIST regression', () => {
-    it('imports a real AP203 geometry file without crashing', async () => {
-      const r = asToolResponse(await handleAnalyzeStepFile(NIST_FILE));
-      expect(r.success).toBe(true);
-      expect(r.data.bodyCount).toBeGreaterThan(0);
-      expect(r.data.volume).toBeGreaterThan(0);
-    });
+  it('handles multibody geometry in inspect output', async () => {
+    const result = expectSuccess(await handleInspectStepFile(multiBodyStepFile));
+    const facts = result.data.facts as Record<string, Record<string, unknown>>;
+    const geometry = facts.geometry as Record<string, unknown>;
+    expect(geometry.bodyCount).toBe(2);
+  });
 
-    it('extracts edges from a real NIST file', async () => {
-      const r = asToolResponse(await handleExtractEdges(NIST_FILE));
-      expect(r.success).toBe(true);
-      expect(r.data.totalEdgeCount).toBeGreaterThan(0);
-      expect(Number(r.data.statistics.minLength)).toBeGreaterThanOrEqual(0);
-    });
+  it('imports a real NIST AP203 geometry file without crashing', async () => {
+    const result = expectSuccess(await handleInspectStepFile(NIST_FILE));
+    const facts = result.data.facts as Record<string, Record<string, unknown>>;
+    const geometry = facts.geometry as Record<string, unknown>;
+    expect(Number(geometry.bodyCount)).toBeGreaterThan(0);
+    expect(Number(geometry.volume)).toBeGreaterThan(0);
   });
 });

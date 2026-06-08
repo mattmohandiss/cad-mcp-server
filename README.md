@@ -1,199 +1,155 @@
 # CAD MCP Server
 
-A minimal MCP (Model Context Protocol) server for analyzing STEP CAD files locally with OpenCascade compiled to WebAssembly.
+A local MCP server for read-only STEP CAD analysis. The server converts STEP files into an AI-facing CAD knowledge graph with measured facts, feature candidates, exchange metadata, warnings, limitations, and provider provenance.
 
 ## Quick Start
 
-### Setup
-
 ```bash
 just setup
-```
-
-### Run Integration Tests
-
-```bash
-just test
-```
-
-### Start the MCP Server
-
-```bash
 just build
 npm start
 ```
 
-This starts the MCP server that listens for tool calls on stdin/stdout.
-
-### Build
+Run validation:
 
 ```bash
+just check
 just build
 ```
 
 ## Architecture
 
+```text
+MCP tools
+  -> CAD application services
+  -> CadKnowledgeGraph
+  -> BRepProvider / AagProvider / SemanticProvider
+  -> STEP files
 ```
-MCP Client → MCP Server (Node.js) → OpenCascade WASM → STEP Files
-```
+
+The architecture is provider-neutral:
+
+- `BRepProvider` supplies exact geometry/topology facts. Current implementation: `occt-wasm`.
+- `AagProvider` supplies face adjacency and feature-recognition graph facts. Current implementation: explicitly unavailable until a real AAG provider is integrated.
+- `SemanticProvider` supplies STEP exchange metadata and OWL-like facts. Current implementation: lightweight STEP text/header parser.
 
 ## Available Tools
 
-The MCP server exposes 3 tools:
+The MCP server exposes five tools.
 
-### 1. `analyze_step_file`
+### `inspect_step_file`
 
-Analyze a STEP file and extract basic geometry information.
+Fast first-pass overview with geometry, exchange metadata, health warnings, and provider limitations.
 
-**Input:**
 ```json
 {
-  "file_path": "/path/to/file.step"
+  "file_path": "/path/to/model.step"
 }
 ```
 
-**Output:**
+### `analyze_step_detail`
+
+Category-selected analysis over the canonical CAD knowledge graph.
+
 ```json
 {
-  "success": true,
-  "data": {
-    "filePath": "...",
-    "units": "mm",
-    "boundingBox": { "min": {...}, "max": {...} },
-    "dimensions": { "width": ..., "height": ..., "depth": ... },
-    "volume": 1234.56,
-    "surfaceArea": 567.89,
-    "bodyCount": 1,
-    "shapeType": "complex",
-    "summary": "..."
+  "file_path": "/path/to/model.step",
+  "categories": ["geometry", "topology", "features", "exchange", "health"],
+  "detail_level": "summary"
+}
+```
+
+Valid categories: `geometry`, `topology`, `structure`, `features`, `spatial`, `exchange`, `health`.
+
+Valid detail levels: `summary`, `standard`, `full`.
+
+### `query_step_graph`
+
+Deterministic graph query interface for follow-up questions.
+
+```json
+{
+  "file_path": "/path/to/model.step",
+  "query": {
+    "find": "features",
+    "where": { "type": "hole_candidate" }
   }
 }
 ```
 
-### 2. `list_bodies`
+### `compare_step_files`
 
-List all bodies in a STEP file with their properties.
+Compares two STEP files using metric, metadata, feature-count, and health/risk deltas.
 
-**Input:**
 ```json
 {
-  "file_path": "/path/to/file.step"
+  "file_a": "/path/to/old.step",
+  "file_b": "/path/to/new.step"
 }
 ```
 
-**Output:**
+### `generate_step_report`
+
+Generates structured JSON sections plus a Markdown report.
+
 ```json
 {
-  "success": true,
-  "data": {
-    "filePath": "...",
-    "bodyCount": 1,
-    "bodies": [
-      {
-        "index": 0,
-        "volume": "1234.56",
-        "surfaceArea": "567.89",
-        "boundingBox": { "min": {...}, "max": {...} },
-        "features": {
-          "hasHoles": true,
-          "hasFillets": true
-        },
-        "summary": "..."
-      }
-    ]
+  "file_path": "/path/to/model.step",
+  "report_type": "engineering_review"
+}
+```
+
+Report types: `engineering_review`, `supplier_review`, `import_risk`, `space_claim`, `manufacturing_handoff`, `pmi_audit`.
+
+## Response Shape
+
+Success:
+
+```json
+{
+  "ok": true,
+  "data": {}
+}
+```
+
+Error:
+
+```json
+{
+  "ok": false,
+  "error": {
+    "type": "file_not_found|invalid_format|parse_error|unknown",
+    "message": "..."
   }
 }
 ```
 
-### 3. `extract_edges`
+Tool outputs separate:
 
-Extract edge information from a STEP file.
-
-**Input:**
-```json
-{
-  "file_path": "/path/to/file.step"
-}
-```
-
-**Output:**
-```json
-{
-  "success": true,
-  "data": {
-    "filePath": "...",
-    "totalEdgeCount": 24,
-    "statistics": {
-      "averageLength": "12.34",
-      "minLength": "1.23",
-      "maxLength": "45.67"
-    },
-    "detectedFeatures": {
-      "hasHoles": true,
-      "hasFillets": true
-    },
-    "edgeLengthRanges": {
-      "tiny": 0,
-      "small": 3,
-      "medium": 15,
-      "large": 6,
-      "xlarge": 0
-    },
-    "summary": "..."
-  }
-}
-```
+- `facts`: directly measured or parsed values.
+- `inferences`: feature/spatial/health candidates with evidence.
+- `warnings`: suspicious conditions and risks.
+- `limitations`: what current providers cannot prove.
+- `providers`: provider capabilities and limitations.
 
 ## Project Structure
 
-```
-cad-mcp/
-  src/
-    index.ts              # MCP server entry point
-    tools/
-      analyze.ts          # analyze_step_file implementation
-      bodies.ts           # list_bodies implementation
-      edges.ts            # extract_edges implementation
-    utils/
-      cad-analyzer.ts     # Analyzer backend (re-exports occt-cad)
-      occt-cad.ts         # OpenCascade WASM analyzer
-      schema.ts           # TypeScript types
-    tests/
-      integration.test.ts # Integration tests
-  samples/
-    dummy.step            # MCP plumbing fixture, not real geometry
-  justfile                # Task runner
-  package.json
-  tsconfig.json
+```text
+src/
+  index.ts
+  tools/                 # MCP tool handlers
+  cad/                   # graph builder, projections, query, compare, report
+  providers/             # provider interfaces and implementations
+  utils/                 # generic errors, IDs, numeric helpers
+  tests/                 # integration fixtures and tests
 ```
 
-## Implementation Details
+## Current Limitations
 
-### CAD Analysis
-
-The analyzer uses `occt-wasm`, which packages OpenCascade as WebAssembly and runs inside Node.js.
-
-The included `samples/dummy.step` file is a minimal STEP metadata fixture for MCP plumbing tests and should not be used as a geometry correctness fixture.
-
-### Error Handling
-
-All errors are returned as JSON with the structure:
-
-```json
-{
-  "success": false,
-  "error": "Error message",
-  "type": "file_not_found|invalid_format|parse_error|unknown"
-}
-```
-
-## Next Steps
-
-- Connect to Claude Desktop or another MCP client
-- Continue expanding STEP regression fixtures
-- Add more DFM (Design For Manufacturing) rules
-- Implement design standards search
-- Add web console UI
+- AAG is intentionally marked unavailable until Analysis Situs or another AAG provider is integrated.
+- Feature candidates from `occt-wasm` are heuristic B-rep hints, not feature-tree intent.
+- STEP exchange parsing is lightweight and does not perform full OWL/EXPRESS/PMI interpretation.
+- `compare_step_files` reports metric and metadata deltas; it does not infer stable feature identity across revisions.
 
 ## References
 

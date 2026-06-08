@@ -13,71 +13,48 @@ just build
 just test
 ```
 
-## Start the MCP Server
+## Start The MCP Server
 
 ```bash
 npm start
 ```
 
-## Configuration
-
-**File**: `opencode.json` in project root  
-**Status**: Created and verified  
-**Scope**: Project-level (this directory only)
-
 ## Available Tools
 
-- `cad-mcp-server_analyze_step_file` → Get geometry info
-- `cad-mcp-server_list_bodies` → List bodies with properties  
-- `cad-mcp-server_extract_edges` → Analyze edges
+- `cad-mcp-server_inspect_step_file` -> fast first-pass overview
+- `cad-mcp-server_analyze_step_detail` -> category-selected graph analysis
+- `cad-mcp-server_query_step_graph` -> targeted graph queries
+- `cad-mcp-server_compare_step_files` -> compare two STEP files
+- `cad-mcp-server_generate_step_report` -> JSON plus Markdown report
 
 ## Test Prompts
 
-1. **Single tool**: "Analyze `samples/NIST-PMI-STEP-Files/AP203 geometry only/nist_ftc_11_asme1_rb.stp`."
-2. **Multiple tools**: "Do a complete analysis of that STEP file: analyze, list bodies, and extract edges."
-3. **Error test**: "Analyze `/nonexistent/file.step`."
+1. Analyze `samples/NIST-PMI-STEP-Files/AP203 geometry only/nist_ftc_11_asme1_rb.stp` with `inspect_step_file`.
+2. Run detailed geometry, topology, exchange, and health analysis on that file.
+3. Query the graph for `hole_candidate` features.
+4. Generate an `engineering_review` report.
+5. Analyze `/nonexistent/file.step` to verify structured errors.
 
 ## Verify Success
 
-- [ ] `opencode` command works
-- [ ] MCP server initializes (no errors)
-- [ ] Claude can see the tools
-- [ ] Tool calls work and return data
-- [ ] Results are summarized by Claude
+- [ ] `just build` succeeds
+- [ ] `just test` succeeds
+- [ ] MCP server initializes
+- [ ] MCP client can see the five tools
+- [ ] Tool calls return `{ ok, data }` or `{ ok, error }`
 
 ## Files
 
 | File | Purpose |
-|------|---------|
-| `opencode.json` | Integration config |
+| --- | --- |
+| `Tools.md` | Tool-surface and architecture guide |
 | `dist/index.js` | Compiled MCP server |
-| `samples/dummy.step` | MCP plumbing fixture, not real geometry |
+| `samples/dummy.step` | Invalid geometry fixture for error tests |
 
-## To Disable After Testing
+## Current Provider Notes
 
-Option 1: Delete the file
-```bash
-rm opencode.json
-```
+- B-rep provider: `occt-wasm`
+- AAG provider: unavailable by design until a real provider is integrated
+- Semantic provider: lightweight STEP metadata parser
 
-Option 2: Disable without deleting
-```json
-{
-  "mcp": {
-    "cad-mcp-server": {
-      "enabled": false
-    }
-  }
-}
-```
-
-## Server Status
-
-Built  
-Configured  
-Verified to start  
-Ready for MCP testing
-
----
-
-**Next**: Start an MCP client from the project root and ask it to analyze one of the real STEP files under `samples/NIST-PMI-STEP-Files/`.
+Next provider candidates: Analysis Situs for AAG/feature recognition and STP2OWL for formal OWL export.
