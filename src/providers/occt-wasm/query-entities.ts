@@ -34,6 +34,41 @@ function bboxCenter(bbox: BoundingBox): [number, number, number] {
 }
 
 /**
+ * Build a face-index-to-body-index and edge-index-to-body-index map by
+ * iterating sub-shapes of each body (solid). Faces/edges not belonging
+ * to any body get index -1 (shells, faces-only models, etc.).
+ */
+export function buildBodyMap(
+  kernel: OcctKernel,
+  shape: ShapeHandle
+): { faceBody: number[]; edgeBody: number[] } {
+  const bodies = kernel.getSubShapes(shape, 'solid');
+  const allFaces = kernel.getSubShapes(shape, 'face');
+  const allEdges = kernel.getSubShapes(shape, 'edge');
+  const faceBody = new Array(allFaces.length).fill(-1);
+  const edgeBody = new Array(allEdges.length).fill(-1);
+
+  for (let bi = 0; bi < bodies.length; bi++) {
+    try {
+      const bodyFaces = kernel.getSubShapes(bodies[bi], 'face');
+      for (const bf of bodyFaces) {
+        const fi = allFaces.findIndex((f) => kernel.isSame(f, bf));
+        if (fi !== -1) faceBody[fi] = bi;
+      }
+    } catch { /* body may not expose faces */ }
+    try {
+      const bodyEdges = kernel.getSubShapes(bodies[bi], 'edge');
+      for (const be of bodyEdges) {
+        const ei = allEdges.findIndex((e) => kernel.isSame(e, be));
+        if (ei !== -1) edgeBody[ei] = bi;
+      }
+    } catch { /* body may not expose edges */ }
+  }
+
+  return { faceBody, edgeBody };
+}
+
+/**
  * Extract deterministic edge entities from a STEP shape.
  * Each edge gets a stable ID like "edge:0", "edge:1", etc.
  * Based on traversal order from getSubShapes.
@@ -48,13 +83,18 @@ export interface ExtractedEdgeEntity {
   start_point?: [number, number, number];
   end_point?: [number, number, number];
   radius?: number;
+  body_id?: string;
   adjacent_faces?: Array<{
     face_id: string;
     surface_type: string;
   }>;
 }
 
-export function extractEdgeEntities(kernel: OcctKernel, shape: ShapeHandle): ExtractedEdgeEntity[] {
+export function extractEdgeEntities(
+  kernel: OcctKernel,
+  shape: ShapeHandle,
+  bodyMap?: { faceBody: number[]; edgeBody: number[] }
+): ExtractedEdgeEntity[] {
   const edges = kernel.getSubShapes(shape, 'edge');
   const entities: ExtractedEdgeEntity[] = [];
 
@@ -88,6 +128,8 @@ export function extractEdgeEntities(kernel: OcctKernel, shape: ShapeHandle): Ext
       // If point extraction fails, continue without them.
     }
 
+    entity.body_id = bodyMap && bodyMap.edgeBody[i] >= 0 ? `body:${bodyMap.edgeBody[i]}` : undefined;
+
     entities.push(entity);
   }
 
@@ -107,6 +149,7 @@ export interface ExtractedFaceEntity {
   center: [number, number, number];
   normal?: [number, number, number];
   radius?: number;
+  body_id?: string;
   has_inner_wires?: boolean;
   adjacent_faces?: Array<{
     face_id: string;
@@ -120,7 +163,11 @@ export interface ExtractedFaceEntity {
   };
 }
 
-export function extractFaceEntities(kernel: OcctKernel, shape: ShapeHandle): ExtractedFaceEntity[] {
+export function extractFaceEntities(
+  kernel: OcctKernel,
+  shape: ShapeHandle,
+  bodyMap?: { faceBody: number[]; edgeBody: number[] }
+): ExtractedFaceEntity[] {
   const faces = kernel.getSubShapes(shape, 'face');
   const entities: ExtractedFaceEntity[] = [];
 
@@ -170,6 +217,8 @@ export function extractFaceEntities(kernel: OcctKernel, shape: ShapeHandle): Ext
     } catch {
       entity.has_inner_wires = false;
     }
+
+    entity.body_id = bodyMap && bodyMap.faceBody[i] >= 0 ? `body:${bodyMap.faceBody[i]}` : undefined;
 
     entities.push(entity);
   }

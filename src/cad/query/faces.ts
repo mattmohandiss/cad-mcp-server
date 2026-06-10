@@ -2,6 +2,7 @@ import type { OcctKernel, ShapeHandle } from 'occt-wasm';
 import type { QueryStepFacesInput } from '../../tools/step-tools.js';
 import { withImportedStep } from '../../providers/occt-wasm/import.js';
 import {
+  buildBodyMap,
   extractFaceEntities,
   type ExtractedFaceEntity,
 } from '../../providers/occt-wasm/query-entities.js';
@@ -27,8 +28,11 @@ import {
  */
 export async function queryStepFaces(filePath: string, input: QueryStepFacesInput) {
   return withImportedStep(filePath, 'query_step_faces', (kernel, shape) => {
+    // Build body map for body_id assignment.
+    const bodyMap = buildBodyMap(kernel, shape);
+
     // Extract all face entities from the STEP file.
-    const allFaces = extractFaceEntities(kernel, shape);
+    const allFaces = extractFaceEntities(kernel, shape, bodyMap);
 
     // Pre-filter by group_ids: resolve which entities belong to requested groups.
     let preFiltered = allFaces;
@@ -260,6 +264,11 @@ function applyFaceFilters(
       result = result.filter((f) => idSet.has(f.id));
     }
 
+    if (filter.body_ids && filter.body_ids.length > 0) {
+      const bodySet = new Set(filter.body_ids);
+      result = result.filter((f) => f.body_id !== undefined && bodySet.has(f.body_id));
+    }
+
     if (filter.surface_type && filter.surface_type.length > 0) {
       const typeSet = new Set(filter.surface_type);
       result = result.filter((f) => typeSet.has(f.surface_type as never));
@@ -403,6 +412,9 @@ function projectFace(
         break;
       case 'has_inner_wires':
         if (face.has_inner_wires !== undefined) result.has_inner_wires = face.has_inner_wires;
+        break;
+      case 'body_id':
+        if (face.body_id !== undefined) result.body_id = face.body_id;
         break;
     }
   }

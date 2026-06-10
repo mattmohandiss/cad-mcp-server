@@ -4,6 +4,7 @@ import { analyzeStepFile } from '../cad/analyze.js';
 import { inspectProjection } from '../cad/projections.js';
 import { queryStepEdges as queryEdgesService } from '../cad/query/edges.js';
 import { queryStepFaces as queryFacesService } from '../cad/query/faces.js';
+import { queryStepPmi as queryPmiService } from '../cad/query/pmi.js';
 import { wrapTool } from './shared.js';
 
 const stepFileInput = {
@@ -113,13 +114,14 @@ const faceIncludeSchema = z
         'adjacent_faces',
         'closest_face_distance',
         'has_inner_wires',
+        'body_id',
       ])
       .describe(
-        'Face projection fields: id=unique identifier, surface_type=geometry type, area=surface area mm^2, bbox=bounding box, center=centroid, normal=surface normal direction, surface_parameters=raw OCCT surface data (e.g. cylinder radius), adjacent_faces=list of adjacent faces with cross-face vexity and dihedral angle, closest_face_distance=minimum distance to any other face in the model, has_inner_wires=whether the face boundary contains interior wire(s) (holes/openings). Default: id,surface_type,area,bbox,center.'
+        'Face projection fields: id=unique identifier, surface_type=geometry type, area=surface area mm^2, bbox=bounding box, center=centroid, normal=surface normal direction, surface_parameters=raw OCCT surface data (e.g. cylinder radius), adjacent_faces=list of adjacent faces with cross-face vexity and dihedral angle, closest_face_distance=minimum distance to any other face in the model, has_inner_wires=whether the face boundary contains interior wire(s) (holes/openings), body_id=which body this face belongs to (body:0, body:1, ...). Default: id,surface_type,area,bbox,center.'
       )
   )
   .min(1)
-  .max(10)
+  .max(11)
   .refine(uniqueArray, 'Include values must be unique.')
   .describe(
     'List of face properties to include in results. Omit to get default projection (id, surface_type, area, bbox, center).'
@@ -139,13 +141,14 @@ const edgeIncludeSchema = z
         'start_point',
         'end_point',
         'adjacent_faces',
+        'body_id',
       ])
       .describe(
-        'Edge projection fields: id=unique identifier, curve_type=line/circle/ellipse/bspline/other, length=edge length mm, bbox=bounding box, center=midpoint or arc center, radius=radius for circular curves (null for lines), start_point=endpoint [x,y,z], end_point=other endpoint [x,y,z], adjacent_faces=the faces that bound this edge with face_id and surface_type. Default: id,curve_type,length,bbox,center.'
+        'Edge projection fields: id=unique identifier, curve_type=line/circle/ellipse/bspline/other, length=edge length mm, bbox=bounding box, center=midpoint or arc center, radius=radius for circular curves (null for lines), start_point=endpoint [x,y,z], end_point=other endpoint [x,y,z], adjacent_faces=the faces that bound this edge with face_id and surface_type, body_id=which body this edge belongs to (body:0, body:1, ...). Default: id,curve_type,length,bbox,center.'
       )
   )
   .min(1)
-  .max(9)
+  .max(10)
   .refine(uniqueArray, 'Include values must be unique.')
   .describe(
     'List of edge properties to include in results. Omit to get default projection (id, curve_type, length, bbox, center).'
@@ -272,7 +275,15 @@ const faceFilterSchema = z
       .nonnegative()
       .max(180)
       .describe(
-        'Angle tolerance in degrees for normal_parallel_to matching. E.g., 10 degrees means normals within +/-10 degrees of the target direction pass the filter.'
+        'Angle tolerance in degrees for normal_parallel_to matching. E.g., 10 degrees means normals within +/-10 degrees of the target direction pass.'
+      )
+      .optional(),
+    body_ids: z
+      .array(z.string().min(1))
+      .min(1)
+      .max(20)
+      .describe(
+        'Filter faces to specific body IDs (e.g., ["body:0", "body:1"]). Use after a summary/groups query to narrow to a subset of bodies in a multi-body model. Max 20 IDs.'
       )
       .optional(),
   })
@@ -338,6 +349,14 @@ const edgeFilterSchema = z
         'Maximum radius in mm for circular/curved edges. Returns edges with radius <= radius_max. Only applies to circular curves.'
       )
       .optional(),
+    body_ids: z
+      .array(z.string().min(1))
+      .min(1)
+      .max(20)
+      .describe(
+        'Filter edges to specific body IDs (e.g., ["body:0", "body:1"]). Use after a summary/groups query to narrow to a subset of bodies in a multi-body model. Max 20 IDs.'
+      )
+      .optional(),
   })
   .strict()
   .refine(({ length_min, length_max }) => boundedRange({ min: length_min, max: length_max }), {
@@ -375,6 +394,97 @@ const edgeQuerySchema = {
   sample_entity_limit: sampleEntityLimitSchema,
 };
 
+/* ------------------------------------------------------------------ */
+/*  PMI query schema                                                   */
+/* ------------------------------------------------------------------ */
+
+const pmiTypeSchema = z
+  .enum(['geometric_tolerance', 'dimension', 'datum', 'annotation'])
+  .describe('PMI entity type category');
+
+const toleranceSubtypeSchema = z
+  .enum([
+    'position', 'flatness', 'straightness', 'circularity', 'cylindricity',
+    'profile', 'parallelism', 'perpendicularity', 'angularity', 'concentricity',
+    'runout', 'symmetry', 'coaxiality', 'circular_runout', 'total_runout',
+    'surface_profile', 'line_profile',
+  ])
+  .describe('Geometric tolerance subtype matching the STEP entity type name');
+
+const pmiFilterSchema = z
+  .object({
+    pmi_types: z
+      .array(pmiTypeSchema)
+      .min(1)
+      .max(5)
+      .describe(
+        'Filter by PMI entity type category: geometric_tolerance (GD&T callouts), dimension (linear/angular/diametral sizes and locations), datum (datum references and systems), annotation (notes, surface finish, callouts). Multiple types use OR logic.'
+      )
+      .optional(),
+    tolerance_types: z
+      .array(toleranceSubtypeSchema)
+      .min(1)
+      .max(17)
+      .describe(
+        'Filter geometric tolerances by subtype: position, flatness, straightness, circularity, cylindricity, profile, parallelism, perpendicularity, angularity, concentricity, runout, symmetry, coaxiality. Only applies when pmi_types includes geometric_tolerance.'
+      )
+      .optional(),
+    value_min: z
+      .number()
+      .nonnegative()
+      .describe('Minimum tolerance/dimension value in mm. Returns PMI with value >= value_min.')
+      .optional(),
+    value_max: z
+      .number()
+      .nonnegative()
+      .describe('Maximum tolerance/dimension value in mm. Returns PMI with value <= value_max.')
+      .optional(),
+  })
+  .strict()
+  .refine(({ value_min, value_max }) => boundedRange({ min: value_min, max: value_max }), {
+    message: 'value_min must be less than or equal to value_max.',
+  });
+
+const pmiGroupBySchema = z
+  .array(
+    z
+      .enum(['type', 'tolerance_type', 'dimension_type', 'material_condition'])
+      .describe(
+        'Grouping dimension: type=geometric_tolerance/dimension/datum/annotation; tolerance_type=position/flatness/etc (geometric tolerances only); dimension_type=diameter/radius/length/location (dimensions only); material_condition=mmc/lmc/rfs (geometric tolerances only).'
+      )
+  )
+  .min(1)
+  .max(3)
+  .refine(uniqueArray, 'Group-by values must be unique.')
+  .describe(
+    'List of dimensions to group PMI entities by. E.g., ["type"] groups by category; ["type","tolerance_type"] groups tolerances by subtype within the tolerance group.'
+  )
+  .optional();
+
+const pmiSortSchema = z
+  .object({
+    by: z
+      .enum(['type', 'value', 'tolerance_type'])
+      .describe('Sort field: type=entity category (alphabetic), value= tolerance/dimension value, tolerance_type=geometric tolerance subtype'),
+    direction: z
+      .enum(['asc', 'desc'])
+      .describe('"asc" (ascending, default) or "desc" (descending)')
+      .optional(),
+  })
+  .strict()
+  .optional();
+
+const pmiQuerySchema = {
+  ...stepFileInput,
+  filter: pmiFilterSchema.optional(),
+  group_by: pmiGroupBySchema,
+  sort: pmiSortSchema,
+  result_mode: resultModeSchema,
+  limit: limitSchema,
+  offset: offsetSchema,
+  sample_entity_limit: sampleEntityLimitSchema,
+};
+
 export const stepToolSchemas = {
   inspectStepFile: stepFileInput,
   queryStepFaces: faceQuerySchema,
@@ -383,6 +493,7 @@ export const stepToolSchemas = {
     file_a: z.string().min(1).describe('Absolute or relative path to the baseline STEP file'),
     file_b: z.string().min(1).describe('Absolute or relative path to the comparison STEP file'),
   },
+  queryStepPmi: pmiQuerySchema,
 } as const;
 
 export async function handleInspectStepFile(filePath: string) {
@@ -407,12 +518,20 @@ export async function handleCompareStepFiles(fileA: string, fileB: string) {
   return wrapTool(async () => compareStepFiles(fileA, fileB));
 }
 
+export async function handleQueryStepPmi(
+  filePath: string,
+  query: Partial<QueryStepPmiInput> | undefined
+) {
+  return wrapTool(async () => queryPmiService(filePath, query as QueryStepPmiInput));
+}
+
 type InputFromShape<T extends Record<string, z.ZodType>> = {
   [K in keyof T]: z.infer<T[K]>;
 };
 
 export type QueryStepFacesInput = InputFromShape<typeof faceQuerySchema>;
 export type QueryStepEdgesInput = InputFromShape<typeof edgeQuerySchema>;
+export type QueryStepPmiInput = InputFromShape<typeof pmiQuerySchema>;
 
 export interface NotImplementedData {
   filePath: string;

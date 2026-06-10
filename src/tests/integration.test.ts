@@ -54,13 +54,14 @@ beforeAll(async () => {
   });
 });
 
-describe('CAD MCP five-tool surface', () => {
-  it('defines only the four public tool schemas', () => {
+describe('CAD MCP tool surface', () => {
+  it('defines only the five public tool schemas', () => {
     expect(Object.keys(stepToolSchemas).sort()).toEqual([
       'compareStepFiles',
       'inspectStepFile',
       'queryStepEdges',
       'queryStepFaces',
+      'queryStepPmi',
     ]);
   });
 

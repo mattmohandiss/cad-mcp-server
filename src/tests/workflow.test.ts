@@ -91,7 +91,7 @@ describe('Engineer: hole analysis', () => {
     const iwMap = new Map(planars.entities.map((p: any) => [p.id, p.has_inner_wires]));
 
     let thru = 0, blind = 0;
-    for (const c of cyl.entities) {
+    for (const c of cyl.entities as any[]) {
       const adj = (c.adjacent_faces || []).filter((a: any) => a.surface_type === 'plane');
       const iw = adj.filter((a: any) => iwMap.get(a.face_id) === true);
       const noIw = adj.filter((a: any) => iwMap.get(a.face_id) === false);
@@ -125,7 +125,7 @@ describe('Engineer: pocket detection', () => {
     }));
 
     // Identify the top face (has_inner_wires=true due to pocket opening)
-    const topFace = r.entities.find((p: any) => p.has_inner_wires === true);
+    const topFace = r.entities.find((p: any) => p.has_inner_wires === true) as any;
     expect(topFace).toBeTruthy();
     const topAdjIds = new Set((topFace.adjacent_faces || []).map((a: any) => a.face_id));
 
@@ -244,7 +244,7 @@ describe('Engineer: complex part with all feature types', () => {
     const iwMap = new Map(planars.entities.map((p: any) => [p.id, p.has_inner_wires]));
 
     let thru = 0, blind = 0;
-    for (const c of cyl.entities) {
+    for (const c of cyl.entities as any[]) {
       const adj = (c.adjacent_faces || []).filter((a: any) => a.surface_type === 'plane');
       const iw = adj.filter((a: any) => iwMap.get(a.face_id) === true);
       const noIw = adj.filter((a: any) => iwMap.get(a.face_id) === false);

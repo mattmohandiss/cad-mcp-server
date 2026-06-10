@@ -2,6 +2,7 @@ import type { OcctKernel, ShapeHandle } from 'occt-wasm';
 import type { QueryStepEdgesInput } from '../../tools/step-tools.js';
 import { withImportedStep } from '../../providers/occt-wasm/import.js';
 import {
+  buildBodyMap,
   extractEdgeEntities,
   type ExtractedEdgeEntity,
 } from '../../providers/occt-wasm/query-entities.js';
@@ -22,8 +23,11 @@ import {
  */
 export async function queryStepEdges(filePath: string, input: QueryStepEdgesInput) {
   return withImportedStep(filePath, 'query_step_edges', (kernel, shape) => {
+    // Build body map for body_id assignment.
+    const bodyMap = buildBodyMap(kernel, shape);
+
     // Extract all edge entities from the STEP file.
-    const allEdges = extractEdgeEntities(kernel, shape);
+    const allEdges = extractEdgeEntities(kernel, shape, bodyMap);
 
     // Pre-filter by group_ids: resolve which entities belong to requested groups.
     let preFiltered = allEdges;
@@ -186,6 +190,11 @@ function applyEdgeFilters(
       result = result.filter((e) => idSet.has(e.id));
     }
 
+    if (filter.body_ids && filter.body_ids.length > 0) {
+      const bodySet = new Set(filter.body_ids);
+      result = result.filter((e) => e.body_id !== undefined && bodySet.has(e.body_id));
+    }
+
     if (filter.curve_type && filter.curve_type.length > 0) {
       const typeSet = new Set(filter.curve_type);
       result = result.filter((e) => typeSet.has(e.curve_type as never));
@@ -322,6 +331,9 @@ function projectEdge(
         break;
       case 'adjacent_faces':
         if (edge.adjacent_faces !== undefined) result.adjacent_faces = edge.adjacent_faces;
+        break;
+      case 'body_id':
+        if (edge.body_id !== undefined) result.body_id = edge.body_id;
         break;
     }
   }

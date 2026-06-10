@@ -8,6 +8,7 @@ import {
   handleInspectStepFile,
   handleQueryStepEdges,
   handleQueryStepFaces,
+  handleQueryStepPmi,
   stepToolSchemas,
 } from './tools/step-tools.js';
 import { isToolError } from './tools/shared.js';
@@ -107,6 +108,20 @@ registerTool(
   },
   async ({ file_a, file_b }) =>
     jsonToolResult(await handleCompareStepFiles(String(file_a), String(file_b)))
+);
+
+registerTool(
+  'query_step_pmi',
+  {
+    title: 'Query STEP PMI',
+    description:
+      'Query Product Manufacturing Information (PMI) from AP242 STEP files, including geometric tolerances (GD&T callouts like position, flatness, profile), dimensions (linear, diametral, angular), datums, and annotations. All PMI data is extracted via lightweight STEP text parsing — no OCCT import required. Filter by PMI type, tolerance subtype, and value range. Use result_mode "groups" with group_by to count tolerances by type or dimension by subtype. Example: {file_path:"model.step",filter:{pmi_types:["geometric_tolerance"]},result_mode:"groups",group_by:["tolerance_type"]}',
+    inputSchema: stepToolSchemas.queryStepPmi,
+  },
+  withErrorContext('query_step_pmi', async (args) => {
+    const query = args as Record<string, unknown>;
+    return jsonToolResult(await handleQueryStepPmi(String(query.file_path), query as never));
+  })
 );
 
 async function main() {
