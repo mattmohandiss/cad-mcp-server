@@ -47,6 +47,18 @@ Notes:
 
 - `result_mode: "groups"` without `group_by` groups by the tool's primary dimension (faces: `surface_type`, edges: `curve_type`, features: `feature_type`).
 - Sample entity IDs are follow-up handles scoped to the same file and query context. They are not stable across separate imports or unrelated queries.
+- **Multi-turn drill-down**: after a groups query returns `group_id` values, use `filter: { group_ids: ["group:0"] }` together with the same `group_by` to retrieve all entities in that group for further filtering. This is the intended way to move from population counts to individual entity inspection.
+
+  Example flow:
+  ```json
+  // Step 1: count holes by diameter
+  { "result_mode": "groups", "group_by": ["diameter"] }
+  // → group:0 has 65 through-holes at diameter 6.0mm
+
+  // Step 2: drill into that group
+  { "group_by": ["diameter"], "filter": { "group_ids": ["group:0"] }, "limit": 200 }
+  // → all 65 holes with entity-level detail
+  ```
 
 ## Public Tools
 
@@ -103,8 +115,7 @@ Input:
     "area_min": 100,
     "area_max": 10000,
     "normal_parallel_to": [0, 0, 1],
-    "normal_tolerance_degrees": 5,
-    "adjacent_to_face": "face:12"
+    "normal_tolerance_degrees": 5
   },
   "region": {
     "bbox": {
@@ -114,7 +125,7 @@ Input:
     "mode": "intersects"
   },
   "near": { "point": [0, 0, 0], "distance": 25 },
-  "include": ["area", "bbox", "center", "normal", "surface_parameters"],
+  "include": ["area", "bbox", "center", "normal", "surface_parameters", "adjacent_faces"],
   "group_by": ["surface_type", "normal_direction"],
   "sort": { "by": "area", "direction": "desc" },
   "result_mode": "groups",
@@ -137,6 +148,8 @@ Supported `surface_type` values:
 Supported face `include` values:
 
 - `id`, `surface_type`, `area`, `bbox`, `center`, `normal`, `surface_parameters`
+- `adjacent_faces` — list of adjacent faces with `face_id`, `surface_type`, `vexity`, and `dihedral_angle_deg`. Computed on demand from OCCT kernel adjacency. Each face's entry describes one adjacent face pair with the dihedral angle across their shared edge. Typical box face has 4 adjacent faces.
+- `closest_face_distance` — single `{face_id, distance}` giving the minimum `kernel.distanceBetween` to any other face in the model. Useful for wall thickness analysis (LLM decides what thickness threshold constitutes a "thin wall").
 
 Supported face `group_by` values:
 
@@ -160,8 +173,7 @@ Input:
     "group_ids": ["group:0"],
     "curve_type": ["line", "circle", "bspline", "other"],
     "length_min": 0,
-    "length_max": 1,
-    "adjacent_to_face": "face:12"
+    "length_max": 1
   },
   "region": {
     "bbox": {
@@ -171,7 +183,7 @@ Input:
     "mode": "intersects"
   },
   "near": { "point": [-39.8, 48.1, -350], "distance": 10 },
-  "include": ["length", "curve_type", "bbox", "center", "radius", "start_point", "end_point"],
+  "include": ["length", "curve_type", "bbox", "center", "radius", "start_point", "end_point", "adjacent_faces"],
   "group_by": ["curve_type", "length_range"],
   "sort": { "by": "length", "direction": "asc" },
   "result_mode": "groups",
@@ -192,6 +204,7 @@ Supported `curve_type` values:
 Supported edge `include` values:
 
 - `id`, `curve_type`, `length`, `bbox`, `center`, `radius`, `start_point`, `end_point`
+- `adjacent_faces` — the two faces that bound this edge, each with `face_id` and `surface_type`. Computed by reverse-lookup from OCCT face sub-shapes. Manifold edges always have exactly 2 bounding faces.
 
 Supported edge `group_by` values:
 
@@ -218,7 +231,6 @@ Input:
     "radius_max": 8,
     "through": true,
     "axis_parallel_to": [0, 0, 1],
-    "axis_tolerance_degrees": 5,
     "confidence_min": 0.5
   },
   "region": {

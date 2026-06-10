@@ -22,7 +22,7 @@ export async function compareStepFiles(fileA: string, fileB: string) {
         b.brep.edgeStatistics && a.brep.edgeStatistics
           ? b.brep.edgeStatistics.count - a.brep.edgeStatistics.count
           : undefined,
-      featureCandidateCount: b.inferences.length - a.inferences.length,
+      inferenceCount: b.inferences.length - a.inferences.length,
     },
     exchange: {
       schemaChanged: a.semantic.schema !== b.semantic.schema,

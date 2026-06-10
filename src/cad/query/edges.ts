@@ -1,3 +1,4 @@
+import type { OcctKernel, ShapeHandle } from 'occt-wasm';
 import type { QueryStepEdgesInput } from '../../tools/step-tools.js';
 import { withImportedStep } from '../../providers/occt-wasm/import.js';
 import {
@@ -24,8 +25,23 @@ export async function queryStepEdges(filePath: string, input: QueryStepEdgesInpu
     // Extract all edge entities from the STEP file.
     const allEdges = extractEdgeEntities(kernel, shape);
 
+    // Pre-filter by group_ids: resolve which entities belong to requested groups.
+    let preFiltered = allEdges;
+    if (input.filter?.group_ids && input.filter.group_ids.length > 0) {
+      const groupBy = input.group_by;
+      const preGroups = groupEdges(allEdges, groupBy, 0);
+      const groupIdSet = new Set(input.filter.group_ids);
+      const allowedIds = new Set<string>();
+      for (const g of preGroups) {
+        if (groupIdSet.has(g.id)) {
+          for (const id of g.entity_ids) allowedIds.add(id);
+        }
+      }
+      preFiltered = allEdges.filter((e) => allowedIds.has(e.id));
+    }
+
     // Apply filters.
-    let filtered = applyEdgeFilters(allEdges, input.filter, input.region, input.near);
+    let filtered = applyEdgeFilters(preFiltered, input.filter, input.region, input.near);
 
     // Apply sorting.
     if (input.sort) {
@@ -45,7 +61,16 @@ export async function queryStepEdges(filePath: string, input: QueryStepEdgesInpu
     const { limit, offset } = normalizePagination(input.limit, input.offset);
     const includeEntities = resultMode === 'entities';
     const paginated = includeEntities ? filtered.slice(offset, offset + limit) : [];
-    const entities = paginated.map((edge) => projectEdge(edge, input.include));
+
+    // Compute edge-face adjacency on demand.
+    const edgeAdjacencies = buildEdgeToFaceAdjacencies(kernel, shape, paginated, input.include);
+
+    const augmentedEdges = paginated.map((edge) => ({
+      ...edge,
+      ...(edgeAdjacencies ? { adjacent_faces: edgeAdjacencies.get(edge.id) ?? [] } : {}),
+    }));
+
+    const entities = augmentedEdges.map((edge) => projectEdge(edge, input.include));
     const pagination = createPagination(limit, offset, paginated.length, total_matched);
 
     return createQueryResponse(
@@ -74,6 +99,43 @@ export async function queryStepEdges(filePath: string, input: QueryStepEdgesInpu
       [] // limitations
     );
   });
+}
+
+/**
+ * Build edge-to-face adjacency map for paginated edges when requested.
+ */
+function buildEdgeToFaceAdjacencies(
+  kernel: OcctKernel,
+  shape: ShapeHandle,
+  paginated: ExtractedEdgeEntity[],
+  include: QueryStepEdgesInput['include']
+): Map<string, Array<{ face_id: string; surface_type: string }>> | undefined {
+  if (!include?.includes('adjacent_faces')) return undefined;
+
+  const edgeShapes = kernel.getSubShapes(shape, 'edge');
+  const faceShapes = kernel.getSubShapes(shape, 'face');
+  const result = new Map<string, Array<{ face_id: string; surface_type: string }>>();
+
+  for (const edge of paginated) {
+    const edgeShape = edgeShapes[edge.index];
+    const entries: Array<{ face_id: string; surface_type: string }> = [];
+
+    for (let fi = 0; fi < faceShapes.length; fi++) {
+      const faceEdgeShapes = kernel.getSubShapes(faceShapes[fi], 'edge');
+      const containsEdge = faceEdgeShapes.some((fe) => kernel.isSame(fe, edgeShape));
+      if (containsEdge) {
+        entries.push({
+          face_id: `face:${fi}`,
+          surface_type: kernel.surfaceType(faceShapes[fi]),
+        });
+        if (entries.length === 2) break; // An edge bounds at most 2 faces
+      }
+    }
+
+    result.set(edge.id, entries);
+  }
+
+  return result;
 }
 
 /**
@@ -257,6 +319,9 @@ function projectEdge(
         break;
       case 'end_point':
         if (edge.end_point !== undefined) result.end_point = edge.end_point;
+        break;
+      case 'adjacent_faces':
+        if (edge.adjacent_faces !== undefined) result.adjacent_faces = edge.adjacent_faces;
         break;
     }
   }

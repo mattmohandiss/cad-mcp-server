@@ -91,6 +91,7 @@ export interface ComputedGroup {
   id: string;
   key: Record<string, unknown>;
   entity_count: number;
+  entity_ids: string[];
   sample_entity_ids: string[];
   sample_entity_limit: number;
   sample_is_complete: boolean;
@@ -131,6 +132,7 @@ export function groupEntities<T extends { id: string }>(
     return {
       key: bucket.key,
       entity_count: bucket.members.length,
+      entity_ids: ids,
       sample_entity_ids: sampled,
       sample_entity_limit: sampleLimit,
       sample_is_complete: is_complete,
@@ -194,7 +196,7 @@ export function createQueryResponse<T extends Record<string, unknown>>(
   pagination: StepQueryPagination,
   entities: T[],
   statistics?: Record<string, unknown>,
-  groups: unknown[] = [],
+  groups: ComputedGroup[] = [],
   warnings: unknown[] = [],
   limitations: unknown[] = []
 ): StepQueryResponse<T> {
@@ -207,7 +209,15 @@ export function createQueryResponse<T extends Record<string, unknown>>(
     statistics: statistics ?? {},
     pagination,
     entities,
-    groups: groups as never,
+    groups: groups.map((g) => ({
+      id: g.id,
+      key: g.key,
+      entity_count: g.entity_count,
+      sample_entity_ids: g.sample_entity_ids,
+      sample_entity_limit: g.sample_entity_limit,
+      sample_is_complete: g.sample_is_complete,
+      summary: g.summary,
+    })),
     warnings,
     limitations,
   };
@@ -228,23 +238,6 @@ export function sampleEntityIds(
     sampled,
     is_complete: sampled.length === entity_ids.length,
   };
-}
-
-/**
- * Check if a point is within a bounding box.
- */
-export function pointInBbox(
-  point: [number, number, number],
-  bbox: { min: [number, number, number]; max: [number, number, number] }
-): boolean {
-  return (
-    point[0] >= bbox.min[0] &&
-    point[0] <= bbox.max[0] &&
-    point[1] >= bbox.min[1] &&
-    point[1] <= bbox.max[1] &&
-    point[2] >= bbox.min[2] &&
-    point[2] <= bbox.max[2]
-  );
 }
 
 /**

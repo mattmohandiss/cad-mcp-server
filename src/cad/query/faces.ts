@@ -1,9 +1,11 @@
+import type { OcctKernel, ShapeHandle } from 'occt-wasm';
 import type { QueryStepFacesInput } from '../../tools/step-tools.js';
 import { withImportedStep } from '../../providers/occt-wasm/import.js';
 import {
   extractFaceEntities,
   type ExtractedFaceEntity,
 } from '../../providers/occt-wasm/query-entities.js';
+import { computeEdgeVexity } from '../../providers/occt-wasm/aag-utils.js';
 import {
   normalizePagination,
   createPagination,
@@ -28,8 +30,23 @@ export async function queryStepFaces(filePath: string, input: QueryStepFacesInpu
     // Extract all face entities from the STEP file.
     const allFaces = extractFaceEntities(kernel, shape);
 
+    // Pre-filter by group_ids: resolve which entities belong to requested groups.
+    let preFiltered = allFaces;
+    if (input.filter?.group_ids && input.filter.group_ids.length > 0) {
+      const groupBy = input.group_by;
+      const preGroups = groupFaces(allFaces, groupBy, 0);
+      const groupIdSet = new Set(input.filter.group_ids);
+      const allowedIds = new Set<string>();
+      for (const g of preGroups) {
+        if (groupIdSet.has(g.id)) {
+          for (const id of g.entity_ids) allowedIds.add(id);
+        }
+      }
+      preFiltered = allFaces.filter((f) => allowedIds.has(f.id));
+    }
+
     // Apply filters.
-    let filtered = applyFaceFilters(allFaces, input.filter, input.region, input.near);
+    let filtered = applyFaceFilters(preFiltered, input.filter, input.region, input.near);
 
     // Apply sorting.
     if (input.sort) {
@@ -49,7 +66,25 @@ export async function queryStepFaces(filePath: string, input: QueryStepFacesInpu
     const { limit, offset } = normalizePagination(input.limit, input.offset);
     const includeEntities = resultMode === 'entities';
     const paginated = includeEntities ? filtered.slice(offset, offset + limit) : [];
-    const entities = paginated.map((face) => projectFace(face, input.include));
+
+    // Compute adjacency and closest-face-distance for paginated faces on demand.
+    const faceShapes = kernel.getSubShapes(shape, 'face');
+    const adjacencies = buildFaceAdjacencies(kernel, shape, faceShapes, paginated, input.include);
+    const closestDistances = buildClosestFaceDistances(
+      kernel,
+      faceShapes,
+      paginated,
+      allFaces,
+      input.include
+    );
+
+    const augmentedFaces = paginated.map((face) => ({
+      ...face,
+      ...(adjacencies ? { adjacent_faces: adjacencies.get(face.id) ?? [] } : {}),
+      ...(closestDistances ? { closest_face_distance: closestDistances.get(face.id) } : {}),
+    }));
+
+    const entities = augmentedFaces.map((face) => projectFace(face, input.include));
     const pagination = createPagination(limit, offset, paginated.length, total_matched);
 
     return createQueryResponse(
@@ -78,6 +113,99 @@ export async function queryStepFaces(filePath: string, input: QueryStepFacesInpu
       [] // limitations
     );
   });
+}
+
+/**
+ * Build adjacency data for paginated faces when requested via include.
+ */
+function buildFaceAdjacencies(
+  kernel: OcctKernel,
+  shape: ShapeHandle,
+  faceShapes: ShapeHandle[],
+  paginated: ExtractedFaceEntity[],
+  include: QueryStepFacesInput['include']
+):
+  | Map<
+      string,
+      Array<{ face_id: string; surface_type: string; vexity: string; dihedral_angle_deg: number }>
+    >
+  | undefined {
+  if (!include?.includes('adjacent_faces')) return undefined;
+
+  const result = new Map<
+    string,
+    Array<{ face_id: string; surface_type: string; vexity: string; dihedral_angle_deg: number }>
+  >();
+
+  for (const face of paginated) {
+    const idx = face.index;
+    const faceShape = faceShapes[idx];
+    const adjacent = kernel.adjacentFaces(shape, faceShape);
+    const entries: Array<{
+      face_id: string;
+      surface_type: string;
+      vexity: string;
+      dihedral_angle_deg: number;
+    }> = [];
+
+    for (const adjFace of adjacent) {
+      const adjIdx = faceShapes.findIndex((s) => kernel.isSame(s, adjFace));
+      if (adjIdx === -1) continue;
+      const sharedEdges = kernel.sharedEdges(faceShape, adjFace);
+      if (sharedEdges.length === 0) continue;
+
+      const vexityResult = computeEdgeVexity(kernel, faceShape, adjFace, sharedEdges[0]);
+      entries.push({
+        face_id: `face:${adjIdx}`,
+        surface_type: kernel.surfaceType(adjFace),
+        vexity: vexityResult.vexity,
+        dihedral_angle_deg: vexityResult.dihedralAngleDeg,
+      });
+    }
+
+    result.set(face.id, entries);
+  }
+
+  return result;
+}
+
+/**
+ * Compute closest face distance for each paginated face when requested.
+ */
+function buildClosestFaceDistances(
+  kernel: OcctKernel,
+  faceShapes: ShapeHandle[],
+  paginated: ExtractedFaceEntity[],
+  allFaces: ExtractedFaceEntity[],
+  include: QueryStepFacesInput['include']
+): Map<string, { face_id: string; distance: number }> | undefined {
+  if (!include?.includes('closest_face_distance')) return undefined;
+
+  const result = new Map<string, { face_id: string; distance: number }>();
+  const allIndices = allFaces.map((f) => f.index);
+
+  for (const face of paginated) {
+    const idx = face.index;
+    const faceShape = faceShapes[idx];
+    let bestFace = '';
+    let bestDist = Number.POSITIVE_INFINITY;
+
+    for (const otherIdx of allIndices) {
+      if (otherIdx === idx) continue;
+      const dist = kernel.distanceBetween(faceShape, faceShapes[otherIdx]);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestFace = `face:${otherIdx}`;
+      }
+    }
+
+    result.set(face.id, {
+      face_id: bestFace,
+      distance: bestDist === Number.POSITIVE_INFINITY ? -1 : bestDist,
+    });
+  }
+
+  return result;
 }
 
 /**
@@ -264,7 +392,17 @@ function projectFace(
         break;
       case 'surface_parameters':
         // Surface-specific parameters like radius for cylinders.
-        result.surface_parameters = face.radius ? { radius: face.radius } : {};
+        result.surface_parameters = face.radius !== undefined ? { radius: face.radius } : {};
+        break;
+      case 'adjacent_faces':
+        if (face.adjacent_faces !== undefined) result.adjacent_faces = face.adjacent_faces;
+        break;
+      case 'closest_face_distance':
+        if (face.closest_face_distance !== undefined)
+          result.closest_face_distance = face.closest_face_distance;
+        break;
+      case 'has_inner_wires':
+        if (face.has_inner_wires !== undefined) result.has_inner_wires = face.has_inner_wires;
         break;
     }
   }

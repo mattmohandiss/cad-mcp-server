@@ -29,7 +29,7 @@ export async function readStepText(filePath: string): Promise<string> {
 export async function withImportedStep<T>(
   filePath: string,
   action: string,
-  analyze: (kernel: OcctKernel, shape: ShapeHandle, stepText: string) => T
+  analyze: (kernel: OcctKernel, shape: ShapeHandle) => T
 ): Promise<T> {
   let kernel: OcctKernel | undefined;
   let shape: ShapeHandle | undefined;
@@ -38,7 +38,7 @@ export async function withImportedStep<T>(
     const stepText = await readStepText(filePath);
     kernel = await getOcctKernel();
     shape = kernel.importStep(stepText);
-    return analyze(kernel, shape, stepText);
+    return analyze(kernel, shape);
   } catch (error) {
     if (typeof error === 'object' && error !== null && 'type' in error && 'message' in error) {
       throw error;

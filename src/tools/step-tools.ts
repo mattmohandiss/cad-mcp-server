@@ -4,7 +4,6 @@ import { analyzeStepFile } from '../cad/analyze.js';
 import { inspectProjection } from '../cad/projections.js';
 import { queryStepEdges as queryEdgesService } from '../cad/query/edges.js';
 import { queryStepFaces as queryFacesService } from '../cad/query/faces.js';
-import { queryStepFeatures as queryFeaturesService } from '../cad/query/features.js';
 import { wrapTool } from './shared.js';
 
 const stepFileInput = {
@@ -103,13 +102,24 @@ const nearSchema = z
 const faceIncludeSchema = z
   .array(
     z
-      .enum(['id', 'surface_type', 'area', 'bbox', 'center', 'normal', 'surface_parameters'])
+      .enum([
+        'id',
+        'surface_type',
+        'area',
+        'bbox',
+        'center',
+        'normal',
+        'surface_parameters',
+        'adjacent_faces',
+        'closest_face_distance',
+        'has_inner_wires',
+      ])
       .describe(
-        'Face projection fields: id=unique identifier, surface_type=geometry type, area=surface area mm^2, bbox=bounding box, center=centroid, normal=surface normal direction, surface_parameters=raw OCCT surface data (e.g. cylinder radius). Default: id,surface_type,area,bbox,center.'
+        'Face projection fields: id=unique identifier, surface_type=geometry type, area=surface area mm^2, bbox=bounding box, center=centroid, normal=surface normal direction, surface_parameters=raw OCCT surface data (e.g. cylinder radius), adjacent_faces=list of adjacent faces with cross-face vexity and dihedral angle, closest_face_distance=minimum distance to any other face in the model, has_inner_wires=whether the face boundary contains interior wire(s) (holes/openings). Default: id,surface_type,area,bbox,center.'
       )
   )
   .min(1)
-  .max(7)
+  .max(10)
   .refine(uniqueArray, 'Include values must be unique.')
   .describe(
     'List of face properties to include in results. Omit to get default projection (id, surface_type, area, bbox, center).'
@@ -119,41 +129,26 @@ const faceIncludeSchema = z
 const edgeIncludeSchema = z
   .array(
     z
-      .enum(['id', 'curve_type', 'length', 'bbox', 'center', 'radius', 'start_point', 'end_point'])
+      .enum([
+        'id',
+        'curve_type',
+        'length',
+        'bbox',
+        'center',
+        'radius',
+        'start_point',
+        'end_point',
+        'adjacent_faces',
+      ])
       .describe(
-        'Edge projection fields: id=unique identifier, curve_type=line/circle/ellipse/bspline/other, length=edge length mm, bbox=bounding box, center=midpoint or arc center, radius=radius for circular curves (null for lines), start_point=endpoint [x,y,z], end_point=other endpoint [x,y,z]. Default: id,curve_type,length,bbox,center.'
+        'Edge projection fields: id=unique identifier, curve_type=line/circle/ellipse/bspline/other, length=edge length mm, bbox=bounding box, center=midpoint or arc center, radius=radius for circular curves (null for lines), start_point=endpoint [x,y,z], end_point=other endpoint [x,y,z], adjacent_faces=the faces that bound this edge with face_id and surface_type. Default: id,curve_type,length,bbox,center.'
       )
   )
   .min(1)
-  .max(8)
+  .max(9)
   .refine(uniqueArray, 'Include values must be unique.')
   .describe(
     'List of edge properties to include in results. Omit to get default projection (id, curve_type, length, bbox, center).'
-  )
-  .optional();
-
-const featureIncludeSchema = z
-  .array(
-    z
-      .enum([
-        'id',
-        'feature_type',
-        'parameters',
-        'bbox',
-        'center',
-        'axis',
-        'source_faces',
-        'confidence',
-      ])
-      .describe(
-        'Feature projection fields: id=unique identifier, feature_type=hole_candidate/through_hole_candidate/blind_hole_candidate/fillet_candidate/pocket_candidate, parameters={radius,diameter,depth,through,...}, bbox=bounding box, center=feature center, axis=feature axis direction [x,y,z], source_faces=constituent face IDs, confidence=0.0-1.0 detection confidence. Default: id,feature_type,parameters,bbox,center.'
-      )
-  )
-  .min(1)
-  .max(8)
-  .refine(uniqueArray, 'Include values must be unique.')
-  .describe(
-    'List of feature properties to include in results. Omit to get default projection (id, feature_type, parameters, bbox, center).'
   )
   .optional();
 
@@ -188,23 +183,6 @@ const edgeGroupBySchema = z
     'List of dimensions to group edges by; required when result_mode is "groups". E.g., ["curve_type","length_range"] groups by type and length bucket. Bucket widths are fixed by the server.'
   )
   .optional();
-
-const featureGroupBySchema = z
-  .array(
-    z
-      .enum(['feature_type', 'diameter', 'radius', 'depth_range', 'through'])
-      .describe(
-        'Grouping dimension: feature_type=candidate type; diameter=rounded to 0.5mm; radius=rounded to 0.5mm; depth_range=fixed log-scale depth bucket in mm; through=true/false/undefined (through vs blind hole). diameter/radius/depth_range only apply to features that carry those parameters.'
-      )
-  )
-  .min(1)
-  .max(5)
-  .refine(uniqueArray, 'Group-by values must be unique.')
-  .describe(
-    'List of dimensions to group features by; required when result_mode is "groups". E.g., ["feature_type","through"] groups holes by type and through/blind status, or ["diameter"] counts distinct hole sizes. Bucket widths are fixed by the server.'
-  )
-  .optional();
-
 const faceSortSchema = z
   .object({
     by: z
@@ -241,24 +219,6 @@ const edgeSortSchema = z
   )
   .optional();
 
-const featureSortSchema = z
-  .object({
-    by: z
-      .enum(['radius', 'diameter', 'depth', 'confidence', 'center_x', 'center_y', 'center_z'])
-      .describe(
-        'Sort field: radius/diameter=circular feature size, depth=pocket/hole depth, confidence=detection confidence 0.0-1.0, center_x/y/z=feature center coordinate'
-      ),
-    direction: z
-      .enum(['asc', 'desc'])
-      .describe('"asc" (ascending, default) or "desc" (descending)')
-      .optional(),
-  })
-  .strict()
-  .describe(
-    'Sort results by one field and optional direction. E.g., {by:"radius",direction:"asc"} sorts smallest holes first.'
-  )
-  .optional();
-
 const faceFilterSchema = z
   .object({
     entity_ids: z
@@ -276,16 +236,7 @@ const faceFilterSchema = z
       .max(50)
       .refine(uniqueArray)
       .describe(
-        'Group IDs from a previous group_by result. Retrieves faces within specific groups. Max 50 IDs.'
-      )
-      .optional(),
-    cluster_ids: z
-      .array(z.string().min(1))
-      .min(1)
-      .max(50)
-      .refine(uniqueArray)
-      .describe(
-        'Cluster IDs from a previous clustering result. Retrieves faces within specific spatial clusters. Max 50 IDs.'
+        'Group IDs from a previous group_by result. Retrieves all entities within those groups. Requires the same group_by used to produce the groups. Use together to drill from grouped/counted populations into specific entities. Max 50 IDs.'
       )
       .optional(),
     surface_type: z
@@ -324,13 +275,6 @@ const faceFilterSchema = z
         'Angle tolerance in degrees for normal_parallel_to matching. E.g., 10 degrees means normals within +/-10 degrees of the target direction pass the filter.'
       )
       .optional(),
-    adjacent_to_face: z
-      .string()
-      .min(1)
-      .describe(
-        'Face ID (e.g., "face:3"). Returns only faces adjacent to this face (sharing an edge with it).'
-      )
-      .optional(),
   })
   .strict()
   .refine(({ area_min, area_max }) => boundedRange({ min: area_min, max: area_max }), {
@@ -354,16 +298,7 @@ const edgeFilterSchema = z
       .max(50)
       .refine(uniqueArray)
       .describe(
-        'Group IDs from a previous group_by result. Retrieves edges within specific groups. Max 50 IDs.'
-      )
-      .optional(),
-    cluster_ids: z
-      .array(z.string().min(1))
-      .min(1)
-      .max(50)
-      .refine(uniqueArray)
-      .describe(
-        'Cluster IDs from a previous clustering result. Retrieves edges within specific spatial clusters. Max 50 IDs.'
+        'Group IDs from a previous group_by result. Retrieves all entities within those groups. Requires the same group_by used to produce the groups. Use together to drill from grouped/counted populations into specific entities. Max 50 IDs.'
       )
       .optional(),
     curve_type: z
@@ -403,11 +338,6 @@ const edgeFilterSchema = z
         'Maximum radius in mm for circular/curved edges. Returns edges with radius <= radius_max. Only applies to circular curves.'
       )
       .optional(),
-    adjacent_to_face: z
-      .string()
-      .min(1)
-      .describe('Face ID (e.g., "face:7"). Returns only edges that bound this face.')
-      .optional(),
   })
   .strict()
   .refine(({ length_min, length_max }) => boundedRange({ min: length_min, max: length_max }), {
@@ -416,140 +346,6 @@ const edgeFilterSchema = z
   .refine(({ radius_min, radius_max }) => boundedRange({ min: radius_min, max: radius_max }), {
     message: 'radius_min must be less than or equal to radius_max.',
   });
-
-const featureFilterSchema = z
-  .object({
-    entity_ids: z
-      .array(z.string().min(1))
-      .min(1)
-      .max(200)
-      .refine(uniqueArray)
-      .describe(
-        'List of feature IDs to retrieve. Limits results to exactly these features. Max 200 IDs.'
-      )
-      .optional(),
-    group_ids: z
-      .array(z.string().min(1))
-      .min(1)
-      .max(50)
-      .refine(uniqueArray)
-      .describe(
-        'Group IDs from a previous group_by result. Retrieves features within specific groups.'
-      )
-      .optional(),
-    cluster_ids: z
-      .array(z.string().min(1))
-      .min(1)
-      .max(50)
-      .refine(uniqueArray)
-      .describe(
-        'Cluster IDs from a previous clustering result. Retrieves features within specific spatial clusters.'
-      )
-      .optional(),
-    radius_min: z
-      .number()
-      .nonnegative()
-      .describe(
-        'Minimum radius in mm for cylindrical features (holes, cylinders). Returns features with radius >= radius_min.'
-      )
-      .optional(),
-    radius_max: z
-      .number()
-      .nonnegative()
-      .describe(
-        'Maximum radius in mm for cylindrical features. Returns features with radius <= radius_max.'
-      )
-      .optional(),
-    diameter_min: z
-      .number()
-      .nonnegative()
-      .describe(
-        'Minimum diameter in mm for cylindrical features (diameter = 2 * radius). Returns features with diameter >= diameter_min.'
-      )
-      .optional(),
-    diameter_max: z
-      .number()
-      .nonnegative()
-      .describe(
-        'Maximum diameter in mm for cylindrical features. Returns features with diameter <= diameter_max.'
-      )
-      .optional(),
-    depth_min: z
-      .number()
-      .nonnegative()
-      .describe(
-        'Minimum depth in mm for pocket/hole features. Returns features with depth >= depth_min.'
-      )
-      .optional(),
-    depth_max: z
-      .number()
-      .nonnegative()
-      .describe(
-        'Maximum depth in mm for pocket/hole features. Returns features with depth <= depth_max.'
-      )
-      .optional(),
-    through: z
-      .boolean()
-      .describe(
-        'true = through-hole (hole goes all the way through the body), false = blind hole (hole stops inside), undefined = no filter on through-hole status.'
-      )
-      .optional(),
-    axis_parallel_to: direction3Schema
-      .describe(
-        'Direction vector [x, y, z] to match feature axes against. Returns features whose axis is parallel to this direction. Use with axis_tolerance_degrees.'
-      )
-      .optional(),
-    axis_tolerance_degrees: z
-      .number()
-      .nonnegative()
-      .max(180)
-      .describe(
-        'Angle tolerance in degrees for axis_parallel_to matching. E.g., 5 degrees means axes within +/-5 degrees of target direction pass.'
-      )
-      .optional(),
-    confidence_min: z
-      .number()
-      .min(0)
-      .max(1)
-      .describe(
-        'Minimum confidence score (0.0-1.0) for feature detection. Returns only features with confidence >= confidence_min. E.g., 0.7 returns confident features only.'
-      )
-      .optional(),
-  })
-  .strict()
-  .refine(({ radius_min, radius_max }) => boundedRange({ min: radius_min, max: radius_max }), {
-    message: 'radius_min must be less than or equal to radius_max.',
-  })
-  .refine(
-    ({ diameter_min, diameter_max }) => boundedRange({ min: diameter_min, max: diameter_max }),
-    {
-      message: 'diameter_min must be less than or equal to diameter_max.',
-    }
-  )
-  .refine(({ depth_min, depth_max }) => boundedRange({ min: depth_min, max: depth_max }), {
-    message: 'depth_min must be less than or equal to depth_max.',
-  });
-
-const featureTypeSchema = z
-  .array(
-    z
-      .enum([
-        'hole_candidate',
-        'through_hole_candidate',
-        'blind_hole_candidate',
-        'fillet_candidate',
-        'pocket_candidate',
-      ])
-      .describe(
-        'Feature type: hole_candidate=undetermined hole, through_hole_candidate=hole goes through body, blind_hole_candidate=hole ends inside body, fillet_candidate=rounded edge, pocket_candidate=depression/pocket. These are heuristic B-rep-based candidates, not native CAD feature-tree intent.'
-      )
-  )
-  .min(1)
-  .max(5)
-  .refine(uniqueArray, 'Feature type values must be unique.')
-  .describe(
-    'Filter by feature type(s). E.g., ["through_hole_candidate","blind_hole_candidate"] returns all hole candidates. Multiple types use OR-within-array semantics. Omit to return all types.'
-  );
 
 const faceQuerySchema = {
   ...stepFileInput,
@@ -579,26 +375,10 @@ const edgeQuerySchema = {
   sample_entity_limit: sampleEntityLimitSchema,
 };
 
-const featureQuerySchema = {
-  ...stepFileInput,
-  feature_type: featureTypeSchema.optional(),
-  filter: featureFilterSchema.optional(),
-  region: regionSchema,
-  near: nearSchema,
-  include: featureIncludeSchema,
-  group_by: featureGroupBySchema,
-  sort: featureSortSchema,
-  result_mode: resultModeSchema,
-  limit: limitSchema,
-  offset: offsetSchema,
-  sample_entity_limit: sampleEntityLimitSchema,
-};
-
 export const stepToolSchemas = {
   inspectStepFile: stepFileInput,
   queryStepFaces: faceQuerySchema,
   queryStepEdges: edgeQuerySchema,
-  queryStepFeatures: featureQuerySchema,
   compareStepFiles: {
     file_a: z.string().min(1).describe('Absolute or relative path to the baseline STEP file'),
     file_b: z.string().min(1).describe('Absolute or relative path to the comparison STEP file'),
@@ -623,13 +403,6 @@ export async function handleQueryStepEdges(
   return wrapTool(async () => queryEdgesService(filePath, query as QueryStepEdgesInput));
 }
 
-export async function handleQueryStepFeatures(
-  filePath: string,
-  query: Partial<QueryStepFeaturesInput> | undefined
-) {
-  return wrapTool(async () => queryFeaturesService(filePath, query as QueryStepFeaturesInput));
-}
-
 export async function handleCompareStepFiles(fileA: string, fileB: string) {
   return wrapTool(async () => compareStepFiles(fileA, fileB));
 }
@@ -640,7 +413,6 @@ type InputFromShape<T extends Record<string, z.ZodType>> = {
 
 export type QueryStepFacesInput = InputFromShape<typeof faceQuerySchema>;
 export type QueryStepEdgesInput = InputFromShape<typeof edgeQuerySchema>;
-export type QueryStepFeaturesInput = InputFromShape<typeof featureQuerySchema>;
 
 export interface NotImplementedData {
   filePath: string;

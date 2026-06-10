@@ -1,7 +1,6 @@
 import type { OcctKernel, ShapeHandle } from 'occt-wasm';
 import type { BRepBody, BRepModel, BRepProvider } from '../brep.js';
 import { makeId } from '../../utils/ids.js';
-import { detectFeatureHints } from './features.js';
 import { withImportedStep } from './import.js';
 import { getDimensions, guessShapeClass, toBoundingBox } from './measure.js';
 import { getEdgeStatistics } from './topology.js';
@@ -23,15 +22,12 @@ export class OcctWasmBRepProvider implements BRepProvider {
       const solids = kernel.getSubShapes(shape, 'solid');
       const faces = kernel.getSubShapes(shape, 'face');
       const bodies = this.getBodies(kernel, shape, solids.length ? solids : [shape]);
-      const featureHints = detectFeatureHints(kernel, shape);
 
       return {
         provider: {
           name: this.name,
           capabilities: [...this.capabilities],
-          limitations: [
-            'Feature candidates in the B-rep path are heuristic B-rep hints. AAG-backed features are available via the AAG provider.',
-          ],
+          limitations: [],
         },
         filePath,
         units: { length: 'mm', area: 'mm^2', volume: 'mm^3' },
@@ -44,7 +40,6 @@ export class OcctWasmBRepProvider implements BRepProvider {
         faceCount: faces.length,
         edgeStatistics: getEdgeStatistics(kernel, shape),
         bodies,
-        featureHints,
         health: {
           isValid: safeIsValid(kernel, shape),
           warnings: [],
@@ -69,7 +64,6 @@ export class OcctWasmBRepProvider implements BRepProvider {
         dimensions: getDimensions(boundingBox),
         volume: kernel.getVolume(body),
         surfaceArea: kernel.getSurfaceArea(body),
-        featureHints: detectFeatureHints(kernel, body, [id]),
       };
     });
   }

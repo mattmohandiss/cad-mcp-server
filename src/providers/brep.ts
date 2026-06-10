@@ -1,7 +1,6 @@
 import type {
   BoundingBox,
   Dimensions,
-  FeatureCandidate,
   ProviderInfo,
   Provenance,
   UnitSystem,
@@ -18,7 +17,6 @@ export type BRepCapability =
 export interface BRepLoadOptions {
   includeBodies?: boolean;
   includeEdges?: boolean;
-  includeFeatures?: boolean;
 }
 
 export interface BRepBody {
@@ -28,7 +26,6 @@ export interface BRepBody {
   dimensions: Dimensions;
   volume: number;
   surfaceArea: number;
-  featureHints: FeatureCandidate[];
 }
 
 export interface BRepEdgeStatistics {
@@ -59,7 +56,6 @@ export interface BRepModel {
   faceCount?: number;
   edgeStatistics?: BRepEdgeStatistics;
   bodies: BRepBody[];
-  featureHints: FeatureCandidate[];
   health: BRepHealth;
   provenance: Provenance[];
 }

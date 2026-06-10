@@ -48,6 +48,10 @@ export interface ExtractedEdgeEntity {
   start_point?: [number, number, number];
   end_point?: [number, number, number];
   radius?: number;
+  adjacent_faces?: Array<{
+    face_id: string;
+    surface_type: string;
+  }>;
 }
 
 export function extractEdgeEntities(kernel: OcctKernel, shape: ShapeHandle): ExtractedEdgeEntity[] {
@@ -84,16 +88,6 @@ export function extractEdgeEntities(kernel: OcctKernel, shape: ShapeHandle): Ext
       // If point extraction fails, continue without them.
     }
 
-    // Try to extract radius for circular curves.
-    if (curveType === 'circle') {
-      try {
-        // For circles, we can estimate radius from bounding box or try other means.
-        // For now, leave it empty as OCCT may not expose radius directly for edges.
-      } catch {
-        // Radius extraction not available for edges, skip.
-      }
-    }
-
     entities.push(entity);
   }
 
@@ -113,6 +107,17 @@ export interface ExtractedFaceEntity {
   center: [number, number, number];
   normal?: [number, number, number];
   radius?: number;
+  has_inner_wires?: boolean;
+  adjacent_faces?: Array<{
+    face_id: string;
+    surface_type: string;
+    vexity: string;
+    dihedral_angle_deg: number;
+  }>;
+  closest_face_distance?: {
+    face_id: string;
+    distance: number;
+  };
 }
 
 export function extractFaceEntities(kernel: OcctKernel, shape: ShapeHandle): ExtractedFaceEntity[] {
@@ -156,6 +161,14 @@ export function extractFaceEntities(kernel: OcctKernel, shape: ShapeHandle): Ext
       } catch {
         // Radius extraction failed, continue without it.
       }
+    }
+
+    // Check if face has inner wires (holes/openings in the face boundary).
+    try {
+      const wires = kernel.getSubShapes(face, 'wire');
+      entity.has_inner_wires = wires.length > 1;
+    } catch {
+      entity.has_inner_wires = false;
     }
 
     entities.push(entity);

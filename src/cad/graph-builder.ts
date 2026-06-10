@@ -85,26 +85,6 @@ export function buildCadKnowledgeGraph(input: BuildInput): CadKnowledgeGraph {
     edges.push(edge(`edge:file-${body.id}`, 'contains', 'file:0', body.id));
   }
 
-  for (const feature of [...brep.featureHints, ...aag.features]) {
-    nodes.push({
-      id: feature.id,
-      type: 'feature_candidate',
-      category: 'features',
-      label: feature.type,
-      attributes: { ...feature },
-    });
-    edges.push(
-      edge(`edge:evidence-${feature.id}`, 'evidence_for', 'measurement:geometry', feature.id)
-    );
-    inferences.push({
-      id: feature.id,
-      category: 'features',
-      type: feature.type,
-      value: feature.dimensions ?? true,
-      evidence: feature.evidence,
-    });
-  }
-
   nodes.push({
     id: 'exchange:metadata',
     type: 'exchange_metadata',

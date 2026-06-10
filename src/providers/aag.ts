@@ -1,10 +1,6 @@
-import type { FeatureCandidate, Limitation, ProviderInfo, Provenance } from './schema.js';
+import type { Limitation, ProviderInfo, Provenance } from './schema.js';
 
-export type AagCapability = 'face_adjacency' | 'vexity' | 'feature_recognition';
-
-export interface AagOptions {
-  includeFeatures?: boolean;
-}
+export type AagCapability = 'face_adjacency' | 'vexity';
 
 export interface AagInput {
   filePath: string;
@@ -32,7 +28,6 @@ export interface AagModel {
   available: boolean;
   nodes: AagNode[];
   edges: AagEdge[];
-  features: FeatureCandidate[];
   limitations: Limitation[];
   provenance: Provenance[];
 }
@@ -40,6 +35,5 @@ export interface AagModel {
 export interface AagProvider {
   name: string;
   capabilities: readonly AagCapability[];
-  build(input: AagInput, options?: AagOptions): Promise<AagModel>;
-  recognizeFeatures?(input: AagModel): Promise<FeatureCandidate[]>;
+  build(input: AagInput): Promise<AagModel>;
 }

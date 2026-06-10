@@ -1,5 +1,3 @@
-import type { AnalysisError } from '../utils/errors.js';
-
 export interface Point3D {
   x: number;
   y: number;
@@ -56,17 +54,4 @@ export interface Warning {
 export interface Limitation {
   source: string;
   message: string;
-}
-
-export interface FeatureCandidate {
-  id: string;
-  type: string;
-  dimensions?: Record<string, number>;
-  sourceIds: string[];
-  evidence: Evidence;
-}
-
-export interface ProviderFailure {
-  provider: string;
-  error: AnalysisError;
 }

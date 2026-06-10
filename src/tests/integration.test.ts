@@ -6,7 +6,6 @@ import {
   handleInspectStepFile,
   handleQueryStepEdges,
   handleQueryStepFaces,
-  handleQueryStepFeatures,
   stepToolSchemas,
 } from '../tools/step-tools.js';
 import { generateStep, NIST_FILE } from './fixtures.js';
@@ -56,13 +55,12 @@ beforeAll(async () => {
 });
 
 describe('CAD MCP five-tool surface', () => {
-  it('defines only the five public tool schemas', () => {
+  it('defines only the four public tool schemas', () => {
     expect(Object.keys(stepToolSchemas).sort()).toEqual([
       'compareStepFiles',
       'inspectStepFile',
       'queryStepEdges',
       'queryStepFaces',
-      'queryStepFeatures',
     ]);
   });
 
@@ -71,7 +69,6 @@ describe('CAD MCP five-tool surface', () => {
       z.object(stepToolSchemas.inspectStepFile).strict(),
       z.object(stepToolSchemas.queryStepFaces).strict(),
       z.object(stepToolSchemas.queryStepEdges).strict(),
-      z.object(stepToolSchemas.queryStepFeatures).strict(),
     ];
 
     for (const schema of schemas) {
@@ -97,7 +94,6 @@ describe('CAD MCP five-tool surface', () => {
           length_max: 1,
           entity_ids: ['edge:1'],
           group_ids: ['group:0'],
-          cluster_ids: ['cluster:0'],
         },
         region: { bbox: { min: [-1, -1, -1], max: [1, 1, 1] }, mode: 'intersects' },
         near: { point: [0, 0, 0], distance: 10 },
@@ -198,38 +194,8 @@ describe('CAD MCP five-tool surface', () => {
     ).toBe(false);
   });
 
-  it('uses candidate-oriented feature schema values and non-zero directions', () => {
-    const featureSchema = z.object(stepToolSchemas.queryStepFeatures).strict();
+  it('rejects non-zero direction vectors in face normal filter', () => {
     const faceSchema = z.object(stepToolSchemas.queryStepFaces).strict();
-
-    expect(
-      featureSchema.safeParse({
-        file_path: blockStepFile,
-        feature_type: ['through_hole_candidate', 'blind_hole_candidate'],
-        filter: { axis_parallel_to: [0, 0, 1] },
-      }).success
-    ).toBe(true);
-
-    expect(
-      featureSchema.safeParse({
-        file_path: blockStepFile,
-        feature_type: ['hole'],
-      }).success
-    ).toBe(false);
-
-    expect(
-      featureSchema.safeParse({
-        file_path: blockStepFile,
-        feature_type: [],
-      }).success
-    ).toBe(false);
-
-    expect(
-      featureSchema.safeParse({
-        file_path: blockStepFile,
-        filter: { axis_parallel_to: [0, 0, 0] },
-      }).success
-    ).toBe(false);
 
     expect(
       faceSchema.safeParse({
@@ -244,6 +210,164 @@ describe('CAD MCP five-tool surface', () => {
         filter: { curvature_min: 0 },
       }).success
     ).toBe(false);
+  });
+
+  it('accepts has_inner_wires in face include', () => {
+    const faceSchema = z.object(stepToolSchemas.queryStepFaces).strict();
+
+    expect(
+      faceSchema.safeParse({
+        file_path: blockStepFile,
+        include: ['has_inner_wires'],
+      }).success
+    ).toBe(true);
+
+    expect(
+      faceSchema.safeParse({
+        file_path: blockStepFile,
+        include: ['has_inner_wires', 'surface_type', 'area'],
+      }).success
+    ).toBe(true);
+  });
+
+  it('accepts adjacent_faces and closest_face_distance in face include and rejects unknown values', () => {
+    const faceSchema = z.object(stepToolSchemas.queryStepFaces).strict();
+
+    expect(
+      faceSchema.safeParse({
+        file_path: blockStepFile,
+        include: ['adjacent_faces'],
+      }).success
+    ).toBe(true);
+
+    expect(
+      faceSchema.safeParse({
+        file_path: blockStepFile,
+        include: ['closest_face_distance'],
+      }).success
+    ).toBe(true);
+
+    expect(
+      faceSchema.safeParse({
+        file_path: blockStepFile,
+        include: ['adjacent_faces', 'closest_face_distance', 'surface_type', 'normal'],
+      }).success
+    ).toBe(true);
+
+    expect(
+      faceSchema.safeParse({
+        file_path: blockStepFile,
+        include: ['adjacent_faces', 'adjacent_faces'],
+      }).success
+    ).toBe(false);
+  });
+
+  it('accepts adjacent_faces in edge include', () => {
+    const edgeSchema = z.object(stepToolSchemas.queryStepEdges).strict();
+
+    expect(
+      edgeSchema.safeParse({
+        file_path: blockStepFile,
+        include: ['adjacent_faces'],
+      }).success
+    ).toBe(true);
+
+    expect(
+      edgeSchema.safeParse({
+        file_path: blockStepFile,
+        include: ['adjacent_faces', 'curve_type', 'length'],
+      }).success
+    ).toBe(true);
+  });
+
+  it('returns adjacent_faces for each face on a block', async () => {
+    const result = expectSuccess(
+      await handleQueryStepFaces(blockStepFile, {
+        include: ['id', 'surface_type', 'adjacent_faces'],
+        limit: 100,
+      })
+    );
+    const entities = (result.data as Record<string, unknown>).entities as Array<
+      Record<string, unknown>
+    >;
+    expect(entities.length).toBeGreaterThan(0);
+    for (const face of entities) {
+      expect(face.id).toBeTruthy();
+      expect(face.adjacent_faces).toBeDefined();
+      const adj = face.adjacent_faces as Array<Record<string, unknown>>;
+      expect(Array.isArray(adj)).toBe(true);
+      // Each face on a box has 4 adjacent faces (box has 6 faces, each touches 4).
+      expect(adj.length).toBe(4);
+      for (const a of adj) {
+        expect(a.face_id).toMatch(/^face:/);
+        expect(a.surface_type).toBeTypeOf('string');
+        expect(['convex', 'concave', 'smooth', 'unknown']).toContain(a.vexity);
+        expect(a.dihedral_angle_deg).toBeTypeOf('number');
+      }
+    }
+  });
+
+  it('returns adjacent_faces for each edge on a block', async () => {
+    const result = expectSuccess(
+      await handleQueryStepEdges(blockStepFile, {
+        include: ['id', 'curve_type', 'adjacent_faces'],
+        limit: 100,
+      })
+    );
+    const entities = (result.data as Record<string, unknown>).entities as Array<
+      Record<string, unknown>
+    >;
+    expect(entities.length).toBeGreaterThan(0);
+    for (const edge of entities) {
+      expect(edge.adjacent_faces).toBeDefined();
+      const adj = edge.adjacent_faces as Array<Record<string, unknown>>;
+      expect(Array.isArray(adj)).toBe(true);
+      // Each edge on a manifold solid bounds exactly 2 faces.
+      expect(adj.length).toBe(2);
+      for (const a of adj) {
+        expect(a.face_id).toMatch(/^face:/);
+        expect(a.surface_type).toBeTypeOf('string');
+      }
+    }
+  });
+
+  it('returns has_inner_wires for each face on a block', async () => {
+    const result = expectSuccess(
+      await handleQueryStepFaces(blockStepFile, {
+        include: ['id', 'surface_type', 'has_inner_wires'],
+        limit: 100,
+      })
+    );
+    const entities = (result.data as Record<string, unknown>).entities as Array<
+      Record<string, unknown>
+    >;
+    expect(entities.length).toBeGreaterThan(0);
+    for (const face of entities) {
+      expect(face.has_inner_wires).toBeDefined();
+      // A simple box has no inner wires (no holes through any face).
+      expect(face.has_inner_wires).toBe(false);
+    }
+  });
+
+  it('returns closest_face_distance for each face on a block', async () => {
+    const result = expectSuccess(
+      await handleQueryStepFaces(blockStepFile, {
+        include: ['id', 'surface_type', 'center', 'closest_face_distance'],
+        limit: 100,
+      })
+    );
+    const entities = (result.data as Record<string, unknown>).entities as Array<
+      Record<string, unknown>
+    >;
+    expect(entities.length).toBeGreaterThan(0);
+    for (const face of entities) {
+      expect(face.closest_face_distance).toBeDefined();
+      const cfd = face.closest_face_distance as Record<string, unknown>;
+      expect(cfd.face_id).toMatch(/^face:/);
+      expect(typeof cfd.distance).toBe('number');
+      expect((cfd.distance as number) >= 0).toBe(true);
+      expect(cfd.face_id).not.toBe(face.id);
+    }
   });
 
   it('does not accept compare options that are not implemented yet', () => {
@@ -337,23 +461,6 @@ describe('CAD MCP five-tool surface', () => {
     expect(firstFace.surface_type).toBe('plane');
   });
 
-  it('queries features with deterministic filtering and pagination', async () => {
-    const result = expectSuccess(
-      await handleQueryStepFeatures(blockStepFile, {
-        limit: 100,
-        offset: 0,
-      })
-    );
-    const data = result.data as Record<string, unknown>;
-    expect(data.schema_version).toBe('0.3');
-    expect(data.file_path).toBe(blockStepFile);
-    const entities = data.entities as unknown[];
-    expect(Array.isArray(entities)).toBe(true);
-    // May have 0 features if none are detected, which is OK.
-    const pagination = data.pagination as Record<string, unknown>;
-    expect(pagination.limit).toBe(100);
-  });
-
   it('groups faces by surface_type with counts and sample IDs', async () => {
     const result = expectSuccess(
       await handleQueryStepFaces(blockStepFile, {
@@ -422,6 +529,83 @@ describe('CAD MCP five-tool surface', () => {
     expect('clusters' in (result.data as Record<string, unknown>)).toBe(false);
   });
 
+  it('filters faces by group_ids from a previous grouping', async () => {
+    // First, get the groups for a box (6 planar faces).
+    const groupResult = expectSuccess(
+      await handleQueryStepFaces(blockStepFile, {
+        result_mode: 'groups',
+        group_by: ['surface_type'],
+      })
+    );
+    const groupData = groupResult.data as Record<string, unknown>;
+    const groups = groupData.groups as Array<Record<string, unknown>>;
+    expect(groups.length).toBeGreaterThan(0);
+
+    // The plane group should be group:0 (6 faces).
+    const planeGroup = groups.find(
+      (g) => (g.key as Record<string, unknown>).surface_type === 'plane'
+    );
+    expect(planeGroup).toBeTruthy();
+    expect(planeGroup!.entity_count).toBe(6);
+
+    const groupId = planeGroup!.id as string;
+
+    // Now filter by that group_id using the same group_by.
+    const filtered = expectSuccess(
+      await handleQueryStepFaces(blockStepFile, {
+        group_by: ['surface_type'],
+        filter: { group_ids: [groupId] },
+        result_mode: 'entities',
+      })
+    );
+    const filteredData = filtered.data as Record<string, unknown>;
+    const faces = filteredData.entities as Array<Record<string, unknown>>;
+    expect(faces.length).toBe(6);
+    for (const f of faces) {
+      expect(f.surface_type).toBe('plane');
+    }
+
+    // Without group_by, the default (surface_type) is used, so results match.
+    const defaultGb = expectSuccess(
+      await handleQueryStepFaces(blockStepFile, {
+        filter: { group_ids: [groupId] },
+        result_mode: 'entities',
+      })
+    );
+    const defaultGbData = defaultGb.data as Record<string, unknown>;
+    expect((defaultGbData.entities as unknown[]).length).toBe(6);
+  });
+
+  it('filters edges by group_ids from length_range grouping', async () => {
+    // Get the tiny-edge group from a box (lengths vary).
+    const groupResult = expectSuccess(
+      await handleQueryStepEdges(blockStepFile, {
+        result_mode: 'groups',
+        group_by: ['length_range'],
+      })
+    );
+    const groups = (groupResult.data as Record<string, unknown>).groups as Array<
+      Record<string, unknown>
+    >;
+
+    // Find a non-empty group.
+    const targetGroup = groups.find((g) => (g.entity_count as number) > 0);
+    expect(targetGroup).toBeTruthy();
+
+    const filtered = expectSuccess(
+      await handleQueryStepEdges(blockStepFile, {
+        group_by: ['length_range'],
+        filter: { group_ids: [targetGroup!.id as string] },
+        result_mode: 'entities',
+      })
+    );
+    const entities = (filtered.data as Record<string, unknown>).entities as Array<
+      Record<string, unknown>
+    >;
+    expect(entities.length).toBe(targetGroup!.entity_count as number);
+    expect(entities.length).toBeGreaterThan(0);
+  });
+
   it('compares two files with metric deltas', async () => {
     const result = expectSuccess(await handleCompareStepFiles(blockStepFile, cylinderStepFile));
     const deltas = result.data.deltas as Record<string, unknown>;
@@ -445,52 +629,5 @@ describe('CAD MCP five-tool surface', () => {
     const aag = geometry.aag as Record<string, unknown>;
     expect(aag.faceCount).toBeGreaterThan(0);
     expect(aag.adjacencyCount).toBeGreaterThan(0);
-  });
-
-  it('ensures all canonical feature types are recognized', () => {
-    // All 5 canonical feature types should map to themselves (not 'unknown').
-    const canonicalTypes = [
-      'hole_candidate',
-      'through_hole_candidate',
-      'blind_hole_candidate',
-      'fillet_candidate',
-      'pocket_candidate',
-    ];
-    const featureSchema = z.object(stepToolSchemas.queryStepFeatures).strict();
-
-    for (const type of canonicalTypes) {
-      const result = featureSchema.safeParse({
-        file_path: blockStepFile,
-        feature_type: [type],
-      });
-      expect(result.success).toBe(true);
-    }
-  });
-
-  it('rejects deprecated feature type enum values', () => {
-    const featureSchema = z.object(stepToolSchemas.queryStepFeatures).strict();
-    const deprecatedTypes = ['cylindrical_region', 'coplanar_face_group', 'parallel_face_pair'];
-
-    for (const type of deprecatedTypes) {
-      const result = featureSchema.safeParse({
-        file_path: blockStepFile,
-        feature_type: [type as never],
-      });
-      expect(result.success).toBe(false);
-    }
-  });
-
-  it('supports through-hole filtering when features are present', async () => {
-    const result = expectSuccess(
-      await handleQueryStepFeatures(blockStepFile, {
-        filter: { through: true },
-        limit: 100,
-        offset: 0,
-      })
-    );
-    const data = result.data as Record<string, unknown>;
-    // Should return successfully whether or not through-holes exist in the test fixture.
-    expect(data.schema_version).toBe('0.3');
-    expect(data.file_path).toBe(blockStepFile);
   });
 });

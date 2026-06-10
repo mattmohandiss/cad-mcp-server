@@ -44,11 +44,6 @@ export interface Inference {
   evidence: Evidence;
 }
 
-export interface ProviderSummary {
-  providers: ProviderInfo[];
-  limitations: Limitation[];
-}
-
 export interface CadKnowledgeGraph {
   filePath: string;
   runId: string;
@@ -62,9 +57,4 @@ export interface CadKnowledgeGraph {
   inferences: Inference[];
   warnings: Warning[];
   limitations: Limitation[];
-}
-
-export interface ToolEnvelope<T> {
-  ok: true;
-  data: T;
 }
