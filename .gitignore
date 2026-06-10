@@ -2,3 +2,10 @@
 .direnv/
 dist/
 node_modules/
+
+# Manual test artifacts
+*.stp
+*.STEP
+
+# Temporary test scripts
+test-all-tools.js

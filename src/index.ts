@@ -3,21 +3,20 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { handleAnalyzeStepDetail } from './tools/analyze-detail.js';
-import { handleCompareStepFiles } from './tools/compare.js';
-import { handleGenerateStepReport } from './tools/report.js';
-import { handleInspectStepFile } from './tools/inspect.js';
-import { handleQueryStepGraph } from './tools/query-graph.js';
+import {
+  handleCompareStepFiles,
+  handleInspectStepFile,
+  handleQueryStepEdges,
+  handleQueryStepFaces,
+  handleQueryStepFeatures,
+  stepToolSchemas,
+} from './tools/step-tools.js';
 import { isToolError } from './tools/shared.js';
 
 const server = new McpServer({
   name: 'cad-mcp-server',
   version: '0.1.0',
 });
-
-const stepFileInput = {
-  file_path: z.string().min(1).describe('Absolute or relative path to the STEP file to analyze'),
-};
 
 function jsonToolResult(result: unknown) {
   return {
@@ -46,105 +45,83 @@ type RegisterTool = (
 
 const registerTool = server.registerTool.bind(server) as RegisterTool;
 
-const categorySchema = z.enum([
-  'geometry',
-  'topology',
-  'structure',
-  'features',
-  'spatial',
-  'exchange',
-  'health',
-]);
+function withErrorContext(
+  toolName: string,
+  handler: (args: Record<string, unknown>) => StepToolResult
+) {
+  return async (args: Record<string, unknown>) => {
+    try {
+      return await handler(args);
+    } catch (error) {
+      console.error(`Tool ${toolName} failed:`, error);
+      throw error;
+    }
+  };
+}
 
 registerTool(
   'inspect_step_file',
   {
     title: 'Inspect STEP File',
     description:
-      'Fast first-pass STEP overview with geometry, exchange metadata, health warnings, and provider limitations.',
-    inputSchema: stepFileInput,
+      'Fast first-pass STEP overview with import status, units, metadata, bounding box, counts, geometric properties, health, and provider limitations. Example: {file_path:"model.step"}',
+    inputSchema: stepToolSchemas.inspectStepFile,
   },
   async ({ file_path }) => jsonToolResult(await handleInspectStepFile(String(file_path)))
 );
 
 registerTool(
-  'analyze_step_detail',
+  'query_step_faces',
   {
-    title: 'Analyze STEP Detail',
-    description: 'Detailed category-selected STEP analysis over the canonical CAD knowledge graph.',
-    inputSchema: {
-      ...stepFileInput,
-      categories: z.array(categorySchema).optional(),
-      detail_level: z.enum(['summary', 'standard', 'full']).optional(),
-    },
+    title: 'Query STEP Faces',
+    description:
+      'Query B-rep faces and surfaces by deterministic model facts such as surface type, area, normal direction, bounding box, and adjacency. All coordinates and dimensions in model units (typically mm). Filters combine with AND across fields; a multi-value array (e.g. surface_type) matches any listed value (OR within the array). Use region or near for spatial queries, surface_type/area for property filtering. For an overview of a large model, set result_mode "groups" with group_by (e.g. ["surface_type"]) to get per-group counts plus sample IDs instead of a long entity list, then drill into specific entities. Supports sorting, pagination, and result projection. Example: {file_path:"model.step",result_mode:"groups",group_by:["surface_type"]}',
+    inputSchema: stepToolSchemas.queryStepFaces,
   },
-  async ({ file_path, categories, detail_level }) =>
-    jsonToolResult(
-      await handleAnalyzeStepDetail(
-        String(file_path),
-        Array.isArray(categories) ? categories : undefined,
-        detail_level === 'standard' || detail_level === 'full' ? detail_level : 'summary'
-      )
-    )
+  withErrorContext('query_step_faces', async (args) => {
+    const query = args as Record<string, unknown>;
+    return jsonToolResult(await handleQueryStepFaces(String(query.file_path), query as never));
+  })
 );
 
 registerTool(
-  'query_step_graph',
+  'query_step_edges',
   {
-    title: 'Query STEP Graph',
-    description: 'Run deterministic targeted queries against the CAD knowledge graph.',
-    inputSchema: {
-      ...stepFileInput,
-      query: z.object({}).passthrough(),
-    },
+    title: 'Query STEP Edges',
+    description:
+      'Query B-rep geometric edges and curves by deterministic model facts such as curve type, length, radius, and bounding box. All coordinates and dimensions in model units (typically mm). Filters combine with AND across fields; a multi-value array (e.g. curve_type) matches any listed value (OR within the array). Use region or near for spatial queries, curve_type/length for property filtering. Useful for finding small/degenerate edges: filter length_max, or set result_mode "groups" with group_by ["length_range"] where the 0-1 bucket isolates tiny edges. Supports sorting, pagination, and result projection. Example: {file_path:"model.step",filter:{length_max:1},sort:{by:"length",direction:"asc"},limit:50}',
+    inputSchema: stepToolSchemas.queryStepEdges,
   },
-  async ({ file_path, query }) =>
-    jsonToolResult(
-      await handleQueryStepGraph(
-        String(file_path),
-        query as Parameters<typeof handleQueryStepGraph>[1]
-      )
-    )
+  withErrorContext('query_step_edges', async (args) => {
+    const query = args as Record<string, unknown>;
+    return jsonToolResult(await handleQueryStepEdges(String(query.file_path), query as never));
+  })
+);
+
+registerTool(
+  'query_step_features',
+  {
+    title: 'Query STEP Features',
+    description:
+      'Query derived feature candidates such as holes (through/blind), fillets, and pockets. All coordinates and dimensions in model units (typically mm). Returns heuristic B-rep-based candidates with confidence scores (0-1), not native CAD feature-tree facts. Filters combine with AND across fields; a multi-value array (e.g. feature_type) matches any listed value (OR within the array). Supports filtering by geometry (radius, diameter, depth), through/blind status, confidence, and spatial location. To count distinct hole sizes, set result_mode "groups" with group_by ["diameter"]; to split holes by through vs blind, group_by ["feature_type","through"]. Use confidence_min for high-confidence only. Example: {file_path:"model.step",result_mode:"groups",group_by:["feature_type","through"]}',
+    inputSchema: stepToolSchemas.queryStepFeatures,
+  },
+  withErrorContext('query_step_features', async (args) => {
+    const query = args as Record<string, unknown>;
+    return jsonToolResult(await handleQueryStepFeatures(String(query.file_path), query as never));
+  })
 );
 
 registerTool(
   'compare_step_files',
   {
     title: 'Compare STEP Files',
-    description: 'Compare two STEP files using geometry, metadata, feature, and health deltas.',
-    inputSchema: {
-      file_a: z.string().min(1),
-      file_b: z.string().min(1),
-    },
+    description:
+      'Compare two STEP files and return metric deltas (differences) in geometry, topology, and metadata. Returns volume delta, surface area delta, face count delta, edge count delta, body count delta, and feature candidate count delta. All deltas are (file_b - file_a). For identical files, all geometric deltas equal 0. Also returns schema differences and product name changes. Use to track revisions, detect modifications, or validate file equivalence. Note: Comparison is metric-based; structural/feature-tree changes not tracked. Example: {file_a:"model_v1.step",file_b:"model_v2.step"}',
+    inputSchema: stepToolSchemas.compareStepFiles,
   },
   async ({ file_a, file_b }) =>
     jsonToolResult(await handleCompareStepFiles(String(file_a), String(file_b)))
-);
-
-registerTool(
-  'generate_step_report',
-  {
-    title: 'Generate STEP Report',
-    description: 'Generate structured JSON plus Markdown report from CAD graph facts.',
-    inputSchema: {
-      ...stepFileInput,
-      report_type: z.enum([
-        'engineering_review',
-        'supplier_review',
-        'import_risk',
-        'space_claim',
-        'manufacturing_handoff',
-        'pmi_audit',
-      ]),
-    },
-  },
-  async ({ file_path, report_type }) =>
-    jsonToolResult(
-      await handleGenerateStepReport(
-        String(file_path),
-        report_type as Parameters<typeof handleGenerateStepReport>[1]
-      )
-    )
 );
 
 async function main() {

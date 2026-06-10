@@ -21,7 +21,7 @@
           # formatters, linters, test tools, and build tools.
           # Global Neovim provides editor behavior, not language tool choices.
           buildInputs = with pkgs; [
-            nodejs_22
+            nodejs_24
           ];
 
           shellHook = ''

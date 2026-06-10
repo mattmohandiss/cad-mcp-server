@@ -8,7 +8,7 @@ import { buildAagFromShape } from './aag-utils.js';
 
 const AAG_LIMITATIONS = [
   'Face adjacency and vexity are computed from the B-rep topology, not from the original design intent (feature tree).',
-  'Vexity computation uses dihedral angle heuristics with a ±0.05 cosine threshold for convex/concave/smooth classification.',
+  'Vexity computation uses dihedral angle heuristics with a +/-0.05 cosine threshold for convex/concave/smooth classification.',
   'Feature recognition is pattern-based on the AAG and may miss non-standard or compound features.',
 ];
 

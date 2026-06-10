@@ -12,8 +12,6 @@ export type KnowledgeCategory =
   | 'exchange'
   | 'health';
 
-export type DetailLevel = 'summary' | 'standard' | 'full';
-
 export interface CadNode {
   id: string;
   type: string;
@@ -64,11 +62,6 @@ export interface CadKnowledgeGraph {
   inferences: Inference[];
   warnings: Warning[];
   limitations: Limitation[];
-}
-
-export interface AnalysisOptions {
-  categories?: KnowledgeCategory[];
-  detailLevel?: DetailLevel;
 }
 
 export interface ToolEnvelope<T> {

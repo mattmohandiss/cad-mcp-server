@@ -1,4 +1,4 @@
-# Quick Reference: CAD MCP Server
+# Quick Start
 
 ## Setup
 
@@ -19,42 +19,56 @@ just test
 npm start
 ```
 
+For local development with TypeScript directly:
+
+```bash
+npm run dev
+```
+
 ## Available Tools
 
-- `cad-mcp-server_inspect_step_file` -> fast first-pass overview
-- `cad-mcp-server_analyze_step_detail` -> category-selected graph analysis
-- `cad-mcp-server_query_step_graph` -> targeted graph queries
-- `cad-mcp-server_compare_step_files` -> compare two STEP files
-- `cad-mcp-server_generate_step_report` -> JSON plus Markdown report
+- `cad-mcp-server_inspect_step_file`: fast first-pass STEP overview.
+- `cad-mcp-server_query_step_faces`: configurable B-rep face/surface query schema. Kernel-backed implementation is pending.
+- `cad-mcp-server_query_step_edges`: configurable B-rep edge/curve query schema. Kernel-backed implementation is pending.
+- `cad-mcp-server_query_step_features`: configurable derived feature-candidate query schema. Kernel-backed implementation is pending.
+- `cad-mcp-server_compare_step_files`: metric-level comparison of two STEP files.
+
+## Sample File
+
+Use this included NIST STEP fixture for manual testing:
+
+```text
+samples/NIST-PMI-STEP-Files/AP203 geometry only/nist_ftc_11_asme1_rb.stp
+```
+
+The sample corpus includes AP203 and AP242 files. Some AP242 files include PMI, but this MCP currently performs only lightweight PMI/entity detection, not full semantic PMI interpretation.
 
 ## Test Prompts
 
-1. Analyze `samples/NIST-PMI-STEP-Files/AP203 geometry only/nist_ftc_11_asme1_rb.stp` with `inspect_step_file`.
-2. Run detailed geometry, topology, exchange, and health analysis on that file.
-3. Query the graph for `hole_candidate` features.
-4. Generate an `engineering_review` report.
-5. Analyze `/nonexistent/file.step` to verify structured errors.
+1. Inspect the NIST sample with `inspect_step_file`.
+2. Confirm `query_step_faces`, `query_step_edges`, and `query_step_features` expose strict schemas; these return `not_implemented` until kernel-backed implementation lands.
+3. Query examples should use candidate-oriented feature values such as `hole_candidate`, `cylindrical_region`, `fillet_candidate`, or `pocket_candidate`.
+4. Keep query examples summary-first with `limit`, `offset`, and typed `include` values.
+5. Compare two sample STEP files with `compare_step_files` and treat the result as a metric-level comparison.
+6. Inspect `/nonexistent/file.step` to verify structured errors.
 
 ## Verify Success
 
-- [ ] `just build` succeeds
-- [ ] `just test` succeeds
-- [ ] MCP server initializes
-- [ ] MCP client can see the five tools
-- [ ] Tool calls return `{ ok, data }` or `{ ok, error }`
+- `just build` succeeds.
+- `just test` succeeds.
+- MCP server initializes.
+- MCP client can see the five tools.
+- Tool calls return `{ "ok": true, "data": ... }` or `{ "ok": false, "error": ... }`.
+- Tool output includes provider limitations where analysis is heuristic or incomplete.
 
-## Files
+## Provider Notes
 
-| File | Purpose |
-| --- | --- |
-| `Tools.md` | Tool-surface and architecture guide |
-| `dist/index.js` | Compiled MCP server |
-| `samples/dummy.step` | Invalid geometry fixture for error tests |
+- B-rep provider: `occt-wasm`.
+- Topology/feature provider: internal AAG-style analysis derived from `occt-wasm` topology calls.
+- Semantic provider: lightweight STEP text/header parser.
 
-## Current Provider Notes
+Important limitations:
 
-- B-rep provider: `occt-wasm`
-- AAG provider: unavailable by design until a real provider is integrated
-- Semantic provider: lightweight STEP metadata parser
-
-Next provider candidates: Analysis Situs for AAG/feature recognition and STP2OWL for formal OWL export.
+- No full native OCCT API surface.
+- No exposed BRepGraph API from `occt-wasm`.
+- No authoritative feature-tree, PMI/GD&T, or revision-identity claims.

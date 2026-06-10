@@ -1,4 +1,4 @@
-import type { CadKnowledgeGraph, DetailLevel, KnowledgeCategory } from './schema.js';
+import type { CadKnowledgeGraph } from './schema.js';
 
 export function providerSummary(graph: CadKnowledgeGraph) {
   return {
@@ -27,27 +27,6 @@ export function inspectProjection(graph: CadKnowledgeGraph) {
     inferences: graph.inferences,
     warnings: graph.warnings,
     limitations: graph.limitations,
-    providers: providerSummary(graph),
-  };
-}
-
-export function detailProjection(
-  graph: CadKnowledgeGraph,
-  categories: KnowledgeCategory[],
-  detailLevel: DetailLevel
-) {
-  const selected = new Set(categories);
-  return {
-    filePath: graph.filePath,
-    detailLevel,
-    facts: graph.facts.filter((fact) => selected.has(fact.category)),
-    inferences: graph.inferences.filter((inference) => selected.has(inference.category)),
-    warnings: selected.has('health') ? graph.warnings : [],
-    nodes:
-      detailLevel === 'full'
-        ? graph.nodes.filter((node) => node.category === 'file' || selected.has(node.category))
-        : undefined,
-    edges: detailLevel === 'full' ? graph.edges : undefined,
     providers: providerSummary(graph),
   };
 }
