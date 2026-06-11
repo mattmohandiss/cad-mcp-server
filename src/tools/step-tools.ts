@@ -11,7 +11,7 @@ const stepFileInput = {
   file_path: z.string().min(1).describe('Absolute or relative path to the STEP file to query'),
 };
 
-const point3Schema = z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]);
+const point3Schema = z.array(z.number().finite()).length(3);
 
 const direction3Schema = point3Schema.refine(([x, y, z]) => x !== 0 || y !== 0 || z !== 0, {
   message: 'Direction vector must be non-zero.',

@@ -188,11 +188,14 @@ export function extractFaceEntities(
       center,
     };
 
-    // Try to get surface normal at center.
+    // Try to get surface normal at center (via UV surface parameters).
     try {
-      const normal = kernel.surfaceNormal(face, center[0], center[1]);
-      if (normal) {
-        entity.normal = pointToTuple(normal);
+      const uv = kernel.uvFromPoint(face, { x: center[0], y: center[1], z: center[2] });
+      if (uv) {
+        const normal = kernel.surfaceNormal(face, uv.u, uv.v);
+        if (normal) {
+          entity.normal = pointToTuple(normal);
+        }
       }
     } catch {
       // Normal extraction failed, continue without it.

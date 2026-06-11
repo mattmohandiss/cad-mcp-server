@@ -61,10 +61,10 @@ export function radiusBucketValue(value: number): number {
  * Snap a direction vector to the nearest principal axis (+X..-Z) when within
  * the axis-snap tolerance; otherwise return "off-axis". Keys are stable strings.
  */
-export function axisDirectionKey(direction: [number, number, number]): string {
+export function axisDirectionKey(direction: number[]): string {
   const unit = normalizeVector(direction);
   if (unit[0] === 0 && unit[1] === 0 && unit[2] === 0) return 'undefined';
-  const axes: Array<{ key: string; vec: [number, number, number] }> = [
+  const axes: Array<{ key: string; vec: number[] }> = [
     { key: '+X', vec: [1, 0, 0] },
     { key: '-X', vec: [-1, 0, 0] },
     { key: '+Y', vec: [0, 1, 0] },
@@ -244,8 +244,8 @@ export function sampleEntityIds(
  * Check if a bounding box intersects another.
  */
 export function bboxIntersects(
-  bbox1: { min: [number, number, number]; max: [number, number, number] },
-  bbox2: { min: [number, number, number]; max: [number, number, number] }
+  bbox1: { min: number[]; max: number[] },
+  bbox2: { min: number[]; max: number[] }
 ): boolean {
   return !(
     bbox1.max[0] < bbox2.min[0] ||
@@ -260,7 +260,7 @@ export function bboxIntersects(
 /**
  * Calculate distance between two points.
  */
-export function pointDistance(p1: [number, number, number], p2: [number, number, number]): number {
+export function pointDistance(p1: number[], p2: number[]): number {
   const dx = p1[0] - p2[0];
   const dy = p1[1] - p2[1];
   const dz = p1[2] - p2[2];
@@ -270,14 +270,14 @@ export function pointDistance(p1: [number, number, number], p2: [number, number,
 /**
  * Calculate dot product of two direction vectors.
  */
-export function dotProduct(v1: [number, number, number], v2: [number, number, number]): number {
+export function dotProduct(v1: number[], v2: number[]): number {
   return v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
 }
 
 /**
  * Normalize a vector to unit length.
  */
-export function normalizeVector(v: [number, number, number]): [number, number, number] {
+export function normalizeVector(v: number[]): [number, number, number] {
   const len = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
   if (len === 0) return [0, 0, 0];
   return [v[0] / len, v[1] / len, v[2] / len];
@@ -287,8 +287,8 @@ export function normalizeVector(v: [number, number, number]): [number, number, n
  * Calculate angle between two unit vectors in degrees.
  */
 export function angleDegreesNormalized(
-  u1: [number, number, number],
-  u2: [number, number, number]
+  u1: number[],
+  u2: number[]
 ): number {
   const dot = Math.max(-1, Math.min(1, dotProduct(u1, u2)));
   return (Math.acos(dot) * 180) / Math.PI;
