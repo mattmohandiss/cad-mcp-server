@@ -92,7 +92,7 @@ registerTool(
   {
     title: 'Inspect STEP File',
     description:
-      'Compact first-pass overview of a STEP file. Use this FIRST to identify the part, check validity, get topology counts, and detect small-geometry indicators. Returns no detailed entity lists; follow up with find_step_faces, find_step_edges, or get_step_entities for detail. Do NOT use for entity-level searches. Example: {file_path:"model.step"}',
+      'Compact first-pass overview of a STEP file. Use this FIRST to identify the part, check validity, dimensions, body count, and topology counts. Expensive face area extremes and adjacency are deferred; follow up with find_step_faces, find_step_edges, or get_step_entities for detail. Do NOT use for entity-level searches. Example: {file_path:"model.step"}',
     inputSchema: stepToolSchemas.inspectStepFile,
     outputSchema: stepToolOutputSchemas.inspectStepFile,
   },
@@ -119,7 +119,7 @@ registerTool(
   {
     title: 'Find STEP Edges',
     description:
-      'Search edges by curve type, length, circular radius, spatial region, or proximity. Use for tiny-edge investigation, long edges, circular edges, or grouped edge statistics. For tiny edges use length_max and sort_by:"length"; omit radius filters unless specifically querying circular edges by radius. radius_min/radius_max only affect circle edges and do not exclude line or bspline edges. Do NOT use for known edge IDs; use get_step_entities. Example tiny edges: {file_path:"model.step",length_max:0.5,sort_by:"length",fields:["id","length","curve_type"]}',
+      'Search edges by curve type, length, circular radius, spatial region, or proximity. Use for tiny-edge investigation, long edges, circular edges, or grouped edge statistics. For tiny edges use length_max and sort_by:"length". Radius filters match radius-bearing/circular edges only; omit them unless specifically querying circular edges by radius. Do NOT use for known edge IDs; use get_step_entities. Example tiny edges: {file_path:"model.step",length_max:0.5,sort_by:"length",fields:["id","length","curve_type"]}',
     inputSchema: stepToolSchemas.findStepEdges,
     outputSchema: stepToolOutputSchemas.findStepEdges,
   },

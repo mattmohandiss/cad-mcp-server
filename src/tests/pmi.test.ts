@@ -9,6 +9,11 @@ interface ToolSuccess {
   data: Record<string, unknown>;
 }
 
+interface ToolFailure {
+  ok: false;
+  error: { type: string; message: string };
+}
+
 async function writeStepText(text: string): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), 'cad-mcp-pmi-'));
   const filePath = path.join(dir, 'pmi.step');
@@ -19,6 +24,12 @@ async function writeStepText(text: string): Promise<string> {
 function expectSuccess(value: unknown): ToolSuccess {
   const response = value as ToolSuccess;
   expect(response.ok).toBe(true);
+  return response;
+}
+
+function expectFailure(value: unknown): ToolFailure {
+  const response = value as ToolFailure;
+  expect(response.ok).toBe(false);
   return response;
 }
 
@@ -70,5 +81,15 @@ END-ISO-10303-21;
 
     expect((result.data.statistics as Record<string, unknown>).total_pmi).toBe(0);
     expect((result.data.warnings as string[])[0]).toContain('No PMI entities found');
+  });
+
+  it('rejects invalid PMI value ranges', async () => {
+    const filePath = await writeStepText("ISO-10303-21;\nDATA;\n#1=PRODUCT('x');\nENDSEC;");
+    const result = expectFailure(
+      await handleQueryStepPmi(filePath, { value_min: 1, value_max: 0.5 })
+    );
+
+    expect(result.error.type).toBe('invalid_input');
+    expect(result.error.message).toContain('value_min');
   });
 });

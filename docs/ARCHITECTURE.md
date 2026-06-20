@@ -2,132 +2,63 @@
 
 ## Summary
 
-This project is a portable MCP server for deterministic STEP inspection. The LLM-facing layer stays small and stable; the CAD work happens inside provider-backed analysis services.
+This project is a portable, read-only MCP server for deterministic STEP inspection. The public tool layer stays small; expensive CAD work is centralized in a cached model service.
 
 ```text
-LLM host
-  -> MCP tools
-  -> tool handlers
-  -> CAD analysis service
-  -> provider outputs
-  -> CadKnowledgeGraph
-  -> inspect, entity-query, and compare projections
+MCP host
+  -> src/index.ts tool registrations
+  -> src/tools/step-tools.ts adapters and handlers
+  -> src/cad/query/* services
+  -> src/cad/model-store.ts cached imported model
+  -> occt-wasm + lightweight STEP text parsers
 ```
 
-## Current Runtime
+## Runtime Model
 
-The current runtime is TypeScript/Node with `occt-wasm`.
+`StepModelStore` owns loaded STEP models. A model is keyed by resolved path, file size, and mtime. Each loaded model can cache:
 
-```text
-src/index.ts
-  -> src/tools/*
-  -> src/cad/analyze.ts
-  -> src/providers/occt-wasm/*
-  -> src/providers/lightweight-step/*
-```
+- STEP text
+- imported OCCT shape handle
+- B-rep summary
+- semantic metadata
+- PMI entities
+- face entities
+- edge entities
+- body maps when requested
 
-Provider roles:
+The store keeps a small in-memory LRU cache and skips eviction of models actively used by an in-flight query.
 
-| Provider | Current implementation | Role |
-| --- | --- | --- |
-| B-rep | `OcctWasmBRepProvider` | STEP import, bodies, dimensions, volume, area, face/edge counts, surface/curve facts. |
-| Topology/features | `OcctWasmAagProvider` | Internal face adjacency, approximate vexity, feature candidates. |
-| Exchange metadata | `LightweightStepSemanticProvider` | STEP schema/header/product/PMI keyword hints. |
+## Tool Strategy
 
-## Why TypeScript MCP Plus WASM
+The server is optimized for engineering drill-down:
 
-This shape is intentional:
+1. `inspect_step_file` returns cheap file-level facts and defers expensive details.
+2. `find_step_faces` and `find_step_edges` summarize, group, filter, sort, and page entities.
+3. `get_step_entities` performs direct exact lookup for known IDs.
+4. `query_step_pmi` parses lightweight STEP PMI text entities.
+5. `compare_step_files` compares whole-model metrics and metadata only.
 
-- MCP is schema and orchestration heavy, which fits TypeScript well.
-- `occt-wasm` makes local distribution simple through npm.
-- The server can run without native Open CASCADE installation.
-- The provider boundary leaves room for a native backend later.
+Full-model adjacency is not part of default inspection. Local adjacency is computed on demand for returned face/edge pages.
 
-Do not rewrite the MCP server just to gain CAD depth. Add deeper CAD runtimes behind provider interfaces when the product needs them.
+## Backend Boundaries
 
-## What `occt-wasm` Is
+- `occt-wasm` handles STEP import, topology traversal, geometry measurements, and local adjacency helpers.
+- Lightweight STEP parsers handle metadata and PMI hints.
+- Tool handlers adapt public MCP schemas into internal query shapes.
+- Query services return factual JSON; the LLM interprets engineering meaning.
 
-`occt-wasm` is upstream Open CASCADE compiled to WebAssembly with a curated TypeScript API. It is not a rewrite of Open CASCADE, but it is also not the full native C++ API surface.
+## Non-Goals
 
-The installed package exposes useful operations for this MCP:
+- No CAD editing or CAM generation.
+- No native CAD feature-tree recovery.
+- No authoritative PMI/GD&T validation.
+- No stable feature identity across revisions.
+- No arbitrary kernel-code execution by the LLM.
 
-- STEP import/export.
-- BREP/STL/glTF-related paths.
-- Shape traversal and subshape queries.
-- Bounding boxes and mass properties.
-- Surface and curve classification.
-- Face adjacency helpers.
-- Tessellation.
-- Healing helpers such as `fixShape`, `healSolid`, and `unifySameDomain`.
-- Limited XCAF document support for names, colors, and assemblies.
+## Future Work
 
-It does not currently expose OCCT BRepGraph through the TypeScript API.
+Possible future extensions should remain behind the same tool/service boundary:
 
-## Internal Graph
-
-The graph is an AI-facing domain model, not a claim that all source CAD semantics are available.
-
-It contains:
-
-- nodes for files, bodies, faces, edges, measurements, features, warnings, and limitations
-- edges for containment, adjacency, evidence, derivation, and relationships
-- facts for direct measurements
-- inferences for candidates and heuristics
-- provider provenance
-
-The graph exists to make answers auditable and queryable. It should not become a dumping ground for raw kernel internals.
-
-## AAG Position
-
-Face adjacency is useful for feature recognition, but AAG should remain an implementation detail for now.
-
-Expose engineer-facing outputs:
-
-- adjacent faces
-- convex/concave/smooth relationships
-- hole-like candidates
-- fillet-like candidates
-- pocket-like candidates
-- evidence source IDs
-
-Avoid user-facing AAG concepts unless explicitly debugging.
-
-## OWL Position
-
-Do not build OWL/SPARQL now.
-
-OWL can become useful later for enterprise semantic interoperability, formal PMI workflows, or PLM knowledge graphs. It is not needed for the current portable inspection MCP and would add operational complexity before the geometry answers are strong enough.
-
-Use structured JSON facts and graph projections first.
-
-## Future Native Provider
-
-A native provider may be justified when the product needs:
-
-- full OCCT XDE/OCAF document semantics
-- BRepGraph identity, layers, cache, and graph-native traversal
-- robust AP242 PMI/GD&T extraction
-- stronger assembly structure and validation properties
-- detailed healing diagnostics
-- high-confidence revision matching
-- native rendering/highlighting
-- performance on large assemblies
-
-Recommended future shape:
-
-```text
-TypeScript MCP server
-  -> provider interface
-      -> occt-wasm provider, portable baseline
-      -> native OCCT/XDE/BRepGraph sidecar, optional depth provider
-      -> hosted CAD worker, optional SaaS/enterprise provider
-```
-
-## Design Constraints
-
-- Keep tools read-only.
-- Keep tool schemas strict.
-- Do not let LLMs run arbitrary CAD code.
-- Separate facts from candidates.
-- State backend limitations in every report-worthy output.
-- Prefer better use of `occt-wasm` before adding heavy dependencies.
+- Lazy/columnar face and edge extraction for faster first broad queries.
+- Optional explicit topology graph tool if full adjacency workflows become necessary.
+- Native OCCT/XDE sidecar for deeper assembly names, colors, PMI, or large-model performance.

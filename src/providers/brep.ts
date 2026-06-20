@@ -7,18 +7,6 @@ import type {
   Warning,
 } from './schema.js';
 
-export type BRepCapability =
-  | 'step_import'
-  | 'body_metrics'
-  | 'edge_statistics'
-  | 'surface_types'
-  | 'curve_types';
-
-export interface BRepLoadOptions {
-  includeBodies?: boolean;
-  includeEdges?: boolean;
-}
-
 export interface BRepBody {
   id: string;
   index: number;
@@ -58,10 +46,4 @@ export interface BRepModel {
   bodies: BRepBody[];
   health: BRepHealth;
   provenance: Provenance[];
-}
-
-export interface BRepProvider {
-  name: string;
-  capabilities: readonly BRepCapability[];
-  load(filePath: string, options?: BRepLoadOptions): Promise<BRepModel>;
 }

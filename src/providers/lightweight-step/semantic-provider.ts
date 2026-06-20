@@ -1,7 +1,7 @@
-import type { SemanticFact, SemanticModel, SemanticProvider } from '../semantic.js';
+import type { SemanticFact, SemanticModel } from '../semantic.js';
 import { parseStepMetadata } from './metadata.js';
 
-export class LightweightStepSemanticProvider implements SemanticProvider {
+export class LightweightStepSemanticProvider {
   readonly name = 'lightweight-step';
   readonly capabilities = [
     'step_header',

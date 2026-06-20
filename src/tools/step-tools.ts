@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { compareStepFiles } from '../cad/compare.js';
-import { analyzeStepFile } from '../cad/analyze.js';
-import { inspectProjection } from '../cad/projections.js';
+import { withStepModel } from '../cad/model-store.js';
 import { CAD_RESPONSE_SCHEMA_VERSION } from '../cad/schema-version.js';
 import { queryStepEdges as queryEdgesService } from '../cad/query/edges.js';
+import { canDirectGetEntities, getStepEntitiesDirect } from '../cad/query/entities.js';
 import { queryStepFaces as queryFacesService } from '../cad/query/faces.js';
 import { queryStepPmi as queryPmiService } from '../cad/query/pmi.js';
 import { wrapTool } from './shared.js';
@@ -689,7 +689,7 @@ const findStepEdgesSchema = {
     .number()
     .nonnegative()
     .describe(
-      'Minimum circular edge radius in mm. Only applies to edges with curve_type "circle"; does not exclude line/bspline edges. Omit unless querying circular edges by radius.'
+      'Minimum circular edge radius in mm. Radius filters match radius-bearing/circular edges only. Omit unless querying circular edges by radius.'
     )
     .optional(),
   radius_max: z
@@ -847,6 +847,40 @@ export const stepToolSchemas = {
   queryStepPmi: pmiQuerySchema,
 } as const;
 
+const queryOutputSchema = z
+  .object({
+    schema_version: z.literal('0.4'),
+    file_path: z.string(),
+    units: z.object({}).passthrough(),
+    coordinate_system: z.object({}).passthrough(),
+    query: z.object({}).passthrough(),
+    statistics: z.object({}).passthrough(),
+    pagination: z.object({
+      limit: z.number(),
+      offset: z.number(),
+      returned: z.number(),
+      total_matched: z.number(),
+      has_more: z.boolean(),
+    }),
+    entities: z.array(z.object({}).passthrough()),
+    groups: z.array(z.object({}).passthrough()),
+    warnings: z.array(z.unknown()),
+    limitations: z.array(z.unknown()),
+  })
+  .passthrough();
+
+const compareOutputSchema = z
+  .object({
+    schema_version: z.literal('0.4'),
+    files: z.object({ a: z.string(), b: z.string() }),
+    deltas: z.object({}).passthrough(),
+    exchange: z.object({}).passthrough(),
+    warnings: z.array(z.object({}).passthrough()),
+    limitations: z.array(z.object({}).passthrough()),
+    providers: z.object({}).passthrough(),
+  })
+  .passthrough();
+
 export const stepToolOutputSchemas = {
   inspectStepFile: {
     schema_version: z.literal('0.4'),
@@ -883,11 +917,11 @@ export const stepToolOutputSchemas = {
     warnings: z.array(z.object({}).passthrough()),
     limitations: z.array(z.object({}).passthrough()),
   },
-  findStepFaces: z.object({}).passthrough(),
-  findStepEdges: z.object({}).passthrough(),
-  getStepEntities: z.object({}).passthrough(),
-  compareStepFiles: z.object({}).passthrough(),
-  queryStepPmi: z.object({}).passthrough(),
+  findStepFaces: queryOutputSchema,
+  findStepEdges: queryOutputSchema,
+  getStepEntities: queryOutputSchema,
+  compareStepFiles: compareOutputSchema,
+  queryStepPmi: queryOutputSchema,
 } as const;
 
 export const stepInternalToolSchemas = {
@@ -898,63 +932,80 @@ export const stepInternalToolSchemas = {
 
 export async function handleInspectStepFile(filePath: string) {
   return wrapTool(async () => {
-    const graph = await analyzeStepFile(filePath);
-    const base = inspectProjection(graph);
+    return withStepModel(filePath, async (model) => {
+      const [brep, semantic] = await Promise.all([model.getBRepModel(), model.getSemanticModel()]);
 
-    const faceSummaryQuery: QueryStepFacesInput = {
-      filter: undefined,
-      region: undefined,
-      near: undefined,
-      include: undefined,
-      group_by: undefined,
-      sort: undefined,
-      result_mode: 'summary',
-      limit: undefined,
-      offset: undefined,
-      sample_entity_limit: 0,
-    };
-    const tinyFaceQuery: QueryStepFacesInput = {
-      filter: { area_max: 1 },
-      region: undefined,
-      near: undefined,
-      include: undefined,
-      group_by: undefined,
-      sort: undefined,
-      result_mode: 'summary',
-      limit: undefined,
-      offset: undefined,
-      sample_entity_limit: 0,
-    };
-
-    const [faceSummary, tinyFaceSummary] = await Promise.all([
-      queryFacesService(filePath, faceSummaryQuery),
-      queryFacesService(filePath, tinyFaceQuery),
-    ]);
-
-    const faceStats = faceSummary.statistics as Record<string, unknown>;
-    const tinyStats = tinyFaceSummary.statistics as Record<string, unknown>;
-
-    return {
-      schema_version: CAD_RESPONSE_SCHEMA_VERSION,
-      file_path: filePath,
-      ...base,
-      topology_summary: {
-        faces: {
-          total: faceStats.total_faces,
-          by_surface_type: faceStats.surface_types || undefined,
-          area_range: faceStats.area_range || undefined,
+      return {
+        schema_version: CAD_RESPONSE_SCHEMA_VERSION,
+        file_path: filePath,
+        identity: {
+          product_names: semantic.productNames,
+          authoring_system: semantic.authoringSystem,
+          organization_name: semantic.organizationName,
         },
-        edges: base.edges || undefined,
-      },
-      geometry_extremes: {
-        faces_area_lt_1_mm2: (tinyStats.matched_faces as number) || 0,
-        edges_length_lt_1_mm: graph.brep.edgeStatistics
-          ? graph.brep.edgeStatistics.byLengthRange.tiny
-          : 0,
-        min_face_area: (faceStats.area_range as Record<string, number>)?.min || 0,
-        min_edge_length: graph.brep.edgeStatistics?.minLength || 0,
-      },
-    };
+        size: {
+          bounding_box: brep.boundingBox,
+          dimensions: brep.dimensions,
+          volume: brep.volume,
+          surface_area: brep.surfaceArea,
+          units: brep.units,
+        },
+        structure: {
+          body_count: brep.bodyCount,
+          shape_type: brep.shapeType,
+          is_assembly: semantic.hasAssembly,
+          product_count: semantic.productCount,
+          schema: semantic.schema,
+          application_protocol: semantic.applicationProtocol,
+        },
+        health: {
+          is_valid: brep.health.isValid,
+          warning_count: brep.health.warnings.length,
+          high_warning_count: brep.health.warnings.filter((w) => w.severity === 'high').length,
+          complexity: {
+            body_count: brep.bodyCount,
+            face_count: brep.faceCount,
+            edge_count: brep.edgeStatistics?.count,
+          },
+        },
+        pmi: {
+          has_pmi: semantic.pmi?.hasGdt || semantic.pmi?.hasDimensions || false,
+          has_gdt: semantic.pmi?.hasGdt || false,
+          has_dimensions: semantic.pmi?.hasDimensions || false,
+          semantic_status: semantic.pmi?.semanticStatus || 'not_detected',
+          tolerance_entity_count: semantic.toleranceEntityCount,
+        },
+        topology_summary: {
+          faces: {
+            total: brep.faceCount,
+          },
+          edges: brep.edgeStatistics
+            ? {
+                total: brep.edgeStatistics.count,
+                by_curve_type: brep.edgeStatistics.byCurveType,
+                by_length_bucket: brep.edgeStatistics.byLengthRange,
+                length_range: {
+                  min: brep.edgeStatistics.minLength,
+                  max: brep.edgeStatistics.maxLength,
+                },
+              }
+            : undefined,
+        },
+        geometry_extremes: {
+          edges_length_lt_1_mm: brep.edgeStatistics ? brep.edgeStatistics.byLengthRange.tiny : 0,
+          min_edge_length: brep.edgeStatistics?.minLength || 0,
+        },
+        warnings: brep.health.warnings,
+        limitations: [
+          ...semantic.limitations,
+          {
+            source: 'inspect_step_file',
+            message:
+              'Face area extremes, surface-type counts, and adjacency graph are deferred. Use find_step_faces or find_step_edges with specific fields for those details.',
+          },
+        ],
+      };
+    });
   });
 }
 
@@ -996,11 +1047,17 @@ export async function handleGetStepEntities(
     if (publicQuery.entity_type === 'face') {
       validateEntityIds(publicQuery.entity_ids, 'face');
       validateEntityFields(publicQuery.fields, 'face');
+      if (canDirectGetEntities(publicQuery as PublicGetStepEntitiesInput)) {
+        return getStepEntitiesDirect(filePath, publicQuery as PublicGetStepEntitiesInput);
+      }
       return queryFacesService(filePath, adaptGetStepFaces(publicQuery));
     }
 
     validateEntityIds(publicQuery.entity_ids, 'edge');
     validateEntityFields(publicQuery.fields, 'edge');
+    if (canDirectGetEntities(publicQuery as PublicGetStepEntitiesInput)) {
+      return getStepEntitiesDirect(filePath, publicQuery as PublicGetStepEntitiesInput);
+    }
     return queryEdgesService(filePath, adaptGetStepEdges(publicQuery));
   });
 }
@@ -1149,6 +1206,10 @@ function adaptGetEdgeFields(
 export function adaptPmiQuery(
   query: Partial<PublicQueryStepPmiInput> | undefined
 ): QueryStepPmiInput {
+  if (!boundedRange({ min: query?.value_min, max: query?.value_max })) {
+    throw invalidInput('value_min must be less than or equal to value_max.');
+  }
+
   return {
     filter: {
       pmi_types: query?.pmi_types,
@@ -1234,13 +1295,8 @@ export type QueryStepEdgesInput = InputFromShape<
 export type QueryStepPmiInput = InputFromShape<(typeof stepInternalToolSchemas)['queryStepPmi']>;
 type PublicFindStepFacesInput = InputFromShape<typeof findStepFacesSchema>;
 type PublicFindStepEdgesInput = InputFromShape<typeof findStepEdgesSchema>;
-type PublicGetStepEntitiesInput = InputFromShape<typeof getStepEntitiesSchema>;
+export type PublicGetStepEntitiesInput = InputFromShape<typeof getStepEntitiesSchema>;
 type PublicQueryStepPmiInput = InputFromShape<typeof pmiQuerySchema>;
-
-export interface NotImplementedData {
-  filePath: string;
-  toolName: string;
-}
 
 export interface StepQueryUnits {
   length: 'mm';

@@ -7,10 +7,10 @@ just setup
 just build
 ```
 
-## Run Tests
+## Validate
 
 ```bash
-just test
+just check
 ```
 
 ## Start The MCP Server
@@ -28,47 +28,37 @@ npm run dev
 ## Available Tools
 
 - `cad-mcp-server_inspect_step_file`: fast first-pass STEP overview.
-- `cad-mcp-server_query_step_faces`: configurable B-rep face/surface query schema. Kernel-backed implementation is pending.
-- `cad-mcp-server_query_step_edges`: configurable B-rep edge/curve query schema. Kernel-backed implementation is pending.
-- `cad-mcp-server_query_step_features`: configurable derived feature-candidate query schema. Kernel-backed implementation is pending.
+- `cad-mcp-server_find_step_faces`: search and group B-rep faces.
+- `cad-mcp-server_find_step_edges`: search and group B-rep edges.
+- `cad-mcp-server_get_step_entities`: retrieve exact known face/edge IDs.
+- `cad-mcp-server_query_step_pmi`: lightweight PMI/GD&T, dimension, datum, and annotation query.
 - `cad-mcp-server_compare_step_files`: metric-level comparison of two STEP files.
 
-## Sample File
+## Suggested Manual Flow
 
-Use this included NIST STEP fixture for manual testing:
-
-```text
-samples/NIST-PMI-STEP-Files/AP203 geometry only/nist_ftc_11_asme1_rb.stp
-```
-
-The sample corpus includes AP203 and AP242 files. Some AP242 files include PMI, but this MCP currently performs only lightweight PMI/entity detection, not full semantic PMI interpretation.
-
-## Test Prompts
-
-1. Inspect the NIST sample with `inspect_step_file`.
-2. Confirm `query_step_faces`, `query_step_edges`, and `query_step_features` expose strict schemas; these return `not_implemented` until kernel-backed implementation lands.
-3. Query examples should use candidate-oriented feature values such as `hole_candidate`, `cylindrical_region`, `fillet_candidate`, or `pocket_candidate`.
-4. Keep query examples summary-first with `limit`, `offset`, and typed `include` values.
-5. Compare two sample STEP files with `compare_step_files` and treat the result as a metric-level comparison.
-6. Inspect `/nonexistent/file.step` to verify structured errors.
+1. Call `inspect_step_file` on a STEP file.
+2. Call `find_step_faces` or `find_step_edges` with `return_type: "summary"` or `"groups"`.
+3. Drill into returned IDs with `get_step_entities`.
+4. Request `adjacent_faces` only when local topology is needed.
+5. Use `query_step_pmi` when checking dimensions, tolerances, datums, or annotations.
 
 ## Verify Success
 
-- `just build` succeeds.
-- `just test` succeeds.
+- `just check` succeeds.
 - MCP server initializes.
-- MCP client can see the five tools.
+- MCP client can see six tools.
 - Tool calls return `{ "ok": true, "data": ... }` or `{ "ok": false, "error": ... }`.
-- Tool output includes provider limitations where analysis is heuristic or incomplete.
 
 ## Provider Notes
 
-- B-rep provider: `occt-wasm`.
-- Topology/feature provider: internal AAG-style analysis derived from `occt-wasm` topology calls.
-- Semantic provider: lightweight STEP text/header parser.
+- Geometry backend: `occt-wasm`.
+- Model cache: in-memory cache keyed by resolved path, size, and mtime.
+- Metadata/PMI backend: lightweight STEP text parser.
 
 Important limitations:
 
 - No full native OCCT API surface.
-- No exposed BRepGraph API from `occt-wasm`.
-- No authoritative feature-tree, PMI/GD&T, or revision-identity claims.
+- No authoritative CAD feature-tree or design-history recovery.
+- No authoritative PMI/GD&T validation.
+- No stable feature identity across revisions.
+- Full-model adjacency is not computed during default inspection; local adjacency is opt-in.

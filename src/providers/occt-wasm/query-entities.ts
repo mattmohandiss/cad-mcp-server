@@ -119,6 +119,10 @@ export function extractEdgeEntities(
       center,
     };
 
+    if (curveType === 'circle') {
+      entity.radius = estimateCircleRadius(kernel, edge, length, bbox);
+    }
+
     // Try to get start/end points if available.
     try {
       const params = kernel.curveParameters(edge);
@@ -139,6 +143,25 @@ export function extractEdgeEntities(
   }
 
   return entities;
+}
+
+function estimateCircleRadius(
+  kernel: OcctKernel,
+  edge: ShapeHandle,
+  length: number,
+  bbox: { min: [number, number, number]; max: [number, number, number] }
+): number | undefined {
+  try {
+    const params = kernel.curveParameters(edge);
+    const span = Math.abs(params.last - params.first);
+    if (span > 1e-9) return length / span;
+  } catch {
+    // Fall back to bounding-box diameter below.
+  }
+
+  const extents = [bbox.max[0] - bbox.min[0], bbox.max[1] - bbox.min[1], bbox.max[2] - bbox.min[2]];
+  const diameter = Math.max(...extents);
+  return diameter > 0 ? diameter / 2 : undefined;
 }
 
 /**

@@ -144,6 +144,30 @@ describe('CAD MCP factual integration smoke tests', () => {
     expect((groups[0].sample_entity_ids as string[]).length).toBeLessThanOrEqual(3);
   });
 
+  it('finds circular edges by radius and returns exact edge radius', async () => {
+    const found = expectSuccess(
+      await handleFindStepEdges(cylinderStepFile, {
+        radius_min: 4.9,
+        radius_max: 5.1,
+        fields: ['id', 'curve_type', 'radius'],
+      })
+    );
+    const edges = found.data.entities as Array<Record<string, unknown>>;
+    expect(edges.length).toBeGreaterThan(0);
+    expect(edges[0].curve_type).toBe('circle');
+    expect(edges[0].radius).toBeCloseTo(5, 6);
+
+    const exact = expectSuccess(
+      await handleGetStepEntities(cylinderStepFile, {
+        entity_type: 'edge',
+        entity_ids: [edges[0].id as string],
+        fields: ['id', 'curve_type', 'radius'],
+      })
+    );
+    const exactEdges = exact.data.entities as Array<Record<string, unknown>>;
+    expect(exactEdges[0].radius).toBeCloseTo(5, 6);
+  });
+
   it('gets exact known STEP entities by ID', async () => {
     const found = expectSuccess(
       await handleFindStepFaces(blockStepFile, { fields: ['id'], limit: 1 })
@@ -163,6 +187,19 @@ describe('CAD MCP factual integration smoke tests', () => {
     expect(entities[0].id).toBe(firstFace.id);
     expect(entities[0].area).toBeTypeOf('number');
     expect(entities[0].bbox_center).toBeDefined();
+  });
+
+  it('returns clean errors for out-of-range exact entity IDs', async () => {
+    const result = expectFailure(
+      await handleGetStepEntities(blockStepFile, {
+        entity_type: 'face',
+        entity_ids: ['face:999'],
+        fields: ['id', 'area'],
+      })
+    );
+
+    expect(result.error.type).toBe('invalid_input');
+    expect(result.error.message).toContain('out of range');
   });
 
   it('compares generated STEP files with factual metric deltas only', async () => {

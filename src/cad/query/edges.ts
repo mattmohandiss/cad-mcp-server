@@ -1,11 +1,7 @@
 import type { OcctKernel, ShapeHandle } from 'occt-wasm';
 import type { QueryStepEdgesInput } from '../../tools/step-tools.js';
-import { withImportedStep } from '../../providers/occt-wasm/import.js';
-import {
-  buildBodyMap,
-  extractEdgeEntities,
-  type ExtractedEdgeEntity,
-} from '../../providers/occt-wasm/query-entities.js';
+import { type ExtractedEdgeEntity } from '../../providers/occt-wasm/query-entities.js';
+import { withStepModel } from '../model-store.js';
 import {
   normalizePagination,
   createPagination,
@@ -22,12 +18,12 @@ import {
  * Query STEP file edges with filtering, sorting, and pagination.
  */
 export async function queryStepEdges(filePath: string, input: QueryStepEdgesInput) {
-  return withImportedStep(filePath, 'query_step_edges', (kernel, shape) => {
-    // Build body map for body_id assignment.
-    const bodyMap = buildBodyMap(kernel, shape);
-
-    // Extract all edge entities from the STEP file.
-    const allEdges = extractEdgeEntities(kernel, shape, bodyMap);
+  return withStepModel(filePath, async (model) => {
+    const includeBodyId = Boolean(
+      input.filter?.body_ids?.length || input.include?.includes('body_id')
+    );
+    const allEdges = await model.getEdgeEntities(includeBodyId);
+    const { kernel, shape } = await model.getShapeContext('query_step_edges');
 
     // Pre-filter by group_ids: resolve which entities belong to requested groups.
     let preFiltered = allEdges;

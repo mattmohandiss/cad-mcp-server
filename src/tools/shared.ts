@@ -21,12 +21,3 @@ export function normalizeError(error: unknown): AnalysisError {
     message: error instanceof Error ? error.message : String(error),
   };
 }
-
-export function isToolError(result: unknown): boolean {
-  return (
-    typeof result === 'object' &&
-    result !== null &&
-    'ok' in result &&
-    (result as { ok?: unknown }).ok === false
-  );
-}

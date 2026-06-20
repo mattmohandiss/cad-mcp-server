@@ -1,112 +1,13 @@
 import type { OcctKernel, ShapeHandle, Vec3 } from 'occt-wasm';
 
-export interface AagFaceNode {
-  index: number;
-  surfaceType: string;
-  area: number;
-  hasInnerWires: boolean;
-  centerOfMass: Vec3;
-}
-
-export interface AagAdjacency {
-  faceAIndex: number;
-  faceBIndex: number;
-  vexity: 'convex' | 'concave' | 'smooth' | 'unknown';
-  dihedralAngleDeg: number;
-  sharedEdgeCount: number;
-  sharedCurveTypes: string[];
-}
-
-export interface AagRawGraph {
-  faces: AagFaceNode[];
-  adjacencies: AagAdjacency[];
-}
-
-export function buildAagFromShape(kernel: OcctKernel, shape: ShapeHandle): AagRawGraph {
-  const faceShapes = kernel.getSubShapes(shape, 'face');
-  const rawFaces: Array<{
-    shape: ShapeHandle;
-    surfaceType: string;
-    area: number;
-    hasInnerWires: boolean;
-    centerOfMass: Vec3;
-  }> = [];
-
-  for (const face of faceShapes) {
-    const outerWire = kernel.outerWire(face);
-    const innerWireCount = faceWiresCount(kernel, face, outerWire);
-    rawFaces.push({
-      shape: face,
-      surfaceType: kernel.surfaceType(face),
-      area: kernel.getSurfaceArea(face),
-      hasInnerWires: innerWireCount > 1,
-      centerOfMass: kernel.getSurfaceCenterOfMass(face),
-    });
-  }
-
-  const faces: AagFaceNode[] = rawFaces.map((f, i) => ({
-    index: i,
-    surfaceType: f.surfaceType,
-    area: f.area,
-    hasInnerWires: f.hasInnerWires,
-    centerOfMass: f.centerOfMass,
-  }));
-
-  const adjacencies: AagAdjacency[] = [];
-  const seen = new Set<string>();
-
-  for (let i = 0; i < rawFaces.length; i++) {
-    const faceA = rawFaces[i].shape;
-    const adjacent = kernel.adjacentFaces(shape, faceA);
-
-    for (const faceB of adjacent) {
-      const j = rawFaces.findIndex((f) => kernel.isSame(f.shape, faceB));
-      if (j === -1 || j <= i) continue;
-
-      const key = `${Math.min(i, j)}-${Math.max(i, j)}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-
-      const sharedEdges = kernel.sharedEdges(faceA, faceB);
-      if (sharedEdges.length === 0) continue;
-
-      const curveTypes = new Set<string>();
-      for (const edge of sharedEdges) {
-        curveTypes.add(kernel.curveType(edge));
-      }
-
-      const primaryEdge = sharedEdges[0];
-      const vexityResult = computeEdgeVexity(kernel, faceA, faceB, primaryEdge);
-
-      adjacencies.push({
-        faceAIndex: i,
-        faceBIndex: j,
-        vexity: vexityResult.vexity,
-        dihedralAngleDeg: vexityResult.dihedralAngleDeg,
-        sharedEdgeCount: sharedEdges.length,
-        sharedCurveTypes: [...curveTypes],
-      });
-    }
-  }
-
-  return { faces, adjacencies };
-}
-
-function faceWiresCount(kernel: OcctKernel, face: ShapeHandle, outerWire: ShapeHandle): number {
-  try {
-    const wires = kernel.getSubShapes(face, 'wire');
-    return wires.length;
-  } catch {
-    return outerWire ? 1 : 0;
-  }
-}
+export type EdgeVexity = 'convex' | 'concave' | 'smooth' | 'unknown';
 
 export function computeEdgeVexity(
   kernel: OcctKernel,
   faceA: ShapeHandle,
   faceB: ShapeHandle,
   sharedEdge: ShapeHandle
-): { vexity: AagAdjacency['vexity']; dihedralAngleDeg: number } {
+): { vexity: EdgeVexity; dihedralAngleDeg: number } {
   try {
     const params = kernel.curveParameters(sharedEdge);
     const midParam = (params.first + params.last) / 2;

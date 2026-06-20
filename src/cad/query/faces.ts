@@ -1,12 +1,8 @@
 import type { OcctKernel, ShapeHandle } from 'occt-wasm';
 import type { QueryStepFacesInput } from '../../tools/step-tools.js';
-import { withImportedStep } from '../../providers/occt-wasm/import.js';
-import {
-  buildBodyMap,
-  extractFaceEntities,
-  type ExtractedFaceEntity,
-} from '../../providers/occt-wasm/query-entities.js';
+import { type ExtractedFaceEntity } from '../../providers/occt-wasm/query-entities.js';
 import { computeEdgeVexity } from '../../providers/occt-wasm/aag-utils.js';
+import { withStepModel } from '../model-store.js';
 import {
   normalizePagination,
   createPagination,
@@ -27,12 +23,12 @@ import {
  * Query STEP file faces with filtering, sorting, and pagination.
  */
 export async function queryStepFaces(filePath: string, input: QueryStepFacesInput) {
-  return withImportedStep(filePath, 'query_step_faces', (kernel, shape) => {
-    // Build body map for body_id assignment.
-    const bodyMap = buildBodyMap(kernel, shape);
-
-    // Extract all face entities from the STEP file.
-    const allFaces = extractFaceEntities(kernel, shape, bodyMap);
+  return withStepModel(filePath, async (model) => {
+    const includeBodyId = Boolean(
+      input.filter?.body_ids?.length || input.include?.includes('body_id')
+    );
+    const allFaces = await model.getFaceEntities(includeBodyId);
+    const { kernel, shape } = await model.getShapeContext('query_step_faces');
 
     // Pre-filter by group_ids: resolve which entities belong to requested groups.
     let preFiltered = allFaces;

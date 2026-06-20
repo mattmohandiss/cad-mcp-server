@@ -1,19 +1,5 @@
 import type { Limitation, ProviderInfo, Provenance, UnitSystem } from './schema.js';
 
-export type SemanticCapability =
-  | 'step_header'
-  | 'schema_detection'
-  | 'product_names'
-  | 'pmi_hints'
-  | 'product_structure'
-  | 'authoring_info'
-  | 'tolerance_detection'
-  | 'assembly_hints';
-
-export interface SemanticOptions {
-  includeEntityCounts?: boolean;
-}
-
 export interface PmiSummary {
   hasPmi: boolean;
   hasGdt: boolean;
@@ -47,20 +33,4 @@ export interface SemanticModel {
   facts: SemanticFact[];
   limitations: Limitation[];
   provenance: Provenance[];
-}
-
-export interface SemanticExportOptions {
-  format: 'owl' | 'rdf';
-}
-
-export interface SemanticExport {
-  format: SemanticExportOptions['format'];
-  content: string;
-}
-
-export interface SemanticProvider {
-  name: string;
-  capabilities: readonly SemanticCapability[];
-  extract(filePath: string, options?: SemanticOptions): Promise<SemanticModel>;
-  export?(options: SemanticExportOptions): Promise<SemanticExport>;
 }
