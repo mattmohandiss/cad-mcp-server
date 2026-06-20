@@ -4,13 +4,12 @@ import { withImportedStep } from './import.js';
 import { buildAagFromShape } from './aag-utils.js';
 
 const AAG_LIMITATIONS = [
-  'Face adjacency and vexity are computed from the B-rep topology, not from the original design intent (feature tree).',
-  'Vexity computation uses dihedral angle heuristics with a +/-0.05 cosine threshold for convex/concave/smooth classification.',
+  'Face adjacency is computed from the B-rep topology, not from the original design intent (feature tree).',
 ];
 
 export class OcctWasmAagProvider implements AagProvider {
   readonly name = 'occt-wasm-aag';
-  readonly capabilities = ['face_adjacency', 'vexity'] as const;
+  readonly capabilities = ['face_adjacency'] as const;
 
   async build(input: AagInput): Promise<AagModel> {
     try {

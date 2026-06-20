@@ -1,81 +1,56 @@
 import type { CadKnowledgeGraph } from './schema.js';
 
-export function providerSummary(graph: CadKnowledgeGraph) {
-  return {
-    providers: graph.providers.map((provider) => ({
-      name: provider.name,
-      capabilities: provider.capabilities,
-      limitations: provider.limitations,
-    })),
-    limitations: graph.limitations,
-  };
-}
-
 export function inspectProjection(graph: CadKnowledgeGraph) {
   return {
-    filePath: graph.filePath,
-    facts: {
-      geometry: geometrySummary(graph),
-      structure: {
-        bodyCount: graph.brep.bodyCount,
-        shapeType: graph.brep.shapeType,
-        productNames: graph.semantic.productNames,
-      },
-      exchange: exchangeSummary(graph),
-      health: healthSummary(graph),
+    identity: {
+      product_names: graph.semantic.productNames,
+      authoring_system: graph.semantic.authoringSystem,
+      organization_name: graph.semantic.organizationName,
     },
-    inferences: graph.inferences,
+    size: {
+      bounding_box: graph.brep.boundingBox,
+      dimensions: graph.brep.dimensions,
+      volume: graph.brep.volume,
+      surface_area: graph.brep.surfaceArea,
+      units: graph.brep.units,
+    },
+    structure: {
+      body_count: graph.brep.bodyCount,
+      shape_type: graph.brep.shapeType,
+      is_assembly: graph.semantic.hasAssembly,
+      product_count: graph.semantic.productCount,
+      schema: graph.semantic.schema,
+      application_protocol: graph.semantic.applicationProtocol,
+    },
+    health: {
+      is_valid: graph.brep.health.isValid,
+      warning_count: graph.warnings.length,
+      high_warning_count: graph.warnings.filter((w) => w.severity === 'high').length,
+      complexity: {
+        body_count: graph.brep.bodyCount,
+        face_count: graph.brep.faceCount,
+        edge_count: graph.brep.edgeStatistics?.count,
+      },
+    },
+    pmi: {
+      has_pmi: graph.semantic.pmi?.hasGdt || graph.semantic.pmi?.hasDimensions || false,
+      has_gdt: graph.semantic.pmi?.hasGdt || false,
+      has_dimensions: graph.semantic.pmi?.hasDimensions || false,
+      semantic_status: graph.semantic.pmi?.semanticStatus || 'not_detected',
+      tolerance_entity_count: graph.semantic.toleranceEntityCount,
+    },
+    edges: graph.brep.edgeStatistics
+      ? {
+          total: graph.brep.edgeStatistics.count,
+          by_curve_type: graph.brep.edgeStatistics.byCurveType,
+          by_length_bucket: graph.brep.edgeStatistics.byLengthRange,
+          length_range: {
+            min: graph.brep.edgeStatistics.minLength,
+            max: graph.brep.edgeStatistics.maxLength,
+          },
+        }
+      : undefined,
     warnings: graph.warnings,
     limitations: graph.limitations,
-    providers: providerSummary(graph),
-  };
-}
-
-export function geometrySummary(graph: CadKnowledgeGraph) {
-  return {
-    units: graph.brep.units,
-    boundingBox: graph.brep.boundingBox,
-    dimensions: graph.brep.dimensions,
-    volume: graph.brep.volume,
-    surfaceArea: graph.brep.surfaceArea,
-    bodyCount: graph.brep.bodyCount,
-    faceCount: graph.brep.faceCount,
-    edgeStatistics: graph.brep.edgeStatistics,
-    bodies: graph.brep.bodies,
-    aag: graph.aag.available
-      ? {
-          faceCount: graph.aag.nodes.length,
-          adjacencyCount: graph.aag.edges.length,
-        }
-      : { available: false },
-  };
-}
-
-export function exchangeSummary(graph: CadKnowledgeGraph) {
-  return {
-    schema: graph.semantic.schema,
-    applicationProtocol: graph.semantic.applicationProtocol,
-    productNames: graph.semantic.productNames,
-    productCount: graph.semantic.productCount,
-    authoringSystem: graph.semantic.authoringSystem,
-    organizationName: graph.semantic.organizationName,
-    hasAssembly: graph.semantic.hasAssembly,
-    toleranceEntityCount: graph.semantic.toleranceEntityCount,
-    shapeRepresentationCount: graph.semantic.shapeRepresentationCount,
-    pmi: graph.semantic.pmi,
-  };
-}
-
-export function healthSummary(graph: CadKnowledgeGraph) {
-  const highWarnings = graph.warnings.filter((warning) => warning.severity === 'high').length;
-  return {
-    isValid: graph.brep.health.isValid,
-    warningCount: graph.warnings.length,
-    highWarnings,
-    complexity: {
-      bodyCount: graph.brep.bodyCount,
-      faceCount: graph.brep.faceCount,
-      edgeCount: graph.brep.edgeStatistics?.count,
-    },
   };
 }

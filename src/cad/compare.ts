@@ -1,9 +1,11 @@
 import { analyzeStepFile } from './analyze.js';
+import { CAD_RESPONSE_SCHEMA_VERSION } from './schema-version.js';
 
 export async function compareStepFiles(fileA: string, fileB: string) {
   const [a, b] = await Promise.all([analyzeStepFile(fileA), analyzeStepFile(fileB)]);
 
   return {
+    schema_version: CAD_RESPONSE_SCHEMA_VERSION,
     files: { a: fileA, b: fileB },
     deltas: {
       dimensions: {
@@ -22,7 +24,6 @@ export async function compareStepFiles(fileA: string, fileB: string) {
         b.brep.edgeStatistics && a.brep.edgeStatistics
           ? b.brep.edgeStatistics.count - a.brep.edgeStatistics.count
           : undefined,
-      inferenceCount: b.inferences.length - a.inferences.length,
     },
     exchange: {
       schemaChanged: a.semantic.schema !== b.semantic.schema,

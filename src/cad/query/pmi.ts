@@ -6,22 +6,16 @@ import type {
   PmiDatumEntity,
   PmiAnnotationEntity,
 } from '../../providers/lightweight-step/pmi-parser.js';
-import { normalizePagination, createPagination, createQueryResponse, type ComputedGroup } from './shared.js';
+import {
+  normalizePagination,
+  createPagination,
+  createQueryResponse,
+  type ComputedGroup,
+} from './shared.js';
 
 type PmiEntity = PmiToleranceEntity | PmiDimensionEntity | PmiDatumEntity | PmiAnnotationEntity;
 
-const PMI_TYPES = new Set(['geometric_tolerance', 'dimension', 'datum', 'annotation']);
-const TOLERANCE_SUBTYPES = new Set([
-  'position', 'flatness', 'straightness', 'circularity', 'cylindricity',
-  'profile', 'parallelism', 'perpendicularity', 'angularity', 'concentricity',
-  'runout', 'symmetry', 'coaxiality', 'circular_runout', 'total_runout',
-  'surface_profile', 'line_profile',
-]);
-
-export async function queryStepPmi(
-  filePath: string,
-  input: QueryStepPmiInput
-) {
+export async function queryStepPmi(filePath: string, input: QueryStepPmiInput) {
   const full = await extractPmiEntities(filePath);
   let filtered = full.pmi_entities;
 
@@ -34,16 +28,23 @@ export async function queryStepPmi(
   if (input.filter?.tolerance_types && input.filter.tolerance_types.length > 0) {
     const tolSet = new Set<string>(input.filter.tolerance_types);
     filtered = filtered.filter(
-      (e) => e.type === 'geometric_tolerance' && 'tolerance_type' in e && tolSet.has((e as PmiToleranceEntity).tolerance_type)
+      (e) =>
+        e.type === 'geometric_tolerance' &&
+        'tolerance_type' in e &&
+        tolSet.has((e as PmiToleranceEntity).tolerance_type)
     );
   }
 
   if (input.filter?.value_min !== undefined) {
-    filtered = filtered.filter((e) => 'value' in e && e.value !== null && e.value >= input.filter!.value_min!);
+    filtered = filtered.filter(
+      (e) => 'value' in e && e.value !== null && e.value >= input.filter!.value_min!
+    );
   }
 
   if (input.filter?.value_max !== undefined) {
-    filtered = filtered.filter((e) => 'value' in e && e.value !== null && e.value <= input.filter!.value_max!);
+    filtered = filtered.filter(
+      (e) => 'value' in e && e.value !== null && e.value <= input.filter!.value_max!
+    );
   }
 
   // Sorting.
@@ -56,14 +57,18 @@ export async function queryStepPmi(
           cmp = a.type.localeCompare(b.type);
           break;
         case 'value':
-          cmp = (('value' in a ? (a as PmiToleranceEntity).value ?? 0 : 0)) -
-                (('value' in b ? (b as PmiToleranceEntity).value ?? 0 : 0));
+          cmp =
+            ('value' in a ? ((a as PmiToleranceEntity).value ?? 0) : 0) -
+            ('value' in b ? ((b as PmiToleranceEntity).value ?? 0) : 0);
           break;
-        case 'tolerance_type':
-          const aTol = a.type === 'geometric_tolerance' ? (a as PmiToleranceEntity).tolerance_type : '';
-          const bTol = b.type === 'geometric_tolerance' ? (b as PmiToleranceEntity).tolerance_type : '';
+        case 'tolerance_type': {
+          const aTol =
+            a.type === 'geometric_tolerance' ? (a as PmiToleranceEntity).tolerance_type : '';
+          const bTol =
+            b.type === 'geometric_tolerance' ? (b as PmiToleranceEntity).tolerance_type : '';
           cmp = aTol.localeCompare(bTol);
           break;
+        }
       }
       return cmp * dir;
     });
@@ -168,7 +173,9 @@ export async function queryStepPmi(
     },
     groups,
     full.pmi_entities.length === 0
-      ? ['No PMI entities found. STEP file may be AP203 (no PMI) or may not contain GD&T annotations.']
+      ? [
+          'No PMI entities found. STEP file may be AP203 (no PMI) or may not contain GD&T annotations.',
+        ]
       : [],
     []
   );

@@ -1,32 +1,59 @@
 #!/usr/bin/env node
 
+import { pathToFileURL } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import {
   handleCompareStepFiles,
+  handleFindStepEdges,
+  handleFindStepFaces,
+  handleGetStepEntities,
   handleInspectStepFile,
-  handleQueryStepEdges,
-  handleQueryStepFaces,
   handleQueryStepPmi,
+  stepToolOutputSchemas,
   stepToolSchemas,
 } from './tools/step-tools.js';
-import { isToolError } from './tools/shared.js';
 
 const server = new McpServer({
   name: 'cad-mcp-server',
   version: '0.1.0',
 });
 
-function jsonToolResult(result: unknown) {
+type ToolResponse<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: { type: string; message: string } };
+
+function isToolResult(value: unknown): value is ToolResponse<unknown> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'ok' in value &&
+    typeof (value as ToolResponse<unknown>).ok === 'boolean'
+  );
+}
+
+export function jsonToolResult(result: unknown) {
+  if (isToolResult(result)) {
+    if (result.ok) {
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result.data, null, 2) }],
+        structuredContent: result.data,
+      };
+    }
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `${result.error.type}: ${result.error.message}`,
+        },
+      ],
+      isError: true,
+    };
+  }
   return {
-    content: [
-      {
-        type: 'text' as const,
-        text: JSON.stringify(result, null, 2),
-      },
-    ],
-    isError: isToolError(result),
+    content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+    structuredContent: result,
   };
 }
 
@@ -39,6 +66,7 @@ type RegisterTool = (
     title: string;
     description: string;
     inputSchema: Record<string, z.ZodType>;
+    outputSchema?: Record<string, z.ZodType> | z.ZodTypeAny;
   },
   callback: (args: Record<string, unknown>) => StepToolResult
 ) => unknown;
@@ -64,37 +92,55 @@ registerTool(
   {
     title: 'Inspect STEP File',
     description:
-      'Fast first-pass STEP overview with import status, units, metadata, bounding box, counts, geometric properties, health, and provider limitations. Example: {file_path:"model.step"}',
+      'Compact first-pass overview of a STEP file. Use this FIRST to identify the part, check validity, get topology counts, and detect small-geometry indicators. Returns no detailed entity lists; follow up with find_step_faces, find_step_edges, or get_step_entities for detail. Do NOT use for entity-level searches. Example: {file_path:"model.step"}',
     inputSchema: stepToolSchemas.inspectStepFile,
+    outputSchema: stepToolOutputSchemas.inspectStepFile,
   },
   async ({ file_path }) => jsonToolResult(await handleInspectStepFile(String(file_path)))
 );
 
 registerTool(
-  'query_step_faces',
+  'find_step_faces',
   {
-    title: 'Query STEP Faces',
+    title: 'Find STEP Faces',
     description:
-      'Query B-rep faces and surfaces by deterministic model facts such as surface type, area, normal direction, bounding box, and adjacency. All coordinates and dimensions in model units (typically mm). Filters combine with AND across fields; a multi-value array (e.g. surface_type) matches any listed value (OR within the array). Use region or near for spatial queries, surface_type/area for property filtering. For an overview of a large model, set result_mode "groups" with group_by (e.g. ["surface_type"]) to get per-group counts plus sample IDs instead of a long entity list, then drill into specific entities. Supports sorting, pagination, and result projection. Example: {file_path:"model.step",result_mode:"groups",group_by:["surface_type"]}',
-    inputSchema: stepToolSchemas.queryStepFaces,
+      'Search faces by surface type, area, spatial region, or proximity. Use when you need specific faces such as large faces, cylindrical faces, faces near a point, or grouped face statistics. Do NOT use for known face IDs; use get_step_entities. Use only the filters needed for the question; adding every optional filter over-constrains results. Example small faces: {file_path:"model.step",area_max:1,sort_by:"area"}. Example cylinders by radius: {file_path:"model.step",surface_types:["cylinder"],return_type:"groups",group_by:["radius"]}',
+    inputSchema: stepToolSchemas.findStepFaces,
+    outputSchema: stepToolOutputSchemas.findStepFaces,
   },
-  withErrorContext('query_step_faces', async (args) => {
+  withErrorContext('find_step_faces', async (args) => {
     const query = args as Record<string, unknown>;
-    return jsonToolResult(await handleQueryStepFaces(String(query.file_path), query as never));
+    return jsonToolResult(await handleFindStepFaces(String(query.file_path), query as never));
   })
 );
 
 registerTool(
-  'query_step_edges',
+  'find_step_edges',
   {
-    title: 'Query STEP Edges',
+    title: 'Find STEP Edges',
     description:
-      'Query B-rep geometric edges and curves by deterministic model facts such as curve type, length, radius, and bounding box. All coordinates and dimensions in model units (typically mm). Filters combine with AND across fields; a multi-value array (e.g. curve_type) matches any listed value (OR within the array). Use region or near for spatial queries, curve_type/length for property filtering. Useful for finding small/degenerate edges: filter length_max, or set result_mode "groups" with group_by ["length_range"] where the 0-1 bucket isolates tiny edges. Supports sorting, pagination, and result projection. Example: {file_path:"model.step",filter:{length_max:1},sort:{by:"length",direction:"asc"},limit:50}',
-    inputSchema: stepToolSchemas.queryStepEdges,
+      'Search edges by curve type, length, circular radius, spatial region, or proximity. Use for tiny-edge investigation, long edges, circular edges, or grouped edge statistics. For tiny edges use length_max and sort_by:"length"; omit radius filters unless specifically querying circular edges by radius. radius_min/radius_max only affect circle edges and do not exclude line or bspline edges. Do NOT use for known edge IDs; use get_step_entities. Example tiny edges: {file_path:"model.step",length_max:0.5,sort_by:"length",fields:["id","length","curve_type"]}',
+    inputSchema: stepToolSchemas.findStepEdges,
+    outputSchema: stepToolOutputSchemas.findStepEdges,
   },
-  withErrorContext('query_step_edges', async (args) => {
+  withErrorContext('find_step_edges', async (args) => {
     const query = args as Record<string, unknown>;
-    return jsonToolResult(await handleQueryStepEdges(String(query.file_path), query as never));
+    return jsonToolResult(await handleFindStepEdges(String(query.file_path), query as never));
+  })
+);
+
+registerTool(
+  'get_step_entities',
+  {
+    title: 'Get STEP Entities',
+    description:
+      'Retrieve one or more known faces or edges by exact entity ID. IDs come from inspect_step_file, find_step_faces, or find_step_edges. Use ONLY when you already have specific IDs. Do NOT use for searching or filtering; use find_step_faces or find_step_edges. Example: {file_path:"model.step",entity_type:"face",entity_ids:["face:0"],fields:["id","area","normal"]}',
+    inputSchema: stepToolSchemas.getStepEntities,
+    outputSchema: stepToolOutputSchemas.getStepEntities,
+  },
+  withErrorContext('get_step_entities', async (args) => {
+    const query = args as Record<string, unknown>;
+    return jsonToolResult(await handleGetStepEntities(String(query.file_path), query as never));
   })
 );
 
@@ -103,11 +149,14 @@ registerTool(
   {
     title: 'Compare STEP Files',
     description:
-      'Compare two STEP files and return metric deltas (differences) in geometry, topology, and metadata. Returns volume delta, surface area delta, face count delta, edge count delta, body count delta, and inference count delta. All deltas are (file_b - file_a). For identical files, all geometric deltas equal 0. Also returns schema differences and product name changes. Use to track revisions, detect modifications, or validate file equivalence. Note: Comparison is metric-based; structural/feature-tree changes not tracked. Example: {file_a:"model_v1.step",file_b:"model_v2.step"}',
+      'Compare two STEP files and return whole-model metric deltas and metadata changes. Use for two revisions of a part when you need factual differences in dimensions, volume, area, topology counts, or exchange metadata. Does NOT track feature identity across revisions. Deltas are comparison_file_path minus baseline_file_path. Example: {baseline_file_path:"model_v1.step",comparison_file_path:"model_v2.step"}',
     inputSchema: stepToolSchemas.compareStepFiles,
+    outputSchema: stepToolOutputSchemas.compareStepFiles,
   },
-  async ({ file_a, file_b }) =>
-    jsonToolResult(await handleCompareStepFiles(String(file_a), String(file_b)))
+  async ({ baseline_file_path, comparison_file_path }) =>
+    jsonToolResult(
+      await handleCompareStepFiles(String(baseline_file_path), String(comparison_file_path))
+    )
 );
 
 registerTool(
@@ -115,8 +164,9 @@ registerTool(
   {
     title: 'Query STEP PMI',
     description:
-      'Query Product Manufacturing Information (PMI) from AP242 STEP files, including geometric tolerances (GD&T callouts like position, flatness, profile), dimensions (linear, diametral, angular), datums, and annotations. All PMI data is extracted via lightweight STEP text parsing — no OCCT import required. Filter by PMI type, tolerance subtype, and value range. Use result_mode "groups" with group_by to count tolerances by type or dimension by subtype. Example: {file_path:"model.step",filter:{pmi_types:["geometric_tolerance"]},result_mode:"groups",group_by:["tolerance_type"]}',
+      'Query Product Manufacturing Information (PMI): geometric tolerances, dimensions, datums, and annotations. Use return_type:"summary" first to check whether PMI exists. Not all STEP files contain PMI; AP203 files commonly do not. Example quick check: {file_path:"model.step",return_type:"summary"}',
     inputSchema: stepToolSchemas.queryStepPmi,
+    outputSchema: stepToolOutputSchemas.queryStepPmi,
   },
   withErrorContext('query_step_pmi', async (args) => {
     const query = args as Record<string, unknown>;
@@ -130,7 +180,9 @@ async function main() {
   console.error('CAD MCP Server started');
 }
 
-main().catch((error) => {
-  console.error('Fatal error:', error);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error('Fatal error:', error);
+    process.exit(1);
+  });
+}

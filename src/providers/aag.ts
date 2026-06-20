@@ -1,6 +1,6 @@
 import type { Limitation, ProviderInfo, Provenance } from './schema.js';
 
-export type AagCapability = 'face_adjacency' | 'vexity';
+export type AagCapability = 'face_adjacency';
 
 export interface AagInput {
   filePath: string;

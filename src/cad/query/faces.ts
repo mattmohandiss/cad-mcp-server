@@ -129,16 +129,13 @@ function buildFaceAdjacencies(
   paginated: ExtractedFaceEntity[],
   include: QueryStepFacesInput['include']
 ):
-  | Map<
-      string,
-      Array<{ face_id: string; surface_type: string; vexity: string; dihedral_angle_deg: number }>
-    >
+  | Map<string, Array<{ face_id: string; surface_type: string; dihedral_angle_deg: number }>>
   | undefined {
   if (!include?.includes('adjacent_faces')) return undefined;
 
   const result = new Map<
     string,
-    Array<{ face_id: string; surface_type: string; vexity: string; dihedral_angle_deg: number }>
+    Array<{ face_id: string; surface_type: string; dihedral_angle_deg: number }>
   >();
 
   for (const face of paginated) {
@@ -148,7 +145,6 @@ function buildFaceAdjacencies(
     const entries: Array<{
       face_id: string;
       surface_type: string;
-      vexity: string;
       dihedral_angle_deg: number;
     }> = [];
 
@@ -162,7 +158,6 @@ function buildFaceAdjacencies(
       entries.push({
         face_id: `face:${adjIdx}`,
         surface_type: kernel.surfaceType(adjFace),
-        vexity: vexityResult.vexity,
         dihedral_angle_deg: vexityResult.dihedralAngleDeg,
       });
     }
@@ -394,7 +389,7 @@ function projectFace(
         result.bbox = face.bbox;
         break;
       case 'center':
-        result.center = face.center;
+        result.bbox_center = face.center;
         break;
       case 'normal':
         if (face.normal !== undefined) result.normal = face.normal;

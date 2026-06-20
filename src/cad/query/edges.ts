@@ -318,7 +318,7 @@ function projectEdge(
         result.bbox = edge.bbox;
         break;
       case 'center':
-        result.center = edge.center;
+        result.bbox_center = edge.center;
         break;
       case 'radius':
         if (edge.radius !== undefined) result.radius = edge.radius;

@@ -55,14 +55,18 @@ export function buildBodyMap(
         const fi = allFaces.findIndex((f) => kernel.isSame(f, bf));
         if (fi !== -1) faceBody[fi] = bi;
       }
-    } catch { /* body may not expose faces */ }
+    } catch {
+      /* body may not expose faces */
+    }
     try {
       const bodyEdges = kernel.getSubShapes(bodies[bi], 'edge');
       for (const be of bodyEdges) {
         const ei = allEdges.findIndex((e) => kernel.isSame(e, be));
         if (ei !== -1) edgeBody[ei] = bi;
       }
-    } catch { /* body may not expose edges */ }
+    } catch {
+      /* body may not expose edges */
+    }
   }
 
   return { faceBody, edgeBody };
@@ -128,7 +132,8 @@ export function extractEdgeEntities(
       // If point extraction fails, continue without them.
     }
 
-    entity.body_id = bodyMap && bodyMap.edgeBody[i] >= 0 ? `body:${bodyMap.edgeBody[i]}` : undefined;
+    entity.body_id =
+      bodyMap && bodyMap.edgeBody[i] >= 0 ? `body:${bodyMap.edgeBody[i]}` : undefined;
 
     entities.push(entity);
   }
@@ -154,7 +159,6 @@ export interface ExtractedFaceEntity {
   adjacent_faces?: Array<{
     face_id: string;
     surface_type: string;
-    vexity: string;
     dihedral_angle_deg: number;
   }>;
   closest_face_distance?: {
@@ -221,7 +225,8 @@ export function extractFaceEntities(
       entity.has_inner_wires = false;
     }
 
-    entity.body_id = bodyMap && bodyMap.faceBody[i] >= 0 ? `body:${bodyMap.faceBody[i]}` : undefined;
+    entity.body_id =
+      bodyMap && bodyMap.faceBody[i] >= 0 ? `body:${bodyMap.faceBody[i]}` : undefined;
 
     entities.push(entity);
   }

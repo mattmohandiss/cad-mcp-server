@@ -4,6 +4,7 @@ import type {
   StepQueryUnits,
   StepQueryCoordinateSystem,
 } from '../../tools/step-tools.js';
+import { CAD_RESPONSE_SCHEMA_VERSION } from '../schema-version.js';
 
 /**
  * Shared query utilities for pagination, filtering, sorting, and response envelopes.
@@ -201,7 +202,7 @@ export function createQueryResponse<T extends Record<string, unknown>>(
   limitations: unknown[] = []
 ): StepQueryResponse<T> {
   return {
-    schema_version: '0.3',
+    schema_version: CAD_RESPONSE_SCHEMA_VERSION,
     file_path,
     units: STEP_QUERY_UNITS,
     coordinate_system: STEP_QUERY_COORDINATE_SYSTEM,
@@ -286,10 +287,7 @@ export function normalizeVector(v: number[]): [number, number, number] {
 /**
  * Calculate angle between two unit vectors in degrees.
  */
-export function angleDegreesNormalized(
-  u1: number[],
-  u2: number[]
-): number {
+export function angleDegreesNormalized(u1: number[], u2: number[]): number {
   const dot = Math.max(-1, Math.min(1, dotProduct(u1, u2)));
   return (Math.acos(dot) * 180) / Math.PI;
 }

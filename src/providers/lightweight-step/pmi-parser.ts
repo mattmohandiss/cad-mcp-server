@@ -31,9 +31,18 @@ function findMatchingParen(text: string, start: number): number {
   let escape = false;
   for (let i = start; i < text.length; i++) {
     const ch = text[i];
-    if (escape) { escape = false; continue; }
-    if (ch === '\\' && inString) { escape = true; continue; }
-    if (ch === "'") { inString = !inString; continue; }
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (ch === '\\' && inString) {
+      escape = true;
+      continue;
+    }
+    if (ch === "'") {
+      inString = !inString;
+      continue;
+    }
     if (inString) continue;
     if (ch === '(') depth++;
     if (ch === ')') depth--;
@@ -73,7 +82,10 @@ function parseParams(raw: string): StepParam[] {
       i = end;
     } else if (ch === '.' && i + 1 < raw.length) {
       const dot2 = raw.indexOf('.', i + 1);
-      if (dot2 === -1) { params.push({ kind: 'raw', value: raw.slice(i) }); break; }
+      if (dot2 === -1) {
+        params.push({ kind: 'raw', value: raw.slice(i) });
+        break;
+      }
       const inner = raw.slice(i + 1, dot2);
       if (inner === 'T' || inner === 'F') {
         params.push({ kind: 'bool', value: inner === 'T' });
@@ -106,7 +118,11 @@ function parseParams(raw: string): StepParam[] {
 
 function skipWhitespace(text: string, start: number): number {
   let i = start;
-  while (i < text.length && (text[i] === ' ' || text[i] === '\t' || text[i] === '\n' || text[i] === '\r')) i++;
+  while (
+    i < text.length &&
+    (text[i] === ' ' || text[i] === '\t' || text[i] === '\n' || text[i] === '\r')
+  )
+    i++;
   return i; // unused, mutating i in place via loop
 }
 
@@ -139,7 +155,10 @@ function readNumber(text: string, start: number): number {
   let i = start;
   if (text[i] === '-' || text[i] === '+') i++;
   while (i < text.length && isDigit(text[i])) i++;
-  if (text[i] === '.') { i++; while (i < text.length && isDigit(text[i])) i++; }
+  if (text[i] === '.') {
+    i++;
+    while (i < text.length && isDigit(text[i])) i++;
+  }
   if ((text[i] === 'e' || text[i] === 'E') && i + 1 < text.length) {
     i++;
     if (text[i] === '-' || text[i] === '+') i++;
@@ -157,35 +176,37 @@ function isDigit(ch: string): boolean {
 /* ------------------------------------------------------------------ */
 
 const GEOMETRIC_TOLERANCE_TYPES = new Set([
-  'POSITION_TOLERANCE', 'FLATNESS_TOLERANCE', 'STRAIGHTNESS_TOLERANCE',
-  'CIRCULARITY_TOLERANCE', 'CYLINDRICITY_TOLERANCE', 'PROFILE_TOLERANCE',
-  'PARALLELISM_TOLERANCE', 'PERPENDICULARITY_TOLERANCE', 'ANGULARITY_TOLERANCE',
-  'CONCENTRICITY_TOLERANCE', 'RUNOUT_TOLERANCE', 'SYMMETRY_TOLERANCE',
-  'COAXIALITY_TOLERANCE', 'CIRCULAR_RUNOUT_TOLERANCE', 'TOTAL_RUNOUT_TOLERANCE',
-  'SURFACE_PROFILE_TOLERANCE', 'LINE_PROFILE_TOLERANCE',
-]);
-
-const SPECIAL_TOLERANCE_TYPES = new Set([
-  'POSITION_TOLERANCE', 'FLATNESS_TOLERANCE', 'STRAIGHTNESS_TOLERANCE',
-  'CIRCULARITY_TOLERANCE', 'CYLINDRICITY_TOLERANCE',
+  'POSITION_TOLERANCE',
+  'FLATNESS_TOLERANCE',
+  'STRAIGHTNESS_TOLERANCE',
+  'CIRCULARITY_TOLERANCE',
+  'CYLINDRICITY_TOLERANCE',
+  'PROFILE_TOLERANCE',
+  'PARALLELISM_TOLERANCE',
+  'PERPENDICULARITY_TOLERANCE',
+  'ANGULARITY_TOLERANCE',
+  'CONCENTRICITY_TOLERANCE',
+  'RUNOUT_TOLERANCE',
+  'SYMMETRY_TOLERANCE',
+  'COAXIALITY_TOLERANCE',
+  'CIRCULAR_RUNOUT_TOLERANCE',
+  'TOTAL_RUNOUT_TOLERANCE',
+  'SURFACE_PROFILE_TOLERANCE',
+  'LINE_PROFILE_TOLERANCE',
 ]);
 
 const DIMENSION_TYPES = new Set([
-  'DIMENSIONAL_SIZE', 'DIMENSIONAL_LOCATION', 'DIAMETER_SIZE',
-  'RADIUS_SIZE', 'LENGTH_SIZE', 'ANGULAR_SIZE',
+  'DIMENSIONAL_SIZE',
+  'DIMENSIONAL_LOCATION',
+  'DIAMETER_SIZE',
+  'RADIUS_SIZE',
+  'LENGTH_SIZE',
+  'ANGULAR_SIZE',
 ]);
 
-const DATUM_TYPES = new Set([
-  'DATUM', 'DATUM_FEATURE', 'DATUM_REFERENCE', 'DATUM_SYSTEM',
-]);
+const DATUM_TYPES = new Set(['DATUM', 'DATUM_FEATURE', 'DATUM_REFERENCE', 'DATUM_SYSTEM']);
 
-const ANNOTATION_TYPES = new Set([
-  'ANNOTATION_OCCURRENCE', 'DRAUGHTING_CALLOUT', 'SURFACE_FINISH',
-]);
-
-const TOLERANCE_VALUE_TYPES = new Set([
-  'TOLERANCE_VALUE', 'PLUS_MINUS_TOLERANCE',
-]);
+const ANNOTATION_TYPES = new Set(['ANNOTATION_OCCURRENCE', 'DRAUGHTING_CALLOUT', 'SURFACE_FINISH']);
 
 export interface PmiToleranceEntity {
   step_id: string;
@@ -260,10 +281,12 @@ function extractGeometricTolerance(
   upperType: string
 ): PmiToleranceEntity {
   const toleranceType = toleranceTypeName(upperType);
-  const nameParam = findStringParam(params, 0);
   const value = findNumberParam(params, 1) ?? findToleranceValueRef(entity.id, params);
   const refs: number[] = [];
-  const matCond = findEnumParam(params, (upperType === 'POSITION_TOLERANCE' || params.length >= 4) ? 3 : 2);
+  const matCond = findEnumParam(
+    params,
+    upperType === 'POSITION_TOLERANCE' || params.length >= 4 ? 3 : 2
+  );
 
   // Collect entity references from parameters (they are SHAPE_ASPECT refs).
   for (const p of params) {
@@ -301,23 +324,23 @@ function findToleranceValueRef(entityId: number, params: StepParam[]): number | 
 }
 
 const TOLERANCE_TYPE_NAMES: Record<string, string> = {
-  'POSITION_TOLERANCE': 'position',
-  'FLATNESS_TOLERANCE': 'flatness',
-  'STRAIGHTNESS_TOLERANCE': 'straightness',
-  'CIRCULARITY_TOLERANCE': 'circularity',
-  'CYLINDRICITY_TOLERANCE': 'cylindricity',
-  'PROFILE_TOLERANCE': 'profile',
-  'PARALLELISM_TOLERANCE': 'parallelism',
-  'PERPENDICULARITY_TOLERANCE': 'perpendicularity',
-  'ANGULARITY_TOLERANCE': 'angularity',
-  'CONCENTRICITY_TOLERANCE': 'concentricity',
-  'RUNOUT_TOLERANCE': 'runout',
-  'SYMMETRY_TOLERANCE': 'symmetry',
-  'COAXIALITY_TOLERANCE': 'coaxiality',
-  'CIRCULAR_RUNOUT_TOLERANCE': 'circular_runout',
-  'TOTAL_RUNOUT_TOLERANCE': 'total_runout',
-  'SURFACE_PROFILE_TOLERANCE': 'surface_profile',
-  'LINE_PROFILE_TOLERANCE': 'line_profile',
+  POSITION_TOLERANCE: 'position',
+  FLATNESS_TOLERANCE: 'flatness',
+  STRAIGHTNESS_TOLERANCE: 'straightness',
+  CIRCULARITY_TOLERANCE: 'circularity',
+  CYLINDRICITY_TOLERANCE: 'cylindricity',
+  PROFILE_TOLERANCE: 'profile',
+  PARALLELISM_TOLERANCE: 'parallelism',
+  PERPENDICULARITY_TOLERANCE: 'perpendicularity',
+  ANGULARITY_TOLERANCE: 'angularity',
+  CONCENTRICITY_TOLERANCE: 'concentricity',
+  RUNOUT_TOLERANCE: 'runout',
+  SYMMETRY_TOLERANCE: 'symmetry',
+  COAXIALITY_TOLERANCE: 'coaxiality',
+  CIRCULAR_RUNOUT_TOLERANCE: 'circular_runout',
+  TOTAL_RUNOUT_TOLERANCE: 'total_runout',
+  SURFACE_PROFILE_TOLERANCE: 'surface_profile',
+  LINE_PROFILE_TOLERANCE: 'line_profile',
 };
 
 function toleranceTypeName(upperType: string): string {
@@ -434,7 +457,7 @@ function findEnumParam(params: StepParam[], index: number): string | null {
 /* ------------------------------------------------------------------ */
 
 export interface PmiQueryResult {
-  schema_version: '0.3';
+  schema_version: '0.4';
   file_path: string;
   pmi_entities: PmiExtractedEntity[];
   statistics: {
@@ -465,7 +488,7 @@ export async function extractPmiEntities(filePath: string): Promise<PmiQueryResu
   }
 
   return {
-    schema_version: '0.3',
+    schema_version: '0.4',
     file_path: filePath,
     pmi_entities: pmiEntities,
     statistics: {
