@@ -3,7 +3,7 @@
   "mcp": {
     "cad-mcp-server": {
       "type": "local",
-      "command": ["node", "dist/index.js"],
+      "command": ["npx", "tsx", "src/index.ts"],
       "enabled": true,
       "timeout": 30000
     }

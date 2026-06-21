@@ -1,0 +1,3 @@
+[submodule "vendor/occt-wasm"]
+	path = vendor/occt-wasm
+	url = https://github.com/mattmohandiss/occt-wasm.git

@@ -82,7 +82,7 @@ The public MCP surface stays small. Internally, the model store caches imported 
 
 For more detail, see:
 
-- `Tools.md`
+- `docs/PROPOSED_TOOLS.md`
 - `docs/ARCHITECTURE.md`
 - `docs/SECURITY.md`
 
