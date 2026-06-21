@@ -6,8 +6,6 @@ import {
   normalizePagination,
   createPagination,
   createQueryResponse,
-  pointDistance,
-  bboxIntersects,
   groupEntities,
   magnitudeBucketKey,
   DEFAULT_QUERY_LIMITS,
@@ -20,7 +18,9 @@ import {
 export async function queryStepEdges(filePath: string, input: QueryStepEdgesInput) {
   return withStepModel(filePath, async (model) => {
     const includeBodyId = Boolean(
-      input.filter?.body_ids?.length || input.include?.includes('body_id')
+      input.filter?.body_ids?.length ||
+      input.include?.includes('body_id') ||
+      input.group_by?.includes('body_id')
     );
     const allEdges = await model.getEdgeEntities(includeBodyId);
     const { kernel, shape } = await model.getShapeContext('query_step_edges');
@@ -41,7 +41,7 @@ export async function queryStepEdges(filePath: string, input: QueryStepEdgesInpu
     }
 
     // Apply filters.
-    let filtered = applyEdgeFilters(preFiltered, input.filter, input.region, input.near);
+    let filtered = applyEdgeFilters(preFiltered, input.filter);
 
     // Apply sorting.
     if (input.sort) {
@@ -54,7 +54,7 @@ export async function queryStepEdges(filePath: string, input: QueryStepEdgesInpu
     // Grouping (result_mode "groups").
     const groups =
       resultMode === 'groups'
-        ? groupEdges(filtered, input.group_by, input.sample_entity_limit)
+        ? groupEdges(filtered, input.group_by, DEFAULT_QUERY_LIMITS.sample_entity_limit)
         : [];
 
     // Pagination + projection (skipped for summary/groups modes to save tokens).
@@ -77,8 +77,6 @@ export async function queryStepEdges(filePath: string, input: QueryStepEdgesInpu
       filePath,
       {
         filter: input.filter ?? {},
-        region: input.region ?? null,
-        near: input.near ?? null,
         include: input.include ?? [],
         group_by: input.group_by ?? null,
         result_mode: resultMode,
@@ -158,6 +156,8 @@ function groupEdges(
           return edge.curve_type;
         case 'length_range':
           return magnitudeBucketKey(edge.length);
+        case 'body_id':
+          return edge.body_id ?? 'unknown';
         default:
           return null;
       }
@@ -174,9 +174,7 @@ function groupEdges(
  */
 function applyEdgeFilters(
   edges: ExtractedEdgeEntity[],
-  filter: QueryStepEdgesInput['filter'],
-  region: QueryStepEdgesInput['region'],
-  near: QueryStepEdgesInput['near']
+  filter: QueryStepEdgesInput['filter']
 ): ExtractedEdgeEntity[] {
   let result = edges;
 
@@ -211,41 +209,6 @@ function applyEdgeFilters(
     if (filter.radius_max !== undefined) {
       result = result.filter((e) => e.radius !== undefined && e.radius <= filter.radius_max!);
     }
-  }
-
-  if (region) {
-    const mode = region.mode ?? 'intersects';
-    result = result.filter((e) => {
-      if (mode === 'contained') {
-        return (
-          e.bbox.min[0] >= region.bbox.min[0] &&
-          e.bbox.max[0] <= region.bbox.max[0] &&
-          e.bbox.min[1] >= region.bbox.min[1] &&
-          e.bbox.max[1] <= region.bbox.max[1] &&
-          e.bbox.min[2] >= region.bbox.min[2] &&
-          e.bbox.max[2] <= region.bbox.max[2]
-        );
-      } else if (mode === 'contains_center') {
-        return (
-          e.center[0] >= region.bbox.min[0] &&
-          e.center[0] <= region.bbox.max[0] &&
-          e.center[1] >= region.bbox.min[1] &&
-          e.center[1] <= region.bbox.max[1] &&
-          e.center[2] >= region.bbox.min[2] &&
-          e.center[2] <= region.bbox.max[2]
-        );
-      } else {
-        // intersects
-        return bboxIntersects(e.bbox, region.bbox);
-      }
-    });
-  }
-
-  if (near) {
-    result = result.filter((e) => {
-      const dist = pointDistance(e.center, near.point);
-      return dist <= near.distance;
-    });
   }
 
   return result;

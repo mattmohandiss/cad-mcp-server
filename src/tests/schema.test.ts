@@ -26,31 +26,26 @@ describe('public tool schema contract', () => {
         surface_types: ['plane', 'cylinder'],
         area_min: 1,
         area_max: 100,
-        normal_parallel_to: [0, 0, 1],
-        bbox_min: [0, 0, 0],
-        bbox_max: [10, 10, 10],
-        center_near_point: [5, 5, 5],
-        center_near_distance: 2,
+        normal: { parallel_to: [0, 0, 1] },
         fields: ['id', 'surface_type', 'bbox_center', 'adjacent_faces'],
-        group_by: ['surface_type'],
-        sort_by: 'area',
-        sort_direction: 'desc',
+        group_by: ['surface_type', 'body_id'],
+        sort: { by: 'area', direction: 'desc' },
         return_type: 'groups',
         limit: 10,
         offset: 0,
-        sample_entity_limit: 5,
       }).success
     ).toBe(true);
 
     for (const invalid of [
       { face_ids: ['face:0'] },
       { filter: { surface_type: ['plane'] } },
-      { region: { bbox: { min: [0, 0, 0], max: [1, 1, 1] } } },
-      { near: { point: [0, 0, 0], distance: 1 } },
       { include: ['id'] },
       { result_mode: 'entities' },
       { bbox_match: 'intersects_bbox' },
       { normal_tolerance_degrees: 5 },
+      { region: { bbox: { min: [0, 0, 0], max: [1, 1, 1] } } },
+      { near: { point: [0, 0, 0], distance: 1 } },
+      { sample_entity_limit: 5 },
     ]) {
       expect(schema.safeParse({ file_path: filePath, ...invalid }).success).toBe(false);
     }
@@ -71,11 +66,10 @@ describe('public tool schema contract', () => {
         file_path: filePath,
         curve_types: ['line'],
         length_max: 1,
-        radius_min: 2,
+        radius: { min: 2 },
         fields: ['id', 'curve_type', 'bbox_center'],
         group_by: ['curve_type', 'length_range'],
-        sort_by: 'length',
-        sort_direction: 'asc',
+        sort: { by: 'length', direction: 'asc' },
         return_type: 'entities',
       }).success
     ).toBe(true);
@@ -88,7 +82,12 @@ describe('public tool schema contract', () => {
     expect(schema.safeParse({ file_path: filePath, group_by: ['axis_direction'] }).success).toBe(
       false
     );
-    expect(schema.safeParse({ file_path: filePath, sample_entity_limit: 51 }).success).toBe(false);
+    expect(
+      schema.safeParse({
+        file_path: filePath,
+        region: { bbox: { min: [0, 0, 0], max: [1, 1, 1] } },
+      }).success
+    ).toBe(false);
   });
 
   it('accepts get entity, PMI, and compare arguments', () => {
@@ -112,7 +111,7 @@ describe('public tool schema contract', () => {
         tolerance_subtypes: ['position'],
         value_max: 0.2,
         group_by: ['type', 'tolerance_type'],
-        sort_by: 'value',
+        sort: { by: 'value' },
         return_type: 'groups',
       }).success
     ).toBe(true);

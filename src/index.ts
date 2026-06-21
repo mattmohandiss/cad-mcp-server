@@ -92,7 +92,7 @@ registerTool(
   {
     title: 'Inspect STEP File',
     description:
-      'Compact first-pass overview of a STEP file. Use this FIRST to identify the part, check validity, dimensions, body count, and topology counts. Expensive face area extremes and adjacency are deferred; follow up with find_step_faces, find_step_edges, or get_step_entities for detail. Do NOT use for entity-level searches. Example: {file_path:"model.step"}',
+      'Compact first-pass overview of a STEP file. Use this FIRST to identify the part, check validity, dimensions, body count, and topology counts. Expensive face area extremes and adjacency are deferred; follow up with find_step_faces, find_step_edges, or get_step_entities for detail. Do NOT use for entity-level searches. IMPORTANT: Omit all optional filter parameters you do not need — do not pass placeholder values (0, 999999, empty array). Example: {file_path:"model.step"}',
     inputSchema: stepToolSchemas.inspectStepFile,
     outputSchema: stepToolOutputSchemas.inspectStepFile,
   },
@@ -104,7 +104,7 @@ registerTool(
   {
     title: 'Find STEP Faces',
     description:
-      'Search faces by surface type, area, spatial region, or proximity. Use when you need specific faces such as large faces, cylindrical faces, faces near a point, or grouped face statistics. Do NOT use for known face IDs; use get_step_entities. Use only the filters needed for the question; adding every optional filter over-constrains results. Example small faces: {file_path:"model.step",area_max:1,sort_by:"area"}. Example cylinders by radius: {file_path:"model.step",surface_types:["cylinder"],return_type:"groups",group_by:["radius"]}',
+      'Search faces by surface type, area, spatial region, or proximity. Use when you need specific faces such as large faces, cylindrical faces, faces near a point, or grouped face statistics. Do NOT use for known face IDs; use get_step_entities. CRITICAL: Omit every optional parameter you do not need. Adding a filter narrows results. Do NOT pass placeholder values. Example small faces: {file_path:"model.step",area_max:1,sort:{by:"area"}}. Example cylinders: {file_path:"model.step",surface_types:["cylinder"],return_type:"groups",group_by:["surface_type"]}',
     inputSchema: stepToolSchemas.findStepFaces,
     outputSchema: stepToolOutputSchemas.findStepFaces,
   },
@@ -119,7 +119,7 @@ registerTool(
   {
     title: 'Find STEP Edges',
     description:
-      'Search edges by curve type, length, circular radius, spatial region, or proximity. Use for tiny-edge investigation, long edges, circular edges, or grouped edge statistics. For tiny edges use length_max and sort_by:"length". Radius filters match radius-bearing/circular edges only; omit them unless specifically querying circular edges by radius. Do NOT use for known edge IDs; use get_step_entities. Example tiny edges: {file_path:"model.step",length_max:0.5,sort_by:"length",fields:["id","length","curve_type"]}',
+      'Search edges by curve type, length, circular radius, spatial region, or proximity. Use for tiny-edge investigation, long edges, circular edges, or grouped edge statistics. For tiny edges use length_max and sort:{by:"length"}. The "radius" filter restricts to circular/curved edges only; omit it unless specifically querying circular edges by radius. Do NOT use for known edge IDs; use get_step_entities. CRITICAL: Omit every optional parameter you do not need. Do NOT pass placeholder values. Example tiny edges: {file_path:"model.step",length_max:0.5,sort:{by:"length"},fields:["id","length","curve_type"]}',
     inputSchema: stepToolSchemas.findStepEdges,
     outputSchema: stepToolOutputSchemas.findStepEdges,
   },
@@ -134,7 +134,7 @@ registerTool(
   {
     title: 'Get STEP Entities',
     description:
-      'Retrieve one or more known faces or edges by exact entity ID. IDs come from inspect_step_file, find_step_faces, or find_step_edges. Use ONLY when you already have specific IDs. Do NOT use for searching or filtering; use find_step_faces or find_step_edges. Example: {file_path:"model.step",entity_type:"face",entity_ids:["face:0"],fields:["id","area","normal"]}',
+      'Retrieve one or more known faces or edges by exact entity ID. IDs come from inspect_step_file, find_step_faces, or find_step_edges. Use ONLY when you already have specific IDs. Do NOT use for searching or filtering; use find_step_faces or find_step_edges. Example: {file_path:"model.step",entity_type:"face",entity_ids:["face:0"],fields:["id","area","normal"]}. IMPORTANT: Omit fields if you want the default projection.',
     inputSchema: stepToolSchemas.getStepEntities,
     outputSchema: stepToolOutputSchemas.getStepEntities,
   },
@@ -149,7 +149,7 @@ registerTool(
   {
     title: 'Compare STEP Files',
     description:
-      'Compare two STEP files and return whole-model metric deltas and metadata changes. Use for two revisions of a part when you need factual differences in dimensions, volume, area, topology counts, or exchange metadata. Does NOT track feature identity across revisions. Deltas are comparison_file_path minus baseline_file_path. Example: {baseline_file_path:"model_v1.step",comparison_file_path:"model_v2.step"}',
+      'Compare two STEP files and return whole-model metric deltas and metadata changes. Use for two revisions of a part when you need factual differences in dimensions, volume, area, topology counts, or exchange metadata. Does NOT track feature identity across revisions. Deltas are comparison_file_path minus baseline_file_path. Both parameters are required. Example: {baseline_file_path:"model_v1.step",comparison_file_path:"model_v2.step"}',
     inputSchema: stepToolSchemas.compareStepFiles,
     outputSchema: stepToolOutputSchemas.compareStepFiles,
   },
@@ -164,7 +164,7 @@ registerTool(
   {
     title: 'Query STEP PMI',
     description:
-      'Query Product Manufacturing Information (PMI): geometric tolerances, dimensions, datums, and annotations. Use return_type:"summary" first to check whether PMI exists. Not all STEP files contain PMI; AP203 files commonly do not. Example quick check: {file_path:"model.step",return_type:"summary"}',
+      'Query Product Manufacturing Information (PMI): geometric tolerances, dimensions, datums, and annotations. Use return_type:"summary" first to check whether PMI exists. Not all STEP files contain PMI; AP203 files commonly do not. CRITICAL: Omit every optional parameter you do not need. Do NOT pass placeholder values. Example quick check: {file_path:"model.step",return_type:"summary"}',
     inputSchema: stepToolSchemas.queryStepPmi,
     outputSchema: stepToolOutputSchemas.queryStepPmi,
   },

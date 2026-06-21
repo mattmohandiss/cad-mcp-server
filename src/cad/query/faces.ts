@@ -7,8 +7,6 @@ import {
   normalizePagination,
   createPagination,
   createQueryResponse,
-  pointDistance,
-  bboxIntersects,
   normalizeVector,
   angleDegreesNormalized,
   groupEntities,
@@ -25,7 +23,9 @@ import {
 export async function queryStepFaces(filePath: string, input: QueryStepFacesInput) {
   return withStepModel(filePath, async (model) => {
     const includeBodyId = Boolean(
-      input.filter?.body_ids?.length || input.include?.includes('body_id')
+      input.filter?.body_ids?.length ||
+      input.include?.includes('body_id') ||
+      input.group_by?.includes('body_id')
     );
     const allFaces = await model.getFaceEntities(includeBodyId);
     const { kernel, shape } = await model.getShapeContext('query_step_faces');
@@ -46,7 +46,7 @@ export async function queryStepFaces(filePath: string, input: QueryStepFacesInpu
     }
 
     // Apply filters.
-    let filtered = applyFaceFilters(preFiltered, input.filter, input.region, input.near);
+    let filtered = applyFaceFilters(preFiltered, input.filter);
 
     // Apply sorting.
     if (input.sort) {
@@ -59,7 +59,7 @@ export async function queryStepFaces(filePath: string, input: QueryStepFacesInpu
     // Grouping (result_mode "groups").
     const groups =
       resultMode === 'groups'
-        ? groupFaces(filtered, input.group_by, input.sample_entity_limit)
+        ? groupFaces(filtered, input.group_by, DEFAULT_QUERY_LIMITS.sample_entity_limit)
         : [];
 
     // Pagination + projection (skipped for summary/groups modes to save tokens).
@@ -91,8 +91,6 @@ export async function queryStepFaces(filePath: string, input: QueryStepFacesInpu
       filePath,
       {
         filter: input.filter ?? {},
-        region: input.region ?? null,
-        near: input.near ?? null,
         include: input.include ?? [],
         group_by: input.group_by ?? null,
         result_mode: resultMode,
@@ -227,6 +225,8 @@ function groupFaces(
           return magnitudeBucketKey(face.area);
         case 'radius':
           return face.radius !== undefined ? radiusBucketValue(face.radius) : null;
+        case 'body_id':
+          return face.body_id ?? 'unknown';
         default:
           return null;
       }
@@ -243,9 +243,7 @@ function groupFaces(
  */
 function applyFaceFilters(
   faces: ExtractedFaceEntity[],
-  filter: QueryStepFacesInput['filter'],
-  region: QueryStepFacesInput['region'],
-  near: QueryStepFacesInput['near']
+  filter: QueryStepFacesInput['filter']
 ): ExtractedFaceEntity[] {
   let result = faces;
 
@@ -285,41 +283,6 @@ function applyFaceFilters(
         return Math.min(angle, 180 - angle) <= tolerance;
       });
     }
-  }
-
-  if (region) {
-    const mode = region.mode ?? 'intersects';
-    result = result.filter((f) => {
-      if (mode === 'contained') {
-        return (
-          f.bbox.min[0] >= region.bbox.min[0] &&
-          f.bbox.max[0] <= region.bbox.max[0] &&
-          f.bbox.min[1] >= region.bbox.min[1] &&
-          f.bbox.max[1] <= region.bbox.max[1] &&
-          f.bbox.min[2] >= region.bbox.min[2] &&
-          f.bbox.max[2] <= region.bbox.max[2]
-        );
-      } else if (mode === 'contains_center') {
-        return (
-          f.center[0] >= region.bbox.min[0] &&
-          f.center[0] <= region.bbox.max[0] &&
-          f.center[1] >= region.bbox.min[1] &&
-          f.center[1] <= region.bbox.max[1] &&
-          f.center[2] >= region.bbox.min[2] &&
-          f.center[2] <= region.bbox.max[2]
-        );
-      } else {
-        // intersects
-        return bboxIntersects(f.bbox, region.bbox);
-      }
-    });
-  }
-
-  if (near) {
-    result = result.filter((f) => {
-      const dist = pointDistance(f.center, near.point);
-      return dist <= near.distance;
-    });
   }
 
   return result;

@@ -22,6 +22,48 @@ const direction3Schema = point3Schema.refine(([x, y, z]) => x !== 0 || y !== 0 |
   message: 'Direction vector must be non-zero.',
 });
 
+const normalFilterSchema = z
+  .object({
+    parallel_to: direction3Schema.describe(
+      'Direction vector [x, y, z] to match face normals against. Only faces whose normal is parallel to this direction match.'
+    ),
+    tolerance_degrees: z
+      .number()
+      .nonnegative()
+      .max(180)
+      .describe(
+        'Angle tolerance in degrees (default: 10). Face normals within +/-tolerance of target direction match.'
+      )
+      .optional(),
+  })
+  .strict()
+  .describe(
+    'Filter by face normal direction. IMPORTANT: setting this restricts results to orientation-filtered faces. Only set when you need faces with a specific normal direction.'
+  )
+  .optional();
+
+const edgeRadiusSchema = z
+  .object({
+    min: z
+      .number()
+      .nonnegative()
+      .describe('Minimum radius in mm. Only affects circular/curved edges.')
+      .optional(),
+    max: z
+      .number()
+      .nonnegative()
+      .describe('Maximum radius in mm. Only affects circular/curved edges.')
+      .optional(),
+  })
+  .strict()
+  .refine((r) => r.min === undefined || r.max === undefined || r.min <= r.max, {
+    message: 'radius.min must be <= radius.max.',
+  })
+  .describe(
+    'Filter circular/curved edges by radius. IMPORTANT: setting this restricts results to edges that carry a radius (circular/curved only). Only set when querying circular edges by radius. Do NOT set as a placeholder.'
+  )
+  .optional();
+
 function uniqueArray<T>(values: T[]): boolean {
   return new Set(values).size === values.length;
 }
@@ -29,17 +71,6 @@ function uniqueArray<T>(values: T[]): boolean {
 function boundedRange(input: { min?: number; max?: number }): boolean {
   return input.min === undefined || input.max === undefined || input.min <= input.max;
 }
-
-const bboxSchema = z
-  .object({
-    min: point3Schema,
-    max: point3Schema,
-  })
-  .strict()
-  .refine(
-    ({ min, max }) => min[0] <= max[0] && min[1] <= max[1] && min[2] <= max[2],
-    'Bounding box min values must be less than or equal to max values.'
-  );
 
 const resultModeSchema = z
   .enum(['summary', 'entities', 'groups'])
@@ -72,46 +103,6 @@ const offsetSchema = z
     'Skip this many results before returning (for pagination). Default: 0. E.g., offset=100, limit=50 returns results 100-149.'
   )
   .optional();
-const sampleEntityLimitSchema = z
-  .number()
-  .int()
-  .nonnegative()
-  .max(50)
-  .describe(
-    'Maximum number of example entity IDs to include per group (used with result_mode "groups"). Default: 5. Max: 50. Set 0 to omit samples.'
-  )
-  .optional();
-
-const regionSchema = z
-  .object({
-    bbox: bboxSchema.describe(
-      'Bounding box filter with min and max [x, y, z] corners. All coordinates in model units (typically mm). Each component of min must be <= corresponding max component.'
-    ),
-    mode: z
-      .enum(['intersects', 'contained', 'contains_center'])
-      .describe(
-        '"intersects" (default) = geometry overlaps or touches the box. "contained" = entire geometry must be inside the box. "contains_center" = geometry center point must be inside the box. Use "contains_center" for point-in-region queries.'
-      )
-      .optional(),
-  })
-  .strict()
-  .optional();
-
-const nearSchema = z
-  .object({
-    point: point3Schema.describe(
-      'Reference point [x, y, z] in model coordinates and units (typically mm). Example: [0, 0, 0] for origin, [100, 50, 25] for a specific location.'
-    ),
-    distance: z
-      .number()
-      .nonnegative()
-      .describe(
-        'Search radius around the point in model units (typically mm). Returns entities whose center is within this distance. E.g., distance: 10 searches within 10mm of the point.'
-      ),
-  })
-  .strict()
-  .optional();
-
 const bodyIdSchema = z.string().regex(/^body:\d+$/, 'Body IDs must match body:N.');
 
 const FACE_GET_FIELDS = new Set([
@@ -242,13 +233,13 @@ const edgeFieldsSchema = z
 const faceGroupBySchema = z
   .array(
     z
-      .enum(['surface_type', 'normal_direction', 'area_range', 'radius'])
+      .enum(['surface_type', 'normal_direction', 'area_range', 'radius', 'body_id'])
       .describe(
-        'Grouping dimension: surface_type=plane/cylinder/cone/etc; normal_direction=nearest principal axis (+X..-Z within 15 degrees, else off-axis); area_range=fixed log-scale size bucket in mm^2 (0-1, 1-10, 10-100, ...); radius=rounded to 0.5mm (cylindrical faces only).'
+        'Grouping dimension: surface_type=plane/cylinder/cone/etc; normal_direction=nearest principal axis (+X..-Z within 15 degrees, else off-axis); area_range=fixed log-scale size bucket in mm^2 (0-1, 1-10, 10-100, ...); radius=rounded to 0.5mm (cylindrical faces only); body_id=which body the face belongs to.'
       )
   )
   .min(1)
-  .max(4)
+  .max(5)
   .refine(uniqueArray, 'Group-by values must be unique.')
   .describe(
     'List of dimensions to group faces by; required when result_mode is "groups". E.g., ["surface_type"] groups by geometry type. Combining dimensions produces one group per distinct key combination. Bucket widths are fixed by the server.'
@@ -258,13 +249,13 @@ const faceGroupBySchema = z
 const edgeGroupBySchema = z
   .array(
     z
-      .enum(['curve_type', 'length_range'])
+      .enum(['curve_type', 'length_range', 'body_id'])
       .describe(
-        'Grouping dimension: curve_type=line/circle/ellipse/bspline/other; length_range=fixed log-scale length bucket in mm (0-1, 1-10, 10-100, ...). The 0-1 length_range bucket isolates tiny/degenerate edges.'
+        'Grouping dimension: curve_type=line/circle/ellipse/bspline/other; length_range=fixed log-scale length bucket in mm (0-1, 1-10, 10-100, ...); body_id=which body the edge belongs to.'
       )
   )
   .min(1)
-  .max(2)
+  .max(3)
   .refine(uniqueArray, 'Group-by values must be unique.')
   .describe(
     'List of dimensions to group edges by; required when result_mode is "groups". E.g., ["curve_type","length_range"] groups by type and length bucket. Bucket widths are fixed by the server.'
@@ -545,32 +536,29 @@ const pmiSortSchema = z
   .strict()
   .optional();
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const internalFaceQuerySchema = {
   filter: faceFilterSchema.optional(),
-  region: regionSchema,
-  near: nearSchema,
   include: faceIncludeSchema,
   group_by: faceGroupBySchema,
   sort: faceSortSchema,
   result_mode: resultModeSchema,
   limit: limitSchema,
   offset: offsetSchema,
-  sample_entity_limit: sampleEntityLimitSchema,
 };
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const internalEdgeQuerySchema = {
   filter: edgeFilterSchema.optional(),
-  region: regionSchema,
-  near: nearSchema,
   include: edgeIncludeSchema,
   group_by: edgeGroupBySchema,
   sort: edgeSortSchema,
   result_mode: resultModeSchema,
   limit: limitSchema,
   offset: offsetSchema,
-  sample_entity_limit: sampleEntityLimitSchema,
 };
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const internalPmiQuerySchema = {
   filter: pmiFilterSchema.optional(),
   group_by: pmiGroupBySchema,
@@ -578,7 +566,6 @@ const internalPmiQuerySchema = {
   result_mode: resultModeSchema,
   limit: limitSchema,
   offset: offsetSchema,
-  sample_entity_limit: sampleEntityLimitSchema,
 };
 
 const findStepFacesSchema = {
@@ -602,37 +589,10 @@ const findStepFacesSchema = {
     .nonnegative()
     .describe('Maximum face area in mm^2. Omit for no upper bound.')
     .optional(),
-  normal_parallel_to: direction3Schema
-    .describe(
-      'Non-zero direction vector [x, y, z] for matching parallel face normals. Matches within 15 degrees. Omit unless you need directional filtering.'
-    )
-    .optional(),
-  bbox_min: point3Schema
-    .describe(
-      'Minimum [x, y, z] corner of a bounding box filter. Must provide both bbox_min and bbox_max. Uses intersection match (faces overlapping or touching the box).'
-    )
-    .optional(),
-  bbox_max: point3Schema
-    .describe(
-      'Maximum [x, y, z] corner of a bounding box filter. Must provide both bbox_min and bbox_max.'
-    )
-    .optional(),
-  center_near_point: point3Schema
-    .describe(
-      'Reference point [x, y, z] for proximity search. Must provide both center_near_point and center_near_distance.'
-    )
-    .optional(),
-  center_near_distance: z
-    .number()
-    .nonnegative()
-    .describe(
-      'Search radius in mm around center_near_point. Must provide both center_near_point and center_near_distance.'
-    )
-    .optional(),
+  normal: normalFilterSchema,
   body_ids: z
     .array(bodyIdSchema)
     .min(1)
-    .max(20)
     .refine(uniqueArray, 'Body IDs must be unique.')
     .describe('Restrict to specific bodies in multi-body models. Omit to search all bodies.')
     .optional(),
@@ -640,30 +600,22 @@ const findStepFacesSchema = {
   group_by: z
     .array(
       z
-        .enum(['surface_type', 'area_range', 'radius'])
+        .enum(['surface_type', 'area_range', 'radius', 'normal_direction', 'body_id'])
         .describe(
-          'Grouping dimension: surface_type=plane/cylinder/etc; area_range=size bucket (0–1, 1–10, …); radius=rounded to 0.5mm (cylindrical faces only).'
+          'Grouping dimension: surface_type=plane/cylinder/etc; area_range=size bucket (0–1, 1–10, …); radius=rounded to 0.5mm (cylindrical faces only); normal_direction=nearest principal axis direction; body_id=which body the face belongs to.'
         )
     )
     .min(1)
-    .max(3)
+    .max(5)
     .refine(uniqueArray, 'Group-by values must be unique.')
     .describe(
       'Group dimensions. Requires return_type:"groups". Ignored otherwise. Example: ["surface_type"] groups by geometry type.'
     )
     .optional(),
-  sort_by: z
-    .enum(['area'])
-    .describe('Sort faces by area. Omit for model-internal order.')
-    .optional(),
-  sort_direction: z
-    .enum(['asc', 'desc'])
-    .describe('Sort direction. Default: asc (smallest first).')
-    .optional(),
+  sort: faceSortSchema,
   return_type: returnTypeSchema,
   limit: limitSchema,
   offset: offsetSchema,
-  sample_entity_limit: sampleEntityLimitSchema,
 };
 
 const findStepEdgesSchema = {
@@ -685,65 +637,19 @@ const findStepEdgesSchema = {
     .nonnegative()
     .describe('Maximum edge length in mm. For tiny edges, set this alone and omit radius filters.')
     .optional(),
-  radius_min: z
-    .number()
-    .nonnegative()
-    .describe(
-      'Minimum circular edge radius in mm. Radius filters match radius-bearing/circular edges only. Omit unless querying circular edges by radius.'
-    )
-    .optional(),
-  radius_max: z
-    .number()
-    .nonnegative()
-    .describe(
-      'Maximum circular edge radius in mm. Only applies to edges with curve_type "circle". Must be >= radius_min.'
-    )
-    .optional(),
-  bbox_min: point3Schema
-    .describe(
-      'Minimum [x, y, z] corner of a bounding box filter. Must provide both bbox_min and bbox_max.'
-    )
-    .optional(),
-  bbox_max: point3Schema
-    .describe(
-      'Maximum [x, y, z] corner of a bounding box filter. Must provide both bbox_min and bbox_max.'
-    )
-    .optional(),
-  center_near_point: point3Schema
-    .describe(
-      'Reference point [x, y, z] for proximity search. Must provide both center_near_point and center_near_distance.'
-    )
-    .optional(),
-  center_near_distance: z
-    .number()
-    .nonnegative()
-    .describe(
-      'Search radius in mm around center_near_point. Must provide both center_near_point and center_near_distance.'
-    )
-    .optional(),
+  radius: edgeRadiusSchema,
   body_ids: z
     .array(bodyIdSchema)
     .min(1)
-    .max(20)
     .refine(uniqueArray, 'Body IDs must be unique.')
     .describe('Restrict to specific bodies in multi-body models. Omit to search all bodies.')
     .optional(),
   fields: edgeFieldsSchema,
   group_by: edgeGroupBySchema,
-  sort_by: z
-    .enum(['length', 'radius'])
-    .describe(
-      'Sort edges by length or radius. For tiny edges, use sort_by:"length". Omit for model-internal order.'
-    )
-    .optional(),
-  sort_direction: z
-    .enum(['asc', 'desc'])
-    .describe('Sort direction. Default: asc (shortest/smallest first).')
-    .optional(),
+  sort: edgeSortSchema,
   return_type: returnTypeSchema,
   limit: limitSchema,
   offset: offsetSchema,
-  sample_entity_limit: sampleEntityLimitSchema,
 };
 
 const getStepEntitiesSchema = {
@@ -818,15 +724,10 @@ const pmiQuerySchema = {
     .describe('Maximum tolerance/dimension value in mm. Omit for no upper bound.')
     .optional(),
   group_by: pmiGroupBySchema,
-  sort_by: z
-    .enum(['type', 'value', 'tolerance_type'])
-    .describe('PMI sort field. Omit for default ordering.')
-    .optional(),
-  sort_direction: z.enum(['asc', 'desc']).describe('Sort direction. Default: asc.').optional(),
+  sort: pmiSortSchema,
   return_type: returnTypeSchema,
   limit: limitSchema,
   offset: offsetSchema,
-  sample_entity_limit: sampleEntityLimitSchema,
 };
 
 export const stepToolSchemas = {
@@ -922,12 +823,6 @@ export const stepToolOutputSchemas = {
   getStepEntities: queryOutputSchema,
   compareStepFiles: compareOutputSchema,
   queryStepPmi: queryOutputSchema,
-} as const;
-
-export const stepInternalToolSchemas = {
-  queryStepFaces: internalFaceQuerySchema,
-  queryStepEdges: internalEdgeQuerySchema,
-  queryStepPmi: internalPmiQuerySchema,
 } as const;
 
 export async function handleInspectStepFile(filePath: string) {
@@ -1075,24 +970,6 @@ export async function handleQueryStepPmi(
   );
 }
 
-function adaptBboxRegion(
-  query: Partial<PublicFindStepFacesInput | PublicFindStepEdgesInput> | undefined
-): QueryStepFacesInput['region'] {
-  validateSpatialPairs(query);
-  if (!query?.bbox_min || !query.bbox_max) return undefined;
-  return {
-    bbox: { min: query.bbox_min, max: query.bbox_max },
-    mode: 'intersects',
-  };
-}
-
-function adaptNear(
-  query: Partial<PublicFindStepFacesInput | PublicFindStepEdgesInput> | undefined
-): QueryStepFacesInput['near'] {
-  if (!query?.center_near_point || query.center_near_distance === undefined) return undefined;
-  return { point: query.center_near_point, distance: query.center_near_distance };
-}
-
 function adaptFaceFields(
   fields: PublicFindStepFacesInput['fields']
 ): QueryStepFacesInput['include'] {
@@ -1108,7 +985,9 @@ function adaptEdgeFields(
 export function adaptFindStepFaces(
   query: Partial<PublicFindStepFacesInput> | undefined
 ): QueryStepFacesInput {
-  validateFaceFindQuery(query);
+  if (!boundedRange({ min: query?.area_min, max: query?.area_max })) {
+    throw invalidInput('area_min must be less than or equal to area_max.');
+  }
 
   return {
     filter: {
@@ -1116,25 +995,27 @@ export function adaptFindStepFaces(
       surface_type: query?.surface_types,
       area_min: query?.area_min,
       area_max: query?.area_max,
-      normal_parallel_to: query?.normal_parallel_to,
-      normal_tolerance_degrees: query?.normal_parallel_to ? 15 : undefined,
+      normal_parallel_to: query?.normal?.parallel_to,
+      normal_tolerance_degrees: query?.normal?.tolerance_degrees,
     },
-    region: adaptBboxRegion(query),
-    near: adaptNear(query),
     include: adaptFaceFields(query?.fields),
     group_by: query?.group_by,
-    sort: query?.sort_by ? { by: query.sort_by, direction: query.sort_direction } : undefined,
+    sort: query?.sort,
     result_mode: query?.return_type,
     limit: query?.limit,
     offset: query?.offset,
-    sample_entity_limit: query?.sample_entity_limit,
   };
 }
 
 export function adaptFindStepEdges(
   query: Partial<PublicFindStepEdgesInput> | undefined
 ): QueryStepEdgesInput {
-  validateEdgeFindQuery(query);
+  if (!boundedRange({ min: query?.length_min, max: query?.length_max })) {
+    throw invalidInput('length_min must be less than or equal to length_max.');
+  }
+  if (!boundedRange({ min: query?.radius?.min, max: query?.radius?.max })) {
+    throw invalidInput('radius.min must be less than or equal to radius.max.');
+  }
 
   return {
     filter: {
@@ -1142,48 +1023,39 @@ export function adaptFindStepEdges(
       curve_type: query?.curve_types,
       length_min: query?.length_min,
       length_max: query?.length_max,
-      radius_min: query?.radius_min,
-      radius_max: query?.radius_max,
+      radius_min: query?.radius?.min,
+      radius_max: query?.radius?.max,
     },
-    region: adaptBboxRegion(query),
-    near: adaptNear(query),
     include: adaptEdgeFields(query?.fields),
     group_by: query?.group_by,
-    sort: query?.sort_by ? { by: query.sort_by, direction: query.sort_direction } : undefined,
+    sort: query?.sort,
     result_mode: query?.return_type,
     limit: query?.limit,
     offset: query?.offset,
-    sample_entity_limit: query?.sample_entity_limit,
   };
 }
 
 function adaptGetStepFaces(query: Partial<PublicGetStepEntitiesInput>): QueryStepFacesInput {
   return {
     filter: { entity_ids: query.entity_ids },
-    region: undefined,
-    near: undefined,
     include: adaptGetFaceFields(query.fields),
     group_by: undefined,
     sort: undefined,
     result_mode: 'entities',
     limit: query.entity_ids?.length,
     offset: 0,
-    sample_entity_limit: undefined,
   };
 }
 
 function adaptGetStepEdges(query: Partial<PublicGetStepEntitiesInput>): QueryStepEdgesInput {
   return {
     filter: { entity_ids: query.entity_ids },
-    region: undefined,
-    near: undefined,
     include: adaptGetEdgeFields(query.fields),
     group_by: undefined,
     sort: undefined,
     result_mode: 'entities',
     limit: query.entity_ids?.length,
     offset: 0,
-    sample_entity_limit: undefined,
   };
 }
 
@@ -1218,45 +1090,11 @@ export function adaptPmiQuery(
       value_max: query?.value_max,
     },
     group_by: query?.group_by,
-    sort: query?.sort_by ? { by: query.sort_by, direction: query.sort_direction } : undefined,
+    sort: query?.sort,
     result_mode: query?.return_type,
     limit: query?.limit,
     offset: query?.offset,
-    sample_entity_limit: query?.sample_entity_limit,
   };
-}
-
-function validateFaceFindQuery(query: Partial<PublicFindStepFacesInput> | undefined): void {
-  validateSpatialPairs(query);
-  if (!boundedRange({ min: query?.area_min, max: query?.area_max })) {
-    throw invalidInput('area_min must be less than or equal to area_max.');
-  }
-}
-
-function validateEdgeFindQuery(query: Partial<PublicFindStepEdgesInput> | undefined): void {
-  validateSpatialPairs(query);
-  if (!boundedRange({ min: query?.length_min, max: query?.length_max })) {
-    throw invalidInput('length_min must be less than or equal to length_max.');
-  }
-  if (!boundedRange({ min: query?.radius_min, max: query?.radius_max })) {
-    throw invalidInput('radius_min must be less than or equal to radius_max.');
-  }
-}
-
-function validateSpatialPairs(
-  query: Partial<PublicFindStepFacesInput | PublicFindStepEdgesInput> | undefined
-): void {
-  if (!query) return;
-  if ((query.bbox_min === undefined) !== (query.bbox_max === undefined)) {
-    throw invalidInput('bbox_min and bbox_max must be provided together.');
-  }
-  if (query.bbox_min && query.bbox_max) {
-    const valid = query.bbox_min.every((value, index) => value <= query.bbox_max![index]);
-    if (!valid) throw invalidInput('Each bbox_min component must be <= bbox_max.');
-  }
-  if ((query.center_near_point === undefined) !== (query.center_near_distance === undefined)) {
-    throw invalidInput('center_near_point and center_near_distance must be provided together.');
-  }
 }
 
 function validateEntityIds(entityIds: string[], entityType: 'face' | 'edge'): void {
@@ -1286,13 +1124,9 @@ type InputFromShape<T extends Record<string, z.ZodType>> = {
   [K in keyof T]: z.infer<T[K]>;
 };
 
-export type QueryStepFacesInput = InputFromShape<
-  (typeof stepInternalToolSchemas)['queryStepFaces']
->;
-export type QueryStepEdgesInput = InputFromShape<
-  (typeof stepInternalToolSchemas)['queryStepEdges']
->;
-export type QueryStepPmiInput = InputFromShape<(typeof stepInternalToolSchemas)['queryStepPmi']>;
+export type QueryStepFacesInput = InputFromShape<typeof internalFaceQuerySchema>;
+export type QueryStepEdgesInput = InputFromShape<typeof internalEdgeQuerySchema>;
+export type QueryStepPmiInput = InputFromShape<typeof internalPmiQuerySchema>;
 type PublicFindStepFacesInput = InputFromShape<typeof findStepFacesSchema>;
 type PublicFindStepEdgesInput = InputFromShape<typeof findStepEdgesSchema>;
 export type PublicGetStepEntitiesInput = InputFromShape<typeof getStepEntitiesSchema>;

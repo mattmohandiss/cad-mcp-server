@@ -114,13 +114,12 @@ describe('CAD MCP factual integration smoke tests', () => {
     expect((summaryResult.data.statistics as Record<string, unknown>).total_faces).toBe(6);
   });
 
-  it('finds edges with flat filters, projections, grouping, and sorting', async () => {
+  it('finds edges with filters, projections, grouping, and sorting', async () => {
     const entitiesResult = expectSuccess(
       await handleFindStepEdges(blockStepFile, {
         curve_types: ['line'],
         fields: ['id', 'curve_type', 'length', 'bbox_center', 'adjacent_faces'],
-        sort_by: 'length',
-        sort_direction: 'asc',
+        sort: { by: 'length', direction: 'asc' },
         limit: 12,
       })
     );
@@ -136,12 +135,11 @@ describe('CAD MCP factual integration smoke tests', () => {
       await handleFindStepEdges(blockStepFile, {
         return_type: 'groups',
         group_by: ['length_range'],
-        sample_entity_limit: 3,
       })
     );
     const groups = groupsResult.data.groups as Array<Record<string, unknown>>;
     expect(groups.length).toBeGreaterThan(0);
-    expect((groups[0].sample_entity_ids as string[]).length).toBeLessThanOrEqual(3);
+    expect((groups[0].sample_entity_ids as string[]).length).toBeLessThanOrEqual(5);
   });
 
   it('finds circular edges by radius and returns exact edge radius', async () => {

@@ -242,33 +242,6 @@ export function sampleEntityIds(
 }
 
 /**
- * Check if a bounding box intersects another.
- */
-export function bboxIntersects(
-  bbox1: { min: number[]; max: number[] },
-  bbox2: { min: number[]; max: number[] }
-): boolean {
-  return !(
-    bbox1.max[0] < bbox2.min[0] ||
-    bbox1.min[0] > bbox2.max[0] ||
-    bbox1.max[1] < bbox2.min[1] ||
-    bbox1.min[1] > bbox2.max[1] ||
-    bbox1.max[2] < bbox2.min[2] ||
-    bbox1.min[2] > bbox2.max[2]
-  );
-}
-
-/**
- * Calculate distance between two points.
- */
-export function pointDistance(p1: number[], p2: number[]): number {
-  const dx = p1[0] - p2[0];
-  const dy = p1[1] - p2[1];
-  const dz = p1[2] - p2[2];
-  return Math.sqrt(dx * dx + dy * dy + dz * dz);
-}
-
-/**
  * Calculate dot product of two direction vectors.
  */
 export function dotProduct(v1: number[], v2: number[]): number {

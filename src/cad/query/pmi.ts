@@ -10,6 +10,7 @@ import {
   normalizePagination,
   createPagination,
   createQueryResponse,
+  DEFAULT_QUERY_LIMITS,
   type ComputedGroup,
 } from './shared.js';
 
@@ -122,7 +123,7 @@ export async function queryStepPmi(filePath: string, input: QueryStepPmiInput) {
         bucket.members.push(entity);
       }
 
-      const sampleLimit = input.sample_entity_limit ?? 5;
+      const sampleLimit = DEFAULT_QUERY_LIMITS.sample_entity_limit;
       let groupIdx = 0;
       groups = [...buckets.values()].map((bucket) => {
         const ids = bucket.members.map((m) => m.step_id);

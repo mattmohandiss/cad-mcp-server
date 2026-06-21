@@ -1,4 +1,4 @@
-export interface NumericStats {
+interface NumericStats {
   count: number;
   total: number;
   average: number;
