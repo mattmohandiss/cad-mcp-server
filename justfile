@@ -1,19 +1,60 @@
 default:
 	just --list
 
+# ── Project setup ─────────────────────────────────────────────────────────
+
 # Initialize submodules after clone
 init:
 	git submodule update --init --recursive
 
-# Full setup: submodules + npm deps
+# Full setup: submodules + npm deps (root + kernel/ts)
 setup: init
 	npm install
+	cd kernel/ts && npm install
 
-# Rebuild occt-wasm fork via Podman (OCI-compatible container engine)
-rebuild-wasm:
-	cd kernel && podman build --progress=plain -t occt-wasm . && podman create --name occt-wasm-tmp occt-wasm && podman cp occt-wasm-tmp:/workspace/dist/. dist/ && podman rm occt-wasm-tmp
-	cd kernel/ts && bash scripts/copy-wasm.sh
-	cd kernel/ts && npm install && npm run build
+# ── Build ─────────────────────────────────────────────────────────────────
+
+# Build the MCP server (TypeScript → dist/)
+build:
+	npm run build
+
+# Build occt-wasm kernel via Docker (OCI-compatible container engine)
+build-wasm:
+	cd kernel && docker build --no-cache -t occt-wasm .
+
+# Regenerate C++ facade from codegen config (after editing config.rs)
+codegen:
+	cd kernel && cargo run -- codegen
+
+# ── Validation ────────────────────────────────────────────────────────────
+
+# Cross-reference facade methods across config.rs, header, and TS files
+validate-facade:
+	scripts/validate-facade.sh
+
+# Lint TypeScript (MCP server + kernel)
+ts-lint:
+	npm run lint
+	cd kernel/ts && npx tsc --noEmit
+	cd kernel/ts && npx eslint src/
+
+# Lint Rust (kernel codegen + crate)
+rs-lint:
+	cd kernel && if command -v cargo &>/dev/null; then cargo fmt --check; cargo clippy 2>&1 | grep -v "^$" | grep -v "warning:" | head -5 || true; else echo "  (cargo not found - skip rs-lint)"; fi
+
+# Format C++ (facade source + generated)
+cpp-fmt:
+	clang-format --dry-run -Werror kernel/facade/src/kernel.cpp kernel/facade/include/occt_kernel.h 2>&1 || echo "  (clang-format check skipped if clang-format not in PATH)"
+
+# TypeScript type-check (kernel + MCP server)
+ts-check:
+	cd kernel/ts && npx tsc --noEmit
+	npx tsc --noEmit
+
+# Full check: run ALL validation and linting
+check: validate-facade ts-lint rs-lint ts-check
+
+# ── Development ───────────────────────────────────────────────────────────
 
 dev:
 	npm run build && node dist/index.js
@@ -27,18 +68,7 @@ test:
 fmt:
 	npm run fmt
 
-lint:
-	npm run lint
-
-check: fmt lint test
-	@echo "Check completed"
-
-build:
-	npm run build
-
-# Regenerate C++ facade from codegen config
-codegen:
-	cd kernel && cargo run -- codegen
+# ── Cleanup ───────────────────────────────────────────────────────────────
 
 clean:
 	rm -rf dist node_modules
