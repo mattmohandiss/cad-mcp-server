@@ -18,9 +18,13 @@ setup: init
 build:
 	npm run build
 
-# Build occt-wasm kernel via Docker (OCI-compatible container engine)
+# Build occt-wasm kernel via OCI-compatible container engine (podman preferred, docker fallback)
 build-wasm:
-	cd kernel && docker build --no-cache -t occt-wasm .
+	if command -v podman &>/dev/null; then \
+	  cd kernel && podman build --no-cache -t occt-wasm .; \
+	else \
+	  cd kernel && docker build --no-cache -t occt-wasm .; \
+	fi
 
 # Regenerate C++ facade from codegen config (after editing config.rs)
 codegen:
