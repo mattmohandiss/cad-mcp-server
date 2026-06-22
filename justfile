@@ -1,44 +1,88 @@
 default:
 	just --list
 
-# Initialize submodules after clone
-init:
-	git submodule update --init --recursive
-
-# Full setup: submodules + npm deps
-setup: init
+# Install root MCP dependencies and local occt-wasm package dependencies
+setup:
 	npm install
+	cd occt/ts && npm install
 
-# Rebuild occt-wasm fork via Podman (OCI-compatible container engine)
-rebuild-wasm:
-	cd kernel && podman build --progress=plain -t occt-wasm . && podman create --name occt-wasm-tmp occt-wasm && podman cp occt-wasm-tmp:/workspace/dist/. dist/ && podman rm occt-wasm-tmp
-	cd kernel/ts && bash scripts/copy-wasm.sh
-	cd kernel/ts && npm install && npm run build
-
+# Build and run the MCP server locally
 dev:
-	npm run build && node dist/index.js
+	npm run build
+	node dist/index.js
 
-watch:
-	npm run watch
+# Build the optimized distribution tarball for npm/manual install
+build: _build-wasm-builder _build-wasm-release _build-server _pack
 
+# Run the integration test suite
 test:
 	npm test
 
-fmt:
-	npm run fmt
+# Run static validation for TypeScript, Rust codegen, and facade consistency
+lint: _validate-facade _lint-ts _lint-rs
 
-lint:
-	npm run lint
+# Run all local checks
+check: lint test
 
-check: fmt lint test
-	@echo "Check completed"
+# Remove generated artifacts and installed dependencies
+clean:
+	rm -rf dist node_modules occt/ts/node_modules occt/dist occt/build occt/ts/dist occt/*.tgz *.tgz
 
-build:
+# Internal: build root MCP server TypeScript
+_build-server:
 	npm run build
 
-# Regenerate C++ facade from codegen config
-codegen:
-	cd kernel && cargo run -- codegen
+# Internal: produce npm package tarball
+_pack:
+	npm pack
 
-clean:
-	rm -rf dist node_modules
+# Internal: build optimized occt-wasm and copy package artifacts into occt/ts/dist
+_build-wasm-release:
+	if command -v podman &>/dev/null; then \
+	  cd occt && podman build --build-arg ENABLE_WASM_OPT=1 -t occt-wasm .; \
+	else \
+	  cd occt && docker build --build-arg ENABLE_WASM_OPT=1 -t occt-wasm .; \
+	fi
+	mkdir -p occt/dist
+	rm -rf occt/ts/dist && mkdir -p occt/ts/dist
+	if command -v podman &>/dev/null; then \
+	  cid=$(podman create occt-wasm); \
+	  podman cp $cid:/workspace/dist/. occt/dist/; \
+	  podman cp $cid:/workspace/ts/dist/. occt/ts/dist/; \
+	  podman rm $cid; \
+	else \
+	  cid=$(docker create occt-wasm); \
+	  docker cp $cid:/workspace/dist/. occt/dist/; \
+	  docker cp $cid:/workspace/ts/dist/. occt/ts/dist/; \
+	  docker rm $cid; \
+	fi
+	cd occt/ts && npm pack --pack-destination ..
+	rm -rf node_modules/occt-wasm
+	npm install ./occt/occt-wasm-*.tgz --no-save --package-lock=false --force
+
+# Internal: build pinned OCCT 8.0.0 static-lib builder image
+_build-wasm-builder:
+	if command -v podman &>/dev/null; then \
+	  cd occt && podman build -t localhost/occt-wasm-builder -f Dockerfile.builder .; \
+	else \
+	  cd occt && docker build -t localhost/occt-wasm-builder -f Dockerfile.builder .; \
+	fi
+
+# Internal: regenerate generated C++ facade after editing codegen config
+_codegen:
+	cd occt/codegen && cargo run
+
+# Internal: cross-reference facade methods across config.rs, header, and TS files
+_validate-facade:
+	scripts/validate-facade.sh
+
+# Internal: lint and type-check TypeScript packages
+_lint-ts:
+	npm run lint
+	cd occt/ts && npx tsc --noEmit
+	cd occt/ts && npx eslint src/
+	npx tsc --noEmit
+
+# Internal: lint Rust codegen package
+_lint-rs:
+	cd occt/codegen && PATH="$HOME/.cargo/bin:$PATH" cargo fmt --check && PATH="$HOME/.cargo/bin:$PATH" cargo clippy -- -D warnings

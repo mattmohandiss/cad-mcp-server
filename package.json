@@ -6,6 +6,8 @@
   "main": "dist/index.js",
   "files": [
     "dist",
+    "node_modules/occt-wasm/dist",
+    "node_modules/occt-wasm/package.json",
     "!dist/tests",
     "README.md"
   ],
@@ -13,7 +15,7 @@
     "cad-mcp-server": "dist/index.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "build": "tsc",
@@ -34,19 +36,21 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "occt-wasm": "file:./kernel/ts",
+    "occt-wasm": "file:./occt/ts",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^25.9.2",
+    "@types/node": "^24.10.0",
     "@typescript-eslint/eslint-plugin": "^8.61.0",
     "@typescript-eslint/parser": "^8.61.0",
     "eslint": "^10.4.1",
     "prettier": "^3.8.4",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
-    "typescript-language-server": "^5.3.0",
     "vitest": "^4.1.8"
-  }
+  },
+  "bundleDependencies": [
+    "occt-wasm"
+  ]
 }
