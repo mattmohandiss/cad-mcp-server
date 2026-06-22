@@ -22,6 +22,7 @@
           # Global Neovim provides editor behavior, not language tool choices.
           buildInputs = with pkgs; [
             nodejs_24
+            podman
           ];
 
           shellHook = ''

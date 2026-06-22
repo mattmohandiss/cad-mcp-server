@@ -356,6 +356,9 @@ function projectFace(
         // Surface-specific parameters like radius for cylinders.
         result.surface_parameters = face.radius !== undefined ? { radius: face.radius } : {};
         break;
+      case 'axis':
+        if (face.axis !== undefined) result.axis = face.axis;
+        break;
       case 'adjacent_faces':
         if (face.adjacent_faces !== undefined) result.adjacent_faces = face.adjacent_faces;
         break;

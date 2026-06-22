@@ -101,6 +101,23 @@ function projectFaces(
           }
           break;
         }
+        case 'axis': {
+          try {
+            const surfaceType = kernel.surfaceType(face);
+            if (surfaceType === 'cylinder') {
+              const axisData = kernel.getFaceCylinderAxis(face);
+              if (axisData) {
+                result.axis = {
+                  direction: [axisData.direction.x, axisData.direction.y, axisData.direction.z],
+                  location: [axisData.location.x, axisData.location.y, axisData.location.z],
+                };
+              }
+            }
+          } catch {
+            // Axis extraction failed, omit field.
+          }
+          break;
+        }
         case 'has_inner_wires':
           try {
             result.has_inner_wires = kernel.getSubShapes(face, 'wire').length > 1;

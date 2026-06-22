@@ -113,6 +113,7 @@ const FACE_FIELDS = [
   'bbox_center',
   'normal',
   'surface_parameters',
+  'axis',
   'adjacent_faces',
   'closest_face_distance',
   'has_inner_wires',
@@ -149,11 +150,11 @@ const faceIncludeSchema = z
         ]
       )
       .describe(
-        'Face projection fields: id=unique identifier, surface_type=geometry type, area=surface area mm^2, bbox=bounding box, center=centroid, normal=surface normal direction, surface_parameters=raw OCCT surface data (e.g. cylinder radius), adjacent_faces=list of adjacent faces with dihedral angle, closest_face_distance=minimum distance to any other face in the model, has_inner_wires=whether the face boundary contains interior wire(s) (holes/openings), body_id=which body this face belongs to (body:0, body:1, ...). Default: id,surface_type,area,bbox,center.'
+        'Face projection fields: id=unique identifier, surface_type=geometry type, area=surface area mm^2, bbox=bounding box, center=centroid, normal=surface normal direction, surface_parameters=raw OCCT surface data (e.g. cylinder radius), axis=cylinder axis direction and location (cylindrical faces only), adjacent_faces=list of adjacent faces with dihedral angle, closest_face_distance=minimum distance to any other face in the model, has_inner_wires=whether the face boundary contains interior wire(s) (holes/openings), body_id=which body this face belongs to (body:0, body:1, ...). Default: id,surface_type,area,bbox,center.'
       )
   )
   .min(1)
-  .max(11)
+  .max(12)
   .refine(uniqueArray, 'Include values must be unique.')
   .describe(
     'List of face properties to include in results. Omit to get default projection (id, surface_type, area, bbox, center).'
@@ -163,9 +164,9 @@ const faceIncludeSchema = z
 const faceFieldsSchema = z
   .array(z.enum(FACE_FIELDS as unknown as [string, ...string[]]))
   .min(1)
-  .max(11)
+  .max(12)
   .refine(uniqueArray, 'Field values must be unique.')
-  .describe('Face fields to include. Default: id,surface_type,area,bbox,bbox_center.')
+  .describe('Face fields to include. Default: id,surface_type,area,bbox,bbox_center. New: axis returns {direction, location} for cylindrical faces.')
   .optional();
 
 const edgeIncludeSchema = z

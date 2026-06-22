@@ -177,6 +177,10 @@ export interface ExtractedFaceEntity {
   center: [number, number, number];
   normal?: [number, number, number];
   radius?: number;
+  axis?: {
+    direction: [number, number, number];
+    location: [number, number, number];
+  };
   body_id?: string;
   has_inner_wires?: boolean;
   adjacent_faces?: Array<{
@@ -237,6 +241,19 @@ export function extractFaceEntities(
         }
       } catch {
         // Radius extraction failed, continue without it.
+      }
+
+      // Extract cylinder axis direction and location.
+      try {
+        const axisData = kernel.getFaceCylinderAxis(face);
+        if (axisData) {
+          entity.axis = {
+            direction: [axisData.direction.x, axisData.direction.y, axisData.direction.z],
+            location: [axisData.location.x, axisData.location.y, axisData.location.z],
+          };
+        }
+      } catch {
+        // Axis extraction failed, continue without it.
       }
     }
 

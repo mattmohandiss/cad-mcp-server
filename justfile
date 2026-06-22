@@ -9,9 +9,9 @@ init:
 setup: init
 	npm install
 
-# Rebuild occt-wasm fork via Docker (requires running Docker daemon)
+# Rebuild occt-wasm fork via Podman (OCI-compatible container engine)
 rebuild-wasm:
-	cd kernel && docker build --progress=plain -t occt-wasm . && docker run --rm -v "$$(pwd)/dist:/out" occt-wasm sh -c 'cp dist/* /out/'
+	cd kernel && podman build --progress=plain -t occt-wasm . && podman create --name occt-wasm-tmp occt-wasm && podman cp occt-wasm-tmp:/workspace/dist/. dist/ && podman rm occt-wasm-tmp
 	cd kernel/ts && bash scripts/copy-wasm.sh
 	cd kernel/ts && npm install && npm run build
 
