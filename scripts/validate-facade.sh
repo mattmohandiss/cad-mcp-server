@@ -49,14 +49,14 @@ KNOWN_RAW_ONLY=(
 
 # ── Extract method names from config.rs ──────────────────────────────────
 extract_config_methods() {
-  grep -oP '(?<=name:\s")[^"]+' "${ROOT}/kernel/xtask/src/codegen/config.rs" \
+  grep -oP '(?<=name:\s")[^"]+' "${ROOT}/occt/codegen/src/config.rs" \
     | sort -u
 }
 
 # ── Extract method names from occt_kernel.h ──────────────────────────────
 # Matches "return_type method_name(...)" lines in the public section.
 extract_header_methods() {
-  grep -oP '^\s+\S+\s+\K\w+(?=\()' "${ROOT}/kernel/facade/include/occt_kernel.h" \
+  grep -oP '^\s+\S+\s+\K\w+(?=\()' "${ROOT}/occt/facade/include/occt_kernel.h" \
     | grep -vx 'OcctKernel' \
     | sort -u
 }
@@ -64,7 +64,7 @@ extract_header_methods() {
 # ── Extract method names from raw-types.ts (OcctRawKernel interface) ─────
 extract_raw_methods() {
   # Match lines like:     methodName(params): returnType;
-  grep -oP '(?<=^\s{4})\w+(?=\()' "${ROOT}/kernel/ts/src/raw-types.ts" \
+  grep -oP '(?<=^\s{4})\w+(?=\()' "${ROOT}/occt/ts/src/raw-types.ts" \
     | sort -u
 }
 
@@ -72,7 +72,7 @@ extract_raw_methods() {
 extract_index_methods() {
   # Match lines like:     methodName(params): returnType {
   # Strip leading whitespace, then filter out non-public methods.
-  grep -oP '^\s{4}\w+(?=\()' "${ROOT}/kernel/ts/src/index.ts" \
+  grep -oP '^\s{4}\w+(?=\()' "${ROOT}/occt/ts/src/index.ts" \
     | sed 's/^\s*//' \
     | grep -vE '^(private|protected|public|static|constructor|get|set)$' \
     | sort -u

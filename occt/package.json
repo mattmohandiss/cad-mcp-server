@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "license": "MIT OR Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "build": "cd codegen && cargo run --release && bash ../scripts/build-wasm.sh && cd ../ts && npm run build",
+    "lint": "cd ts && npx eslint src/",
+    "typecheck": "cd ts && npx tsc --noEmit",
+    "docker:builder": "podman build -t localhost/occt-wasm-builder -f Dockerfile.builder .",
+    "docker:build": "podman build -t occt-wasm .",
+    "docker:dist": "podman build -t occt-wasm . && podman run --rm -v \"$(pwd)/dist:/out\" occt-wasm sh -c 'cp dist/* /out/'"
+  }
+}

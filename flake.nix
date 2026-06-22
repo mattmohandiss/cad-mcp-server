@@ -21,6 +21,7 @@
           # test tools, and build tools.
           # Global Neovim provides editor behavior, not language tool choices.
           buildInputs = with pkgs; [
+            just
             nodejs_24
             podman
 
@@ -28,9 +29,8 @@
             cargo
             rustc
 
-            # C++ tooling — formatting and static analysis
+            # C++ formatting
             clang-tools
-            cppcheck
           ];
 
           shellHook = ''

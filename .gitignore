@@ -2,11 +2,14 @@
 .direnv/
 dist/
 node_modules/
+*.tgz
 
 # Manual test artifacts
 *.stp
 *.STEP
 
-# occt-wasm fork build artifacts (rebuild via Docker, not committed)
-kernel/dist/
-kernel/ts/dist/
+# occt-wasm build artifacts (rebuild via just build, not committed)
+occt/dist/
+occt/ts/dist/
+occt/build/
+occt/*.tgz
