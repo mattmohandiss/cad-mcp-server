@@ -96,7 +96,9 @@ registerTool(
     inputSchema: stepToolSchemas.inspectStepFile,
     outputSchema: stepToolOutputSchemas.inspectStepFile,
   },
-  async ({ file_path }) => jsonToolResult(await handleInspectStepFile(String(file_path)))
+  withErrorContext('inspect_step_file', async ({ file_path }) =>
+    jsonToolResult(await handleInspectStepFile(String(file_path)))
+  )
 );
 
 registerTool(
@@ -153,10 +155,12 @@ registerTool(
     inputSchema: stepToolSchemas.compareStepFiles,
     outputSchema: stepToolOutputSchemas.compareStepFiles,
   },
-  async ({ baseline_file_path, comparison_file_path }) =>
-    jsonToolResult(
+  withErrorContext('compare_step_files', async (args) => {
+    const { baseline_file_path, comparison_file_path } = args as Record<string, string>;
+    return jsonToolResult(
       await handleCompareStepFiles(String(baseline_file_path), String(comparison_file_path))
-    )
+    );
+  })
 );
 
 registerTool(

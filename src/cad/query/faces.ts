@@ -2,13 +2,12 @@ import type { OcctKernel, ShapeHandle } from 'occt-wasm';
 import type { QueryStepFacesInput } from '../../tools/step-tools.js';
 import { type ExtractedFaceEntity } from '../../providers/occt-wasm/query-entities.js';
 import { computeEdgeVexity } from '../../providers/occt-wasm/aag-utils.js';
+import { normalizeVector, angleDegreesNormalized } from '../../utils/vectors.js';
 import { withStepModel } from '../model-store.js';
 import {
   normalizePagination,
   createPagination,
   createQueryResponse,
-  normalizeVector,
-  angleDegreesNormalized,
   groupEntities,
   magnitudeBucketKey,
   radiusBucketValue,

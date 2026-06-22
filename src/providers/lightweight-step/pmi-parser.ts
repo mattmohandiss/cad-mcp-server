@@ -69,7 +69,7 @@ function parseParams(raw: string): StepParam[] {
   const params: StepParam[] = [];
   let i = 0;
   while (i < raw.length) {
-    skipWhitespace(raw, i);
+    i = skipWhitespace(raw, i);
     if (i >= raw.length) break;
     const ch = raw[i];
     if (ch === "'") {

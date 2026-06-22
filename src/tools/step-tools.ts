@@ -105,7 +105,7 @@ const offsetSchema = z
   .optional();
 const bodyIdSchema = z.string().regex(/^body:\d+$/, 'Body IDs must match body:N.');
 
-const FACE_GET_FIELDS = new Set([
+const FACE_FIELDS = [
   'id',
   'surface_type',
   'area',
@@ -117,9 +117,9 @@ const FACE_GET_FIELDS = new Set([
   'closest_face_distance',
   'has_inner_wires',
   'body_id',
-]);
+] as const;
 
-const EDGE_GET_FIELDS = new Set([
+const EDGE_FIELDS = [
   'id',
   'curve_type',
   'length',
@@ -130,24 +130,24 @@ const EDGE_GET_FIELDS = new Set([
   'end_point',
   'adjacent_faces',
   'body_id',
-]);
+] as const;
+
+const FACE_GET_FIELDS = new Set<string>(FACE_FIELDS);
+const EDGE_GET_FIELDS = new Set<string>(EDGE_FIELDS);
+
+function mapBboxCenter(fields: string[] | undefined): string[] | undefined {
+  return fields?.map((f) => (f === 'bbox_center' ? 'center' : f));
+}
 
 const faceIncludeSchema = z
   .array(
     z
-      .enum([
-        'id',
-        'surface_type',
-        'area',
-        'bbox',
-        'center',
-        'normal',
-        'surface_parameters',
-        'adjacent_faces',
-        'closest_face_distance',
-        'has_inner_wires',
-        'body_id',
-      ])
+      .enum(
+        FACE_FIELDS.map((f) => (f === 'bbox_center' ? 'center' : f)) as unknown as [
+          string,
+          ...string[],
+        ]
+      )
       .describe(
         'Face projection fields: id=unique identifier, surface_type=geometry type, area=surface area mm^2, bbox=bounding box, center=centroid, normal=surface normal direction, surface_parameters=raw OCCT surface data (e.g. cylinder radius), adjacent_faces=list of adjacent faces with dihedral angle, closest_face_distance=minimum distance to any other face in the model, has_inner_wires=whether the face boundary contains interior wire(s) (holes/openings), body_id=which body this face belongs to (body:0, body:1, ...). Default: id,surface_type,area,bbox,center.'
       )
@@ -161,21 +161,7 @@ const faceIncludeSchema = z
   .optional();
 
 const faceFieldsSchema = z
-  .array(
-    z.enum([
-      'id',
-      'surface_type',
-      'area',
-      'bbox',
-      'bbox_center',
-      'normal',
-      'surface_parameters',
-      'adjacent_faces',
-      'closest_face_distance',
-      'has_inner_wires',
-      'body_id',
-    ])
-  )
+  .array(z.enum(FACE_FIELDS as unknown as [string, ...string[]]))
   .min(1)
   .max(11)
   .refine(uniqueArray, 'Field values must be unique.')
@@ -185,18 +171,12 @@ const faceFieldsSchema = z
 const edgeIncludeSchema = z
   .array(
     z
-      .enum([
-        'id',
-        'curve_type',
-        'length',
-        'bbox',
-        'center',
-        'radius',
-        'start_point',
-        'end_point',
-        'adjacent_faces',
-        'body_id',
-      ])
+      .enum(
+        EDGE_FIELDS.map((f) => (f === 'bbox_center' ? 'center' : f)) as unknown as [
+          string,
+          ...string[],
+        ]
+      )
       .describe(
         'Edge projection fields: id=unique identifier, curve_type=line/circle/ellipse/bspline/other, length=edge length mm, bbox=bounding box, center=midpoint or arc center, radius=radius for circular curves (null for lines), start_point=endpoint [x,y,z], end_point=other endpoint [x,y,z], adjacent_faces=the faces that bound this edge with face_id and surface_type, body_id=which body this edge belongs to (body:0, body:1, ...). Default: id,curve_type,length,bbox,center.'
       )
@@ -210,20 +190,7 @@ const edgeIncludeSchema = z
   .optional();
 
 const edgeFieldsSchema = z
-  .array(
-    z.enum([
-      'id',
-      'curve_type',
-      'length',
-      'bbox',
-      'bbox_center',
-      'radius',
-      'start_point',
-      'end_point',
-      'adjacent_faces',
-      'body_id',
-    ])
-  )
+  .array(z.enum(EDGE_FIELDS as unknown as [string, ...string[]]))
   .min(1)
   .max(10)
   .refine(uniqueArray, 'Field values must be unique.')
@@ -668,23 +635,9 @@ const getStepEntitiesSchema = {
   fields: z
     .array(
       z.enum([
-        'id',
-        'surface_type',
-        'curve_type',
-        'area',
-        'length',
-        'bbox',
-        'bbox_center',
-        'normal',
-        'surface_parameters',
-        'radius',
-        'start_point',
-        'end_point',
-        'adjacent_faces',
-        'closest_face_distance',
-        'has_inner_wires',
-        'body_id',
-      ])
+        ...FACE_FIELDS,
+        ...EDGE_FIELDS.filter((f) => !FACE_FIELDS.includes(f as never)),
+      ] as unknown as [string, ...string[]])
     )
     .min(1)
     .max(16)
@@ -970,18 +923,6 @@ export async function handleQueryStepPmi(
   );
 }
 
-function adaptFaceFields(
-  fields: PublicFindStepFacesInput['fields']
-): QueryStepFacesInput['include'] {
-  return fields?.map((field) => (field === 'bbox_center' ? 'center' : field));
-}
-
-function adaptEdgeFields(
-  fields: PublicFindStepEdgesInput['fields']
-): QueryStepEdgesInput['include'] {
-  return fields?.map((field) => (field === 'bbox_center' ? 'center' : field));
-}
-
 export function adaptFindStepFaces(
   query: Partial<PublicFindStepFacesInput> | undefined
 ): QueryStepFacesInput {
@@ -998,7 +939,7 @@ export function adaptFindStepFaces(
       normal_parallel_to: query?.normal?.parallel_to,
       normal_tolerance_degrees: query?.normal?.tolerance_degrees,
     },
-    include: adaptFaceFields(query?.fields),
+    include: mapBboxCenter(query?.fields),
     group_by: query?.group_by,
     sort: query?.sort,
     result_mode: query?.return_type,
@@ -1026,7 +967,7 @@ export function adaptFindStepEdges(
       radius_min: query?.radius?.min,
       radius_max: query?.radius?.max,
     },
-    include: adaptEdgeFields(query?.fields),
+    include: mapBboxCenter(query?.fields),
     group_by: query?.group_by,
     sort: query?.sort,
     result_mode: query?.return_type,
@@ -1038,7 +979,7 @@ export function adaptFindStepEdges(
 function adaptGetStepFaces(query: Partial<PublicGetStepEntitiesInput>): QueryStepFacesInput {
   return {
     filter: { entity_ids: query.entity_ids },
-    include: adaptGetFaceFields(query.fields),
+    include: mapBboxCenter(query.fields),
     group_by: undefined,
     sort: undefined,
     result_mode: 'entities',
@@ -1050,29 +991,13 @@ function adaptGetStepFaces(query: Partial<PublicGetStepEntitiesInput>): QuerySte
 function adaptGetStepEdges(query: Partial<PublicGetStepEntitiesInput>): QueryStepEdgesInput {
   return {
     filter: { entity_ids: query.entity_ids },
-    include: adaptGetEdgeFields(query.fields),
+    include: mapBboxCenter(query.fields),
     group_by: undefined,
     sort: undefined,
     result_mode: 'entities',
     limit: query.entity_ids?.length,
     offset: 0,
   };
-}
-
-function adaptGetFaceFields(
-  fields: PublicGetStepEntitiesInput['fields']
-): QueryStepFacesInput['include'] {
-  return fields?.map((field) => (field === 'bbox_center' ? 'center' : field)) as
-    | QueryStepFacesInput['include']
-    | undefined;
-}
-
-function adaptGetEdgeFields(
-  fields: PublicGetStepEntitiesInput['fields']
-): QueryStepEdgesInput['include'] {
-  return fields?.map((field) => (field === 'bbox_center' ? 'center' : field)) as
-    | QueryStepEdgesInput['include']
-    | undefined;
 }
 
 export function adaptPmiQuery(
