@@ -1,6 +1,6 @@
 import type { OcctKernel, ShapeHandle } from 'occt-wasm';
-import type { QueryStepEdgesInput } from '../../tools/step-tools.js';
-import { type ExtractedEdgeEntity } from '../../providers/occt-wasm/query-entities.js';
+import type { QueryStepEdgesInput } from '../tools/step-tools.js';
+import { type ExtractedEdgeEntity } from '../kernel/query-entities.js';
 import { withStepModel } from '../model-store.js';
 import {
   normalizePagination,

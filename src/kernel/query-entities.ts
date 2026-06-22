@@ -1,5 +1,5 @@
 import type { OcctKernel, ShapeHandle } from 'occt-wasm';
-import type { BoundingBox, Point3D } from '../schema.js';
+import type { BoundingBox, Point3D } from '../types/schema.js';
 import { toBoundingBox } from './measure.js';
 
 /**

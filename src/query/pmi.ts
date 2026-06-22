@@ -1,10 +1,10 @@
-import type { QueryStepPmiInput } from '../../tools/step-tools.js';
+import type { QueryStepPmiInput } from '../tools/step-tools.js';
 import type {
   PmiToleranceEntity,
   PmiDimensionEntity,
   PmiDatumEntity,
   PmiAnnotationEntity,
-} from '../../providers/lightweight-step/pmi-parser.js';
+} from '../pmi/parser.js';
 import { withStepModel } from '../model-store.js';
 import {
   normalizePagination,

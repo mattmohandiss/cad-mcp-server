@@ -1,5 +1,5 @@
 import type { OcctKernel, ShapeHandle } from 'occt-wasm';
-import type { PublicGetStepEntitiesInput } from '../../tools/step-tools.js';
+import type { PublicGetStepEntitiesInput } from '../tools/step-tools.js';
 import { withStepModel } from '../model-store.js';
 import { createPagination, createQueryResponse } from './shared.js';
 

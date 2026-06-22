@@ -1,6 +1,6 @@
 import type { OcctKernel, ShapeHandle } from 'occt-wasm';
-import type { BRepEdgeStatistics } from '../brep.js';
-import { bucketLength, emptyStats } from '../../utils/numbers.js';
+import type { BRepEdgeStatistics } from '../types/brep.js';
+import { bucketLength, emptyStats } from '../utils/numbers.js';
 
 export function getEdgeStatistics(kernel: OcctKernel, shape: ShapeHandle): BRepEdgeStatistics {
   const edges = kernel.getSubShapes(shape, 'edge');

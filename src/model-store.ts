@@ -1,28 +1,28 @@
 import { realpath, stat } from 'node:fs/promises';
 import type { OcctKernel, ShapeHandle } from 'occt-wasm';
-import type { AnalysisError } from '../utils/errors.js';
-import type { BRepBody, BRepModel } from '../providers/brep.js';
-import type { SemanticModel } from '../providers/semantic.js';
+import type { AnalysisError } from './utils/errors.js';
+import type { BRepBody, BRepModel } from './types/brep.js';
+import type { SemanticModel } from './types/semantic.js';
 import type {
   PmiAnnotationEntity,
   PmiDatumEntity,
   PmiDimensionEntity,
   PmiToleranceEntity,
-} from '../providers/lightweight-step/pmi-parser.js';
-import { extractPmiEntities } from '../providers/lightweight-step/pmi-parser.js';
-import { LightweightStepSemanticProvider } from '../providers/lightweight-step/semantic-provider.js';
-import { getOcctKernel } from '../providers/occt-wasm/kernel.js';
-import { mapOcctError, readStepText } from '../providers/occt-wasm/import.js';
-import { getDimensions, guessShapeClass, toBoundingBox } from '../providers/occt-wasm/measure.js';
-import { getEdgeStatistics } from '../providers/occt-wasm/topology.js';
+} from './pmi/parser.js';
+import { extractPmiEntities } from './pmi/parser.js';
+import { LightweightStepSemanticProvider } from './pmi/semantic-provider.js';
+import { getOcctKernel } from './kernel/kernel.js';
+import { mapOcctError, readStepText } from './kernel/import.js';
+import { getDimensions, guessShapeClass, toBoundingBox } from './kernel/measure.js';
+import { getEdgeStatistics } from './kernel/topology.js';
 import {
   buildBodyMap,
   extractEdgeEntities,
   extractFaceEntities,
   type ExtractedEdgeEntity,
   type ExtractedFaceEntity,
-} from '../providers/occt-wasm/query-entities.js';
-import { makeId } from '../utils/ids.js';
+} from './kernel/query-entities.js';
+import { makeId } from './utils/ids.js';
 
 type PmiEntity = PmiToleranceEntity | PmiDimensionEntity | PmiDatumEntity | PmiAnnotationEntity;
 

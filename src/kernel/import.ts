@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { OcctError, OcctErrorCode } from 'occt-wasm';
-import { type AnalysisError, unknownError } from '../../utils/errors.js';
+import { type AnalysisError, unknownError } from '../utils/errors.js';
 
 export function mapOcctError(error: unknown, action: string): AnalysisError {
   if (error instanceof OcctError) {

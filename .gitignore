@@ -8,5 +8,5 @@ node_modules/
 *.STEP
 
 # occt-wasm fork build artifacts (rebuild via Docker, not committed)
-vendor/occt-wasm/dist/
-vendor/occt-wasm/ts/dist/
+kernel/dist/
+kernel/ts/dist/

@@ -1,4 +1,4 @@
-import { readStepText } from '../occt-wasm/import.js';
+import { readStepText } from '../kernel/import.js';
 
 export interface ParsedStepMetadata {
   schema?: string;

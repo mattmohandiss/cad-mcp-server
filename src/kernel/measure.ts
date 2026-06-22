@@ -1,5 +1,5 @@
 import type { OcctKernel, ShapeHandle } from 'occt-wasm';
-import type { BoundingBox, Dimensions } from '../schema.js';
+import type { BoundingBox, Dimensions } from '../types/schema.js';
 
 export function toBoundingBox(kernel: OcctKernel, shape: ShapeHandle): BoundingBox {
   const bbox = kernel.getBoundingBox(shape, false);

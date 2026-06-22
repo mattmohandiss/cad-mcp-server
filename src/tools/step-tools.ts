@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import { compareStepFiles } from '../cad/compare.js';
-import { withStepModel } from '../cad/model-store.js';
-import { CAD_RESPONSE_SCHEMA_VERSION } from '../cad/schema-version.js';
-import { queryStepEdges as queryEdgesService } from '../cad/query/edges.js';
-import { canDirectGetEntities, getStepEntitiesDirect } from '../cad/query/entities.js';
-import { queryStepFaces as queryFacesService } from '../cad/query/faces.js';
-import { queryStepPmi as queryPmiService } from '../cad/query/pmi.js';
+import { compareStepFiles } from '../compare.js';
+import { withStepModel } from '../model-store.js';
+import { CAD_RESPONSE_SCHEMA_VERSION } from '../schema-version.js';
+import { queryStepEdges as queryEdgesService } from '../query/edges.js';
+import { canDirectGetEntities, getStepEntitiesDirect } from '../query/entities.js';
+import { queryStepFaces as queryFacesService } from '../query/faces.js';
+import { queryStepPmi as queryPmiService } from '../query/pmi.js';
 import { wrapTool } from './shared.js';
 
 const stepFileInput = {

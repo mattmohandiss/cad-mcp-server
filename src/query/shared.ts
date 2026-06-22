@@ -3,9 +3,9 @@ import type {
   StepQueryPagination,
   StepQueryUnits,
   StepQueryCoordinateSystem,
-} from '../../tools/step-tools.js';
+} from '../tools/step-tools.js';
 import { CAD_RESPONSE_SCHEMA_VERSION } from '../schema-version.js';
-import { normalizeVector, angleDegreesNormalized } from '../../utils/vectors.js';
+import { normalizeVector, angleDegreesNormalized } from '../utils/vectors.js';
 
 /**
  * Shared query utilities for pagination, filtering, sorting, and response envelopes.

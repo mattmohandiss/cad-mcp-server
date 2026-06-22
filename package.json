@@ -34,7 +34,7 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "occt-wasm": "file:./vendor/occt-wasm/ts",
+    "occt-wasm": "file:./kernel/ts",
     "zod": "^4.4.3"
   },
   "devDependencies": {
