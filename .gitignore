@@ -9,6 +9,28 @@ node_modules/
 .env
 *.env
 
+# Personal config / notes
+opencode.json
+TODO.md
+test_prompts.md
+
+# Internal planning (not for public repo)
+docs/PROPOSED_TOOLS.md
+
+# Editor / dev env
+.envrc
+.nvim.lua
+
+# Editor
+.vscode/
+.idea/
+
+# Generated codegen output
+occt/facade/generated/
+
+# Reference PDFs (accompany NIST samples but not used by code)
+samples/**/PDF/
+
 # Manual test artifacts
 *.stp
 *.STEP

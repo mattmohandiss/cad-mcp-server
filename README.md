@@ -98,7 +98,7 @@ The npm package includes:
 
 ## Contributing
 
-Contributions welcome. See the [GitHub repo](https://github.com/mattmohandiss/cad-mcp-server) for issues and discussions.
+Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, and pull request guidelines.
 
 ## License
 
