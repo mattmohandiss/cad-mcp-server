@@ -27,10 +27,12 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           package-manager-cache: false
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
+        with:
+          driver: docker
 
       - name: Build OCCT builder (cached)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: occt
           file: occt/Dockerfile.builder
@@ -40,7 +42,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=occt-builder
 
       - name: Build WASM release (cached)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: occt
           file: occt/Dockerfile
