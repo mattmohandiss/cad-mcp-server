@@ -1,38 +1,19 @@
 # CAD MCP Server
 
-CAD MCP Server gives AI tools local, read-only access to STEP CAD geometry.
-It bundles a stripped Open CASCADE WebAssembly kernel so engineers can ask practical questions about parts and assemblies without installing native CAD software.
+[![npm version](https://img.shields.io/npm/v/cad-mcp-server?logo=npm)](https://npmjs.com/package/cad-mcp-server)
+[![License](https://img.shields.io/npm/l/cad-mcp-server)](LICENSE)
+[![Node version](https://img.shields.io/node/v/cad-mcp-server?logo=node.js)](package.json)
+[![npm downloads](https://img.shields.io/npm/dm/cad-mcp-server)](https://npmjs.com/package/cad-mcp-server)
 
-The server measures geometry. The LLM interprets engineering meaning.
+**AI-native CAD inspection, no CAD license required.** CAD MCP Server bundles a WebAssembly Open CASCADE kernel so LLM tools can read, measure, and compare STEP files locally. The server returns measured facts; your AI assistant interprets engineering meaning.
 
-## What You Can Ask
-
-- "Review this STEP file like a mechanical lead before release."
-- "Prepare an RFQ summary for a machine shop."
-- "Compare Rev A and Rev B as an ECO review."
-- "Audit the model for bearing and shaft interfaces."
-- "Can these parts fit on a 200 x 200 x 300 mm printer?"
-- "Build a first-pass CNC manufacturing plan."
-- "Create a first-pass inspection and QA plan."
-
-## Install
-
-Use directly from npm with any MCP client that supports command-based servers:
+## Quick Start
 
 ```bash
 npx -y cad-mcp-server
 ```
 
-Requirements:
-
-- Node.js 22 or newer
-- Local access to the STEP/STP files you want to inspect
-
-No Docker, Open CASCADE install, or native CAD application is required for normal use.
-
-## MCP Client Config
-
-Use this command in Claude Desktop, OpenCode, Cursor, or another MCP-compatible client:
+Add this to your MCP client config (Claude Desktop, OpenCode, Cursor, etc.):
 
 ```json
 {
@@ -45,67 +26,86 @@ Use this command in Claude Desktop, OpenCode, Cursor, or another MCP-compatible 
 }
 ```
 
-For local development from a cloned repo:
+Point the AI at any STEP or STP file on your local filesystem.
 
-```json
-{
-  "mcpServers": {
-    "cad": {
-      "command": "node",
-      "args": ["/path/to/cad-mcp/dist/index.js"]
-    }
-  }
-}
-```
+## Use Cases
 
-## What It Does
-
-- Imports STEP/STP files locally through a bundled `occt-wasm` kernel.
-- Computes bounding boxes, dimensions, volume, surface area, body count, face count, and edge statistics.
-- Classifies common surface and curve types.
-- Searches faces and edges by type, size, normal direction, body, grouping, and sort.
-- Returns face/edge details such as area, length, radius, axis, bbox, endpoints, and local adjacency when requested.
-- Parses lightweight STEP metadata and PMI-related hints when present.
-- Compares two STEP files by gross dimensions, volume, area, topology counts, and metadata.
-- Caches imported models so repeated engineering questions are fast.
+| Who | What they ask |
+|---|---|
+| **Mechanical lead** | "Review this STEP file like a mechanical lead before release. What are the top design or manufacturing risks?" |
+| **Manufacturing engineer** | "Build a first-pass CNC plan: likely setups, drilling directions, and cost-driving features." |
+| **QC engineer** | "Create an inspection plan from the STEP file. What should we measure? What's missing?" |
+| **Procurement / sourcing** | "Prepare an RFQ summary: part count, envelope, complexity drivers, and questions the supplier will ask." |
+| **Design engineer (revision)** | "Compare Rev A and Rev B as an ECO review. What changed? What should be rechecked?" |
+| **Hobbyist / maker** | "Can these parts fit on a 200 x 200 x 300 mm printer? What needs splitting or reorientation?" |
 
 ## MCP Tools
 
 | Tool | Purpose |
-| --- | --- |
-| `inspect_step_file` | Fast first-pass overview of a STEP file: validity, size, bodies, topology counts, and metadata. |
-| `find_step_faces` | Search B-rep faces/surfaces by type, area, normal, body, grouping, and sort. |
-| `find_step_edges` | Search B-rep edges/curves by type, length, circular radius, body, grouping, and sort. |
+|---|---|
+| `inspect_step_file` | Fast first-pass overview: validity, size, bodies, topology counts, metadata. |
+| `find_step_faces` | Search B-rep faces by surface type, area, normal, body, grouping, and sort. |
+| `find_step_edges` | Search B-rep edges by curve type, length, radius, body, grouping, and sort. |
 | `get_step_entities` | Retrieve known face or edge IDs with requested fields. |
-| `query_step_pmi` | Query lightweight PMI/GD&T, dimensions, datums, and annotations when present in the STEP text. |
-| `compare_step_files` | Compare two STEP files by whole-model geometry, topology counts, and metadata. |
+| `query_step_pmi` | Query lightweight PMI/GD&T, dimensions, datums, and annotations. |
+| `compare_step_files` | Compare two STEP files by whole-model geometry, topology, and metadata. |
 
-The intended workflow is: inspect first, ask for summaries or groups, drill into entity IDs, then request local adjacency or exact fields only where needed.
+**Recommended workflow:** `inspect` first, drill into groups or summaries, ask for specific entity IDs, then request adjacency or exact fields only where needed.
+
+## How It Works
+
+STEP files are parsed locally by a stripped Open CASCADE Technology (OCCT) kernel compiled to WebAssembly. No data leaves your machine. No Docker, no cloud API, no CAD vendor dependency. The package bundles everything — just `npx` and go.
+
+## Why CAD MCP Server?
+
+- **Zero install friction.** One `npx` command, no native CAD software, no licenses.
+- **Read-only by design.** The server measures geometry; the AI interprets meaning. No risk of accidental edits.
+- **Local-first.** All processing stays on your machine. STEP files never leave your filesystem.
+- **WASM-speed.** OCCT runs at near-native speed in a bundled WebAssembly kernel.
+- **LLM-native output.** Results are structured JSON designed for AI consumption, not human eyeballs.
 
 ## What It Is Not
 
-CAD MCP Server is an inspection tool, not a full CAD system.
+- Not a CAD editor — no geometry creation or modification.
+- Not a CAM system — no toolpath generation.
+- Not a manufacturability certifier — it provides evidence, not conclusions.
+- Not an AP242 PMI engine — PMI hints are lightweight and heuristic-based.
+- Not a feature-tree recovery tool — STEP is a boundary-representation format.
 
-- It does not edit CAD or generate geometry.
-- It does not generate CAM toolpaths.
-- It does not certify manufacturability.
-- It does not recover native CAD feature trees, mates, configurations, or design history from STEP.
-- It does not provide authoritative AP242 PMI/GD&T interpretation.
-- It does not guarantee stable feature identity across revisions.
+Good AI answers separate measured facts, assumptions, and recommendations.
 
-Good answers from an AI assistant should separate measured facts, assumptions, and recommendations.
+## Roadmap
+
+- **v0.2** — Advanced face adjacency graphs, edge-vexity classification, larger file support.
+- **v0.3** — Assembly hierarchy traversal, color/layer metadata, improved PMI coverage.
+- **v1.0** — Stable tool surface, first-semver API guarantees.
+
+Interested in hosted or enterprise features? Let us know via [GitHub Discussions](https://github.com/mattmohandiss/cad-mcp-server/discussions).
+
+## Requirements
+
+- Node.js 22 or newer
+- Local access to STEP/STP files
+
+No Docker, Open CASCADE install, or native CAD application required.
 
 ## Distribution
 
 The npm package includes:
-
 - MCP server JavaScript in `dist/`
-- bundled `occt-wasm` package
-- optimized `occt-wasm.wasm` geometry kernel
-- TypeScript declarations for the published runtime files
+- Bundled `occt-wasm` package with optimized `occt-wasm.wasm` geometry kernel
+- TypeScript declarations for published runtime files
 
-Users install one package. Maintainers rebuild the kernel with Podman or Docker only when the OCCT facade changes.
+## Contributing
+
+Contributions welcome. See the [GitHub repo](https://github.com/mattmohandiss/cad-mcp-server) for issues and discussions.
 
 ## License
 
-This project is MIT licensed. The bundled `occt-wasm` backend uses Open CASCADE Technology, which is distributed under LGPL-2.1. Review the relevant Open CASCADE and `occt-wasm` license terms before redistributing modified kernel builds.
+This project is **MIT licensed** — free for all uses, commercial included.
+
+The bundled `occt-wasm` backend uses Open CASCADE Technology (LGPL-2.1). Review the [third-party notices](THIRD_PARTY_NOTICES.md) before redistributing modified kernel builds.
+
+## Support
+
+If CAD MCP Server saves you time, consider [sponsoring](https://github.com/sponsors/mattmohandiss) development.

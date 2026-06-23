@@ -6,6 +6,7 @@ import {
   handleFindStepFaces,
   handleGetStepEntities,
   handleInspectStepFile,
+  handleQueryStepPmi,
 } from '../tools/step-tools.js';
 import { NIST_FILE } from './fixtures.js';
 
@@ -183,5 +184,30 @@ describe('CAD MCP factual integration smoke tests', () => {
     const deltas = result.data.deltas as Record<string, unknown>;
     expect(deltas.volume).toBe(0);
     expect(deltas.inferenceCount).toBeUndefined();
+  });
+
+  it('queries PMI from an AP242 STEP file', async () => {
+    const pmiFile = path.join(
+      process.cwd(),
+      'samples',
+      'NIST-PMI-STEP-Files',
+      'nist_ftc_08_asme1_ap242-e2.stp'
+    );
+
+    const summary = expectSuccess(
+      await handleQueryStepPmi(pmiFile, { return_type: 'summary' })
+    );
+    expect(summary.data.schema_version).toBe('0.4');
+    expect((summary.data.statistics as Record<string, unknown>).total_pmi).toBeGreaterThan(0);
+
+    const entities = expectSuccess(
+      await handleQueryStepPmi(pmiFile, {
+        pmi_types: ['geometric_tolerance'],
+        limit: 5,
+      })
+    );
+    const items = entities.data.entities as Array<Record<string, unknown>>;
+    expect(items.length).toBeGreaterThan(0);
+    expect(items[0].type).toBe('geometric_tolerance');
   });
 });

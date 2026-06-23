@@ -1,9 +1,16 @@
 {
   "name": "cad-mcp-server",
   "version": "0.1.0",
-  "description": "MCP server for AI-assisted STEP CAD inspection, geometry queries, PMI hints, and revision comparison",
+  "description": "MCP server for inspecting STEP CAD files -- extract faces, edges, mass properties, and PMI from 3D models via LLM tools, no CAD software needed.",
   "type": "module",
   "main": "dist/index.js",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist",
     "node_modules/occt-wasm/dist",
@@ -19,13 +26,25 @@
   "engines": {
     "node": ">=22"
   },
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "preferUnplugged": true,
   "scripts": {
-    "build": "tsc",
+    "build": "rm -rf dist && tsc",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
+    "prepack": "tsc",
     "watch": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
     "fmt": "prettier --write src/",
     "lint": "eslint \"src/**/*.ts\""
   },
@@ -35,20 +54,32 @@
     "cad",
     "step",
     "stp",
+    "3d",
     "mechanical-engineering",
     "manufacturing",
     "dfm",
     "gdandt",
     "pmi",
     "geometry",
+    "inspection",
+    "quality",
+    "b-rep",
     "opencascade",
     "occt",
     "wasm",
     "claude",
     "ai-tools"
   ],
-  "author": "",
+  "author": "Matt Mohandiss <mattmohandiss@gmail.com>",
   "license": "MIT",
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/mattmohandiss"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
   "homepage": "https://github.com/mattmohandiss/cad-mcp-server#readme",
   "repository": {
     "type": "git",
@@ -68,6 +99,7 @@
     "@typescript-eslint/eslint-plugin": "^8.61.0",
     "@typescript-eslint/parser": "^8.61.0",
     "eslint": "^10.4.1",
+    "globals": "^17.7.0",
     "prettier": "^3.8.4",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",

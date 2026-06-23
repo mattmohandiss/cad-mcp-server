@@ -5,6 +5,10 @@ dist/
 node_modules/
 *.tgz
 
+# Environment / secrets
+.env
+*.env
+
 # Manual test artifacts
 *.stp
 *.STEP

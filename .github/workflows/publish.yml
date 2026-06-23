@@ -1,0 +1,82 @@
+name: Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      dist-tag:
+        description: 'npm dist-tag (beta, latest)'
+        required: true
+        default: 'beta'
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build OCCT builder (cached)
+        uses: docker/build-push-action@v6
+        with:
+          context: occt
+          file: occt/Dockerfile.builder
+          tags: localhost/occt-wasm-builder
+          load: true
+          cache-from: type=gha,scope=occt-builder
+          cache-to: type=gha,mode=max,scope=occt-builder
+
+      - name: Build WASM release (cached)
+        uses: docker/build-push-action@v6
+        with:
+          context: occt
+          file: occt/Dockerfile
+          build-args: ENABLE_WASM_OPT=1
+          tags: occt-wasm
+          load: true
+          cache-from: type=gha,scope=occt-wasm
+          cache-to: type=gha,mode=max,scope=occt-wasm
+
+      - name: Extract WASM artifacts
+        run: |
+          cid=$(docker create occt-wasm)
+          mkdir -p occt/dist occt/ts/dist
+          docker cp "$cid":/workspace/dist/. occt/dist/
+          docker cp "$cid":/workspace/ts/dist/. occt/ts/dist/
+          docker rm "$cid"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+
+      - name: Determine dist-tag
+        id: tag
+        run: |
+          if [[ -n "${{ github.event.inputs.dist-tag }}" ]]; then
+            echo "tag=${{ github.event.inputs.dist-tag }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          else
+            echo "tag=beta" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish to npm
+        run: npm publish --tag ${{ steps.tag.outputs.tag }}
