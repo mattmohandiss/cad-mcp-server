@@ -1,152 +1,111 @@
 # CAD MCP Server
 
-A portable, read-only MCP server for inspecting STEP CAD files with Open CASCADE compiled to WebAssembly.
+CAD MCP Server gives AI tools local, read-only access to STEP CAD geometry.
+It bundles a stripped Open CASCADE WebAssembly kernel so engineers can ask practical questions about parts and assemblies without installing native CAD software.
 
-The server gives an LLM deterministic CAD tools for geometry summaries, entity search, local topology facts, PMI hints, file-health warnings, and metric comparisons. It is intentionally small: the LLM interprets engineering meaning, while the MCP tools measure and cite evidence.
+The server measures geometry. The LLM interprets engineering meaning.
 
-## Product Stance
+## What You Can Ask
 
-This project is a **portable CAD inspection MCP**, not a full CAD platform.
+- "Review this STEP file like a mechanical lead before release."
+- "Prepare an RFQ summary for a machine shop."
+- "Compare Rev A and Rev B as an ECO review."
+- "Audit the model for bearing and shaft interfaces."
+- "Can these parts fit on a 200 x 200 x 300 mm printer?"
+- "Build a first-pass CNC manufacturing plan."
+- "Create a first-pass inspection and QA plan."
 
-- Use `occt-wasm` as the default local backend for easy npm distribution.
-- Keep the MCP tool surface small and stable.
-- Keep first-pass inspection cheap; defer expensive adjacency/entity detail until a follow-up query asks for it.
-- Defer OWL/SPARQL/enterprise ontology work until there is a real integration requirement.
-- Keep native OCCT/XDE/BRepGraph as a future provider path for production-depth workflows.
-- Never claim native CAD feature-tree intent, authoritative PMI/GD&T interpretation, or stable cross-revision identity unless a backend can prove it.
+## Install
 
-## What It Can Do Today
-
-- Import STEP/STP files through `occt-wasm`.
-- Compute bounding boxes, dimensions, volume, surface area, body count, face count, and edge statistics.
-- Classify common surface and curve types.
-- Query faces and edges by type, size, spatial region, body, and exact entity ID.
-- Return local face/edge adjacency on demand for selected result pages.
-- Parse lightweight STEP metadata such as schema/header/product hints and PMI-related entity hints.
-- Query lightweight PMI entities such as geometric tolerances, dimensions, datums, and annotations.
-- Compare two STEP files by gross geometry, topology counts, metadata, and health warnings.
-- Cache imported models and derived entity data so repeated engineering queries on the same file are fast.
-
-## What It Does Not Do Yet
-
-- It does not expose the full native OCCT C++ API.
-- It does not expose OCCT BRepGraph through `occt-wasm`.
-- It does not recover native CAD feature trees, mates, configurations, or design history from STEP.
-- It does not provide robust AP242 PMI/GD&T interpretation.
-- It does not perform production-grade revision matching with stable feature identity.
-- It does not build full-model adjacency graphs during default inspection; adjacency is local/on-demand.
-- It does not edit CAD, generate CAM/toolpaths, or certify manufacturability.
-- It does not run an OWL/SPARQL semantic layer.
-
-## Quick Start
+Use directly from npm with any MCP client that supports command-based servers:
 
 ```bash
-just setup
-just build
-npm start
+npx -y cad-mcp-server
 ```
 
-Run validation:
+Requirements:
 
-```bash
-just check
-```
+- Node.js 22 or newer
+- Local access to the STEP/STP files you want to inspect
 
-## MCP Tools
+No Docker, Open CASCADE install, or native CAD application is required for normal use.
 
-The server exposes six tools:
+## MCP Client Config
 
-| Tool | Purpose |
-| --- | --- |
-| `inspect_step_file` | Fast first-pass overview of a STEP file: validity, size, bodies, topology counts, and PMI hints. |
-| `find_step_faces` | Search B-rep faces/surfaces by type, area, normal, body, region, proximity, grouping, and sort. |
-| `find_step_edges` | Search B-rep edges/curves by type, length, circular radius, body, region, proximity, grouping, and sort. |
-| `get_step_entities` | Retrieve known face or edge IDs with requested fields. This is the fastest drill-down path. |
-| `query_step_pmi` | Query lightweight PMI/GD&T, dimensions, datums, and annotations when present in the STEP text. |
-| `compare_step_files` | Metric-level comparison of two STEP files. |
-
-The intended workflow is: inspect first, ask for summaries or groups, drill into entity IDs, then request local adjacency or exact fields only where needed.
-
-## Architecture
-
-```text
-MCP tools
-  -> tool adapters and query services
-  -> cached StepModelStore
-  -> occt-wasm imported shape and derived B-rep/entity caches
-  -> lightweight STEP metadata and PMI parsers
-  -> STEP files
-```
-
-The public MCP surface stays small. Internally, the model store caches imported shapes and derived data keyed by resolved path, size, and mtime. Expensive full-model adjacency is not part of default inspection; local adjacency is computed only when requested by query fields.
-
-For more detail, see:
-
-- `docs/PROPOSED_TOOLS.md`
-- `docs/ARCHITECTURE.md`
-- `docs/SECURITY.md`
-
-## Response Shape
-
-Success:
+Use this command in Claude Desktop, OpenCode, Cursor, or another MCP-compatible client:
 
 ```json
 {
-  "ok": true,
-  "data": {}
-}
-```
-
-Error:
-
-```json
-{
-  "ok": false,
-  "error": {
-    "type": "file_not_found|invalid_format|parse_error|unknown",
-    "message": "..."
+  "mcpServers": {
+    "cad": {
+      "command": "npx",
+      "args": ["-y", "cad-mcp-server"]
+    }
   }
 }
 ```
 
-Tool outputs separate:
+For local development from a cloned repo:
 
-- `facts`: directly measured or parsed values.
-- `inferences`: feature, spatial, or health candidates with evidence.
-- `warnings`: suspicious conditions and risks.
-- `limitations`: what current providers cannot prove.
-- `providers`: backend capabilities and limitations.
-
-## Project Structure
-
-```text
-src/
-  index.ts              # MCP server entrypoint
-  tools/                # MCP tool handlers
-  cad/                  # model cache, query services, analysis graph builder, compare services
-  providers/            # provider interfaces and implementations
-  providers/occt-wasm/  # portable OCCT WebAssembly backend
-  tests/                # integration fixtures and tests
-docs/                   # active product and architecture docs
-samples/                # sample STEP files
+```json
+{
+  "mcpServers": {
+    "cad": {
+      "command": "node",
+      "args": ["/path/to/cad-mcp/dist/index.js"]
+    }
+  }
+}
 ```
 
-## Roadmap Summary
+## What It Does
 
-Near term:
+- Imports STEP/STP files locally through a bundled `occt-wasm` kernel.
+- Computes bounding boxes, dimensions, volume, surface area, body count, face count, and edge statistics.
+- Classifies common surface and curve types.
+- Searches faces and edges by type, size, normal direction, body, grouping, and sort.
+- Returns face/edge details such as area, length, radius, axis, bbox, endpoints, and local adjacency when requested.
+- Parses lightweight STEP metadata and PMI-related hints when present.
+- Compares two STEP files by gross dimensions, volume, area, topology counts, and metadata.
+- Caches imported models so repeated engineering questions are fast.
 
-- Make documentation and limitations precise.
-- Use more of the existing `occt-wasm` API before adding native dependencies.
-- Improve lazy/columnar face and edge extraction for faster first broad queries on very large files.
-- Add an explicit topology-analysis tool if full graph workflows become necessary.
-- Add XCAF-backed assembly/name/color extraction where practical.
-- Add mesh/viewer artifacts with durable entity mapping if feasible.
+## MCP Tools
 
-Later:
+| Tool | Purpose |
+| --- | --- |
+| `inspect_step_file` | Fast first-pass overview of a STEP file: validity, size, bodies, topology counts, and metadata. |
+| `find_step_faces` | Search B-rep faces/surfaces by type, area, normal, body, grouping, and sort. |
+| `find_step_edges` | Search B-rep edges/curves by type, length, circular radius, body, grouping, and sort. |
+| `get_step_entities` | Retrieve known face or edge IDs with requested fields. |
+| `query_step_pmi` | Query lightweight PMI/GD&T, dimensions, datums, and annotations when present in the STEP text. |
+| `compare_step_files` | Compare two STEP files by whole-model geometry, topology counts, and metadata. |
 
-- Add an optional native OCCT/XDE/BRepGraph provider for production-depth analysis.
-- Add stronger PMI, assembly, revision-compare, rendering, and manufacturability workflows only when requirements justify the complexity.
+The intended workflow is: inspect first, ask for summaries or groups, drill into entity IDs, then request local adjacency or exact fields only where needed.
+
+## What It Is Not
+
+CAD MCP Server is an inspection tool, not a full CAD system.
+
+- It does not edit CAD or generate geometry.
+- It does not generate CAM toolpaths.
+- It does not certify manufacturability.
+- It does not recover native CAD feature trees, mates, configurations, or design history from STEP.
+- It does not provide authoritative AP242 PMI/GD&T interpretation.
+- It does not guarantee stable feature identity across revisions.
+
+Good answers from an AI assistant should separate measured facts, assumptions, and recommendations.
+
+## Distribution
+
+The npm package includes:
+
+- MCP server JavaScript in `dist/`
+- bundled `occt-wasm` package
+- optimized `occt-wasm.wasm` geometry kernel
+- TypeScript declarations for the published runtime files
+
+Users install one package. Maintainers rebuild the kernel with Podman or Docker only when the OCCT facade changes.
 
 ## License
 
-This project is MIT licensed. The compiled `occt-wasm` backend inherits Open CASCADE LGPL licensing; see the `occt-wasm` package documentation for details about redistributing the WebAssembly component.
+This project is MIT licensed. The bundled `occt-wasm` backend uses Open CASCADE Technology, which is distributed under LGPL-2.1. Review the relevant Open CASCADE and `occt-wasm` license terms before redistributing modified kernel builds.

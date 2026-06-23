@@ -1,7 +1,7 @@
 {
   "name": "cad-mcp-server",
   "version": "0.1.0",
-  "description": "MCP server for CAD STEP file analysis",
+  "description": "MCP server for AI-assisted STEP CAD inspection, geometry queries, PMI hints, and revision comparison",
   "type": "module",
   "main": "dist/index.js",
   "files": [
@@ -9,7 +9,9 @@
     "node_modules/occt-wasm/dist",
     "node_modules/occt-wasm/package.json",
     "!dist/tests",
-    "README.md"
+    "README.md",
+    "THIRD_PARTY_NOTICES.md",
+    "docs/EXAMPLE_PROMPTS.md"
   ],
   "bin": {
     "cad-mcp-server": "dist/index.js"
@@ -29,11 +31,32 @@
   },
   "keywords": [
     "mcp",
+    "model-context-protocol",
     "cad",
-    "step"
+    "step",
+    "stp",
+    "mechanical-engineering",
+    "manufacturing",
+    "dfm",
+    "gdandt",
+    "pmi",
+    "geometry",
+    "opencascade",
+    "occt",
+    "wasm",
+    "claude",
+    "ai-tools"
   ],
   "author": "",
   "license": "MIT",
+  "homepage": "https://github.com/mattmohandiss/cad-mcp-server#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mattmohandiss/cad-mcp-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mattmohandiss/cad-mcp-server/issues"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "occt-wasm": "file:./occt/ts",
