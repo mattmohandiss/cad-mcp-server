@@ -241,7 +241,7 @@ function groupFaces(
   );
 }
 
-function applyFaceFilters(
+export function applyFaceFilters(
   faces: ExtractedFaceEntity[],
   input: QueryFacesInput,
 ): ExtractedFaceEntity[] {
@@ -284,7 +284,7 @@ function applyFaceFilters(
   return result;
 }
 
-function sortFaces(
+export function sortFaces(
   faces: ExtractedFaceEntity[],
   sort: NonNullable<QueryFacesInput['sort']>,
 ): ExtractedFaceEntity[] {
@@ -316,7 +316,7 @@ function sortFaces(
   return sorted;
 }
 
-function projectFace(
+export function projectFace(
   face: ExtractedFaceEntity,
   fields: QueryFacesInput['fields'],
   pullDirection?: number[],

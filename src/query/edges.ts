@@ -143,7 +143,7 @@ function groupEdges(
   );
 }
 
-function applyEdgeFilters(
+export function applyEdgeFilters(
   edges: ExtractedEdgeEntity[],
   input: QueryEdgesInput,
 ): ExtractedEdgeEntity[] {
@@ -183,7 +183,7 @@ function applyEdgeFilters(
   return result;
 }
 
-function sortEdges(
+export function sortEdges(
   edges: ExtractedEdgeEntity[],
   sort: NonNullable<QueryEdgesInput['sort']>,
 ): ExtractedEdgeEntity[] {
@@ -218,7 +218,7 @@ function sortEdges(
   return sorted;
 }
 
-function projectEdge(
+export function projectEdge(
   edge: ExtractedEdgeEntity,
   fields: QueryEdgesInput['fields'],
 ): Record<string, unknown> {

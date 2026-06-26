@@ -9,6 +9,9 @@ import {
   sampleEntityIds,
   DEFAULT_QUERY_LIMITS,
 } from '../query/shared.js';
+import { applyFaceFilters, sortFaces, projectFace } from '../query/faces.js';
+import { applyEdgeFilters, sortEdges, projectEdge } from '../query/edges.js';
+import type { ExtractedFaceEntity, ExtractedEdgeEntity } from '../kernel/query-entities.js';
 
 // ---------------------------------------------------------------------------
 // Vector utilities
@@ -177,5 +180,251 @@ describe('sampleEntityIds', () => {
     const result = sampleEntityIds(['a', 'b'], 0);
     expect(result.sampled).toEqual([]);
     expect(result.is_complete).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Face filters, sorting, projection
+// ---------------------------------------------------------------------------
+
+function makeFace(overrides: Partial<ExtractedFaceEntity> = {}): ExtractedFaceEntity {
+  return {
+    id: 'face:0',
+    index: 0,
+    surface_type: 'plane',
+    area: 100,
+    bbox: { min: [0, 0, 0], max: [10, 10, 0] },
+    bbox_center: [5, 5, 0],
+    normal: [0, 0, 1],
+    body_id: 'body:0',
+    ...overrides,
+  };
+}
+
+describe('face filters', () => {
+  const faces = [
+    makeFace({ id: 'face:0', surface_type: 'plane', area: 10 }),
+    makeFace({ id: 'face:1', surface_type: 'cylinder', area: 50 }),
+    makeFace({ id: 'face:2', surface_type: 'plane', area: 100 }),
+  ];
+
+  it('filters by surface type', () => {
+    const result = applyFaceFilters(faces, { surface_types: ['plane'] });
+    expect(result.length).toBe(2);
+    expect(result.every((f) => f.surface_type === 'plane')).toBe(true);
+  });
+
+  it('filters by area range', () => {
+    const result = applyFaceFilters(faces, { area_min: 20, area_max: 80 });
+    expect(result.length).toBe(1);
+    expect(result[0].id).toBe('face:1');
+  });
+
+  it('filters by entity IDs', () => {
+    const result = applyFaceFilters(faces, { entity_ids: ['face:0', 'face:2'] });
+    expect(result.length).toBe(2);
+  });
+
+  it('filters by body ID', () => {
+    const facesWithBody = [
+      makeFace({ id: 'face:0', body_id: 'body:0' }),
+      makeFace({ id: 'face:1', body_id: 'body:1' }),
+      makeFace({ id: 'face:2', body_id: undefined }),
+    ];
+    const result = applyFaceFilters(facesWithBody, { body_ids: ['body:0'] });
+    expect(result.length).toBe(1);
+    expect(result[0].body_id).toBe('body:0');
+  });
+
+  it('filters by normal direction', () => {
+    const facesWithNormals = [
+      makeFace({ id: 'face:0', normal: [0, 0, 1] }),
+      makeFace({ id: 'face:1', normal: [1, 0, 0] }),
+    ];
+    const result = applyFaceFilters(facesWithNormals, {
+      normal: { parallel_to: [0, 0, 1], tolerance_degrees: 5 },
+    });
+    expect(result.length).toBe(1);
+    expect(result[0].id).toBe('face:0');
+  });
+
+  it('no filter returns all', () => {
+    const result = applyFaceFilters(faces, {});
+    expect(result.length).toBe(3);
+  });
+});
+
+describe('face sorting', () => {
+  const faces = [
+    makeFace({ id: 'face:0', area: 10, bbox_center: [0, 0, 0], surface_type: 'plane' }),
+    makeFace({ id: 'face:1', area: 100, bbox_center: [50, 0, 0], surface_type: 'cylinder' }),
+    makeFace({ id: 'face:2', area: 50, bbox_center: [10, 0, 0], surface_type: 'cone' }),
+  ];
+
+  it('sorts by area ascending', () => {
+    const result = sortFaces(faces, { by: 'area', direction: 'asc' });
+    expect(result[0].id).toBe('face:0');
+    expect(result[2].id).toBe('face:1');
+  });
+
+  it('sorts by area descending', () => {
+    const result = sortFaces(faces, { by: 'area', direction: 'desc' });
+    expect(result[0].id).toBe('face:1');
+    expect(result[2].id).toBe('face:0');
+  });
+
+  it('sorts by surface_type alphabetically', () => {
+    const result = sortFaces(faces, { by: 'surface_type' });
+    expect(result[0].surface_type).toBe('cone');
+    expect(result[2].surface_type).toBe('plane');
+  });
+
+  it('sorts by center_x', () => {
+    const result = sortFaces(faces, { by: 'center_x' });
+    expect(result[0].id).toBe('face:0');
+    expect(result[2].id).toBe('face:1');
+  });
+});
+
+describe('face projection', () => {
+  const face = makeFace({ radius: 5, axis: { direction: [0, 0, 1], location: [1, 2, 3] } });
+
+  it('default fields include id, surface_type, area, bbox, bbox_center, body_id', () => {
+    const result = projectFace(face, undefined);
+    expect(result.id).toBe('face:0');
+    expect(result.surface_type).toBe('plane');
+    expect(result.area).toBe(100);
+    expect(result.bbox).toBeDefined();
+    expect(result.bbox_center).toBeDefined();
+    expect(result.body_id).toBe('body:0');
+  });
+
+  it('body_id is always surfaced even when not in fields', () => {
+    const result = projectFace(face, ['id', 'surface_type']);
+    expect(result.body_id).toBe('body:0');
+  });
+
+  it('respects specific field selection', () => {
+    const result = projectFace(face, ['id', 'area']);
+    expect(result.id).toBe('face:0');
+    expect(result.area).toBe(100);
+    expect(result.surface_type).toBeUndefined();
+    expect(result.bbox).toBeUndefined();
+  });
+
+  it('draft_angle_deg computed when pull_direction provided', () => {
+    const result = projectFace(face, ['draft_angle_deg'], [0, 0, 1]);
+    expect(result.draft_angle_deg).toBeCloseTo(90, 0); // normal [0,0,1], pull [0,0,1] → 0° angle → 90° draft
+  });
+
+  it('draft_angle_deg not computed without pull_direction', () => {
+    const result = projectFace(face, ['draft_angle_deg']);
+    expect(result.draft_angle_deg).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Edge filters, sorting, projection
+// ---------------------------------------------------------------------------
+
+function makeEdge(overrides: Partial<ExtractedEdgeEntity> = {}): ExtractedEdgeEntity {
+  return {
+    id: 'edge:0',
+    index: 0,
+    curve_type: 'line',
+    length: 10,
+    bbox: { min: [0, 0, 0], max: [10, 0, 0] },
+    bbox_center: [5, 0, 0],
+    body_id: 'body:0',
+    ...overrides,
+  };
+}
+
+describe('edge filters', () => {
+  const edges = [
+    makeEdge({ id: 'edge:0', curve_type: 'line', length: 10 }),
+    makeEdge({ id: 'edge:1', curve_type: 'circle', length: 31.4, radius: 5 }),
+    makeEdge({ id: 'edge:2', curve_type: 'circle', length: 62.8, radius: 10 }),
+  ];
+
+  it('filters by curve type', () => {
+    const result = applyEdgeFilters(edges, { curve_types: ['circle'] });
+    expect(result.length).toBe(2);
+  });
+
+  it('filters by length range', () => {
+    const result = applyEdgeFilters(edges, { length_min: 30, length_max: 50 });
+    expect(result.length).toBe(1);
+    expect(result[0].id).toBe('edge:1');
+  });
+
+  it('filters by radius', () => {
+    const result = applyEdgeFilters(edges, { radius: { min: 8 } });
+    expect(result.length).toBe(1);
+    expect(result[0].id).toBe('edge:2');
+  });
+
+  it('filters by entity IDs', () => {
+    const result = applyEdgeFilters(edges, { entity_ids: ['edge:0', 'edge:2'] });
+    expect(result.length).toBe(2);
+  });
+});
+
+describe('edge sorting', () => {
+  const edges = [
+    makeEdge({ id: 'edge:0', length: 10, curve_type: 'line', bbox_center: [0, 0, 0] }),
+    makeEdge({ id: 'edge:1', length: 100, curve_type: 'circle', bbox_center: [50, 0, 0], radius: 5 }),
+    makeEdge({ id: 'edge:2', length: 50, curve_type: 'bspline', bbox_center: [10, 0, 0] }),
+  ];
+
+  it('sorts by length ascending', () => {
+    const result = sortEdges(edges, { by: 'length' });
+    expect(result[0].id).toBe('edge:0');
+    expect(result[2].id).toBe('edge:1');
+  });
+
+  it('sorts by curve_type', () => {
+    const result = sortEdges(edges, { by: 'curve_type' });
+    expect(result[0].curve_type).toBe('bspline');
+  });
+
+  it('sorts by radius (nulls treated as 0)', () => {
+    const result = sortEdges(edges, { by: 'radius' });
+    expect(result[2].id).toBe('edge:1'); // radius 5, largest
+  });
+});
+
+describe('edge projection', () => {
+  const edge = makeEdge({ radius: 5, start_vertex: 'vertex:0', end_vertex: 'vertex:1', convexity: 'convex' });
+
+  it('default fields', () => {
+    const result = projectEdge(edge, undefined);
+    expect(result.id).toBe('edge:0');
+    expect(result.curve_type).toBe('line');
+    expect(result.length).toBe(10);
+    expect(result.bbox).toBeDefined();
+    expect(result.bbox_center).toBeDefined();
+    expect(result.body_id).toBe('body:0');
+  });
+
+  it('body_id always surfaced', () => {
+    const result = projectEdge(edge, ['id', 'curve_type']);
+    expect(result.body_id).toBe('body:0');
+  });
+
+  it('includes optional fields when set', () => {
+    const result = projectEdge(edge, ['start_vertex', 'end_vertex', 'convexity', 'radius']);
+    expect(result.start_vertex).toBe('vertex:0');
+    expect(result.end_vertex).toBe('vertex:1');
+    expect(result.convexity).toBe('convex');
+    expect(result.radius).toBe(5);
+  });
+
+  it('omits optional fields when not set', () => {
+    const bare = makeEdge();
+    const result = projectEdge(bare, ['start_vertex', 'convexity', 'radius']);
+    expect(result.start_vertex).toBeUndefined();
+    expect(result.convexity).toBeUndefined();
+    expect(result.radius).toBeUndefined();
   });
 });

@@ -9,6 +9,7 @@ import {
   normalizePagination,
   createPagination,
   createQueryResponse,
+  groupEntities,
   DEFAULT_QUERY_LIMITS,
   type ComputedGroup,
 } from './shared.js';
@@ -90,66 +91,32 @@ export async function queryStepPmi(filePath: string, input: QueryPmiInput) {
 
     if (resultMode === 'groups') {
       const groupBy = input.group_by ?? ['type'];
-      const buckets = new Map<string, { key: Record<string, unknown>; members: PmiEntity[] }>();
-
-      for (const entity of filtered) {
-        const key: Record<string, unknown> = {};
-        for (const dim of groupBy) {
-          switch (dim) {
+      const withId = filtered.map((e) => ({ ...e, id: e.step_id })) as Array<PmiEntity & { id: string }>;
+      groups = groupEntities<PmiEntity & { id: string }>(
+        withId,
+        groupBy,
+        (entity, dimension) => {
+          switch (dimension) {
             case 'type':
-              key.type = entity.type;
-              break;
+              return entity.type;
             case 'tolerance_type':
-              if (entity.type === 'geometric_tolerance') {
-                key.tolerance_type = (entity as PmiToleranceEntity).tolerance_type;
-              } else {
-                key.tolerance_type = null;
-              }
-              break;
+              return entity.type === 'geometric_tolerance'
+                ? (entity as PmiToleranceEntity).tolerance_type
+                : null;
             case 'dimension_type':
-              if (entity.type === 'dimension') {
-                key.dimension_type = (entity as PmiDimensionEntity).dimension_type;
-              } else {
-                key.dimension_type = null;
-              }
-              break;
+              return entity.type === 'dimension'
+                ? (entity as PmiDimensionEntity).dimension_type
+                : null;
             case 'material_condition':
-              if (entity.type === 'geometric_tolerance') {
-                key.material_condition = (entity as PmiToleranceEntity).material_condition;
-              } else {
-                key.material_condition = null;
-              }
-              break;
+              return entity.type === 'geometric_tolerance'
+                ? (entity as PmiToleranceEntity).material_condition
+                : null;
+            default:
+              return null;
           }
-        }
-        const mapKey = JSON.stringify(groupBy.map((d) => key[d]));
-        let bucket = buckets.get(mapKey);
-        if (!bucket) {
-          bucket = { key, members: [] };
-          buckets.set(mapKey, bucket);
-        }
-        bucket.members.push(entity);
-      }
-
-      const sampleLimit = DEFAULT_QUERY_LIMITS.sample_entity_limit;
-      let groupIdx = 0;
-      groups = [...buckets.values()].map((bucket) => {
-        const ids = bucket.members.map((m) => m.step_id);
-        const sampled = ids.slice(0, sampleLimit);
-        const isComplete = ids.length <= sampleLimit;
-        return {
-          id: `group:${groupIdx++}`,
-          key: bucket.key,
-          entity_count: bucket.members.length,
-          entity_ids: ids,
-          sample_entity_ids: sampled,
-          sample_entity_limit: sampleLimit,
-          sample_is_complete: isComplete,
-          summary: {} as Record<string, unknown>,
-        };
-      });
-
-      groups.sort((a, b) => b.entity_count - a.entity_count);
+        },
+        DEFAULT_QUERY_LIMITS.sample_entity_limit,
+      );
     }
 
     const { limit, offset } = normalizePagination(input.limit, input.offset);
