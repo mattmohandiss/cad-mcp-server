@@ -25,7 +25,7 @@ Add to your MCP client config (Claude Desktop, OpenCode, Cursor, etc.):
 }
 ```
 
-## MCP Tools (v1.0)
+## MCP Tools (v0.2)
 
 | Tool | Purpose |
 |---|---|
@@ -56,8 +56,9 @@ STEP files are parsed locally by a stripped Open CASCADE Technology (OCCT 8.0) k
 
 ## Roadmap
 
-- **v1.0** — 9-tool stable surface (current)
+- **v0.2** — 9-tool surface: ray intersection, coaxial cylinders, distance measurement, draft angles (current)
 - **Future** — XDE integration (assembly tree, product names, GD&T-to-face links, colors)
+- **v1.0** — Stable tool surface, first-semver API guarantees
 
 ## Requirements
 
