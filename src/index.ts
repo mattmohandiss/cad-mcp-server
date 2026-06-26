@@ -7,11 +7,12 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import {
   handleCompareStepFiles,
-  handleFindCylindricalFeatures,
+  handleFindCoaxialCylinders,
   handleFindStepEdges,
   handleFindStepFaces,
   handleGetStepEntities,
   handleInspectStepFile,
+  handleQueryRayIntersect,
   handleQueryStepPmi,
   stepToolOutputSchemas,
   stepToolSchemas,
@@ -182,18 +183,33 @@ registerTool(
 );
 
 registerTool(
-  'find_cylindrical_features',
+  'query_ray_intersect',
   {
-    title: 'Find Cylindrical Features',
+    title: 'Query Ray Intersect',
     description:
-      'Group coaxial cylindrical faces into candidate hole, boss, and shaft features. Classifies through vs blind where possible via ray intersection. Returns feature candidates with diameter, axis, and entity references. All features are inferred from B-rep geometry — not original CAD feature history. Threads and non-cylindrical holes are not detected.',
-    inputSchema: stepToolSchemas.findCylindricalFeatures,
-    outputSchema: stepToolOutputSchemas.findCylindricalFeatures,
+      'Fire a ray into the model and return all face intersections sorted by distance. Returns face ID, intersection point, and distance for each hit. Use for line-of-sight, wall thickness estimation, through-hole detection, and accessibility analysis.',
+    inputSchema: stepToolSchemas.queryRayIntersect,
+    outputSchema: stepToolOutputSchemas.queryRayIntersect,
   },
-  withErrorContext('find_cylindrical_features', async (args) => {
+  withErrorContext('query_ray_intersect', async (args) => {
+    const query = args as Record<string, unknown>;
+    return jsonToolResult(await handleQueryRayIntersect(String(query.file_path), query as never));
+  }),
+);
+
+registerTool(
+  'find_coaxial_cylinders',
+  {
+    title: 'Find Coaxial Cylinders',
+    description:
+      'Group cylindrical faces that share the same axis. Returns axis direction, axis location, diameter, extent along axis, and ray intersection hits in both axis directions for each group. No feature classification — the LLM interprets what the geometry represents (holes, bosses, shafts, counterbores).',
+    inputSchema: stepToolSchemas.findCoaxialCylinders,
+    outputSchema: stepToolOutputSchemas.findCoaxialCylinders,
+  },
+  withErrorContext('find_coaxial_cylinders', async (args) => {
     const query = args as Record<string, unknown>;
     return jsonToolResult(
-      await handleFindCylindricalFeatures(String(query.file_path), query as never),
+      await handleFindCoaxialCylinders(String(query.file_path), query as never),
     );
   }),
 );

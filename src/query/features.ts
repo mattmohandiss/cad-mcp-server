@@ -1,8 +1,9 @@
 import type { OcctKernel, ShapeHandle, Vec3 } from 'occt-wasm';
-import { type ExtractedFaceEntity } from '../kernel/query-entities.js';
+import type { ExtractedFaceEntity } from '../kernel/query-entities.js';
 import { withStepModel } from '../model-store.js';
-import { normalizeVector, angleDegreesNormalized, dotProduct } from '../utils/vectors.js';
+import { normalizeVector, angleDegreesNormalized } from '../utils/vectors.js';
 import { createPagination, createQueryResponse } from './shared.js';
+import { resolveRayHits } from '../kernel/ray-utils.js';
 
 export interface QueryFeaturesInput {
   min_diameter_mm?: number;
@@ -14,61 +15,29 @@ export interface QueryFeaturesInput {
   offset?: number;
 }
 
-interface CylindricalFeature {
+interface CoaxialGroup {
   id: string;
   diameter_mm: number;
   axis: { direction: [number, number, number]; location: [number, number, number] };
-  through: boolean | null;
-  cylindrical_faces: string[];
-  cap_faces: string[];
+  extent_along_axis_mm: number;
+  face_ids: string[];
+  ray_hits_pos_axis: Array<{ face_id: string; distance: number; point: [number, number, number] }>;
+  ray_hits_neg_axis: Array<{ face_id: string; distance: number; point: [number, number, number] }>;
 }
 
 /**
- * Map raw ray intersection results to face IDs using the kernel's hash function.
+ * Group coaxial cylindrical faces. No classification — surfaces measured
+ * geometry so the LLM can interpret feature candidates.
  */
-function resolveRayHits(
-  kernel: OcctKernel,
-  shape: ShapeHandle,
-  raw: number[],
-): Array<{ face_id: string; distance: number; point: [number, number, number] }> {
-  const stride = 7;
-  const faces = kernel.getSubShapes(shape, 'face');
-  const HASH_UPPER = 1 << 30;
-  const hashToIdx = new Map<number, number>();
-  for (let i = 0; i < faces.length; i++) {
-    const f = faces[i];
-    if (!f) continue;
-    hashToIdx.set(kernel.hashCode(f, HASH_UPPER), i);
-  }
-  const hits: Array<{ face_id: string; distance: number; point: [number, number, number] }> = [];
-  for (let i = 0; i + stride <= raw.length; i += stride) {
-    const faceHash = raw[i];
-    const faceIdx = hashToIdx.get(faceHash);
-    if (faceIdx === undefined) continue;
-    hits.push({
-      face_id: `face:${faceIdx}`,
-      distance: raw[i + 1],
-      point: [raw[i + 2], raw[i + 3], raw[i + 4]],
-    });
-  }
-  return hits;
-}
-
-/**
- * Find cylindrical features by grouping coaxial cylindrical faces.
- */
-export async function findCylindricalFeatures(
-  filePath: string,
-  input: QueryFeaturesInput,
-) {
+export async function findCoaxialCylinders(filePath: string, input: QueryFeaturesInput) {
   return withStepModel(filePath, async (model) => {
     const allFaces = await model.getFaceEntities();
-    const { kernel, shape } = await model.getShapeContext('find_cylindrical_features');
+    const { kernel, shape } = await model.getShapeContext('find_coaxial_cylinders');
 
     const axisTol = input.axis_tolerance_deg ?? 5;
     const mergeTol = input.merge_coaxial_tolerance_mm ?? 0.1;
 
-    // Filter to cylindrical faces with axis data, optionally by diameter.
+    // Filter to cylindrical faces with axis data.
     let cylindricalFaces = allFaces.filter(
       (f) => f.surface_type === 'cylinder' && f.axis !== undefined,
     );
@@ -85,7 +54,7 @@ export async function findCylindricalFeatures(
 
     // Group by coaxiality.
     const groups: {
-      axisDir: number[];
+      axisDir: [number, number, number];
       axisLoc: [number, number, number];
       radius: number;
       faces: ExtractedFaceEntity[];
@@ -94,27 +63,27 @@ export async function findCylindricalFeatures(
     for (const face of cylindricalFaces) {
       if (!face.axis || face.radius === undefined) continue;
       const dir = normalizeVector(face.axis.direction);
-      const loc = face.axis.location as [number, number, number];
+      const loc = face.axis.location.slice(0, 3) as [number, number, number];
 
       let matched = false;
       for (const group of groups) {
         const ang = angleDegreesNormalized(dir, group.axisDir);
-        const isAntiParallel = Math.min(ang, 180 - ang) < axisTol;
-        if (!isAntiParallel) continue;
+        if (Math.min(ang, 180 - ang) >= axisTol) continue;
 
-        // Check if axis locations are collinear.
-        const toLoc = [loc[0] - group.axisLoc[0], loc[1] - group.axisLoc[1], loc[2] - group.axisLoc[2]];
+        // Check axis collinearity.
+        const toLoc = [
+          loc[0] - group.axisLoc[0],
+          loc[1] - group.axisLoc[1],
+          loc[2] - group.axisLoc[2],
+        ];
         const projLen = Math.abs(
-          toLoc[0] * group.axisDir[0] +
-            toLoc[1] * group.axisDir[1] +
-            toLoc[2] * group.axisDir[2],
+          toLoc[0] * group.axisDir[0] + toLoc[1] * group.axisDir[1] + toLoc[2] * group.axisDir[2],
         );
-        const perp =
-          Math.sqrt(
-            (toLoc[0] - projLen * group.axisDir[0]) ** 2 +
-              (toLoc[1] - projLen * group.axisDir[1]) ** 2 +
-              (toLoc[2] - projLen * group.axisDir[2]) ** 2,
-          );
+        const perp = Math.sqrt(
+          (toLoc[0] - projLen * group.axisDir[0]) ** 2 +
+            (toLoc[1] - projLen * group.axisDir[1]) ** 2 +
+            (toLoc[2] - projLen * group.axisDir[2]) ** 2,
+        );
         if (perp < mergeTol) {
           group.faces.push(face);
           matched = true;
@@ -126,112 +95,82 @@ export async function findCylindricalFeatures(
       }
     }
 
-    // Classify each group.
-    const features: CylindricalFeature[] = [];
-    const allFaceShapes = kernel.getSubShapes(shape, 'face');
+    // Measure each group.
+    const result: CoaxialGroup[] = [];
 
     for (let gi = 0; gi < groups.length; gi++) {
       const group = groups[gi];
-      const axisDir = group.axisDir as [number, number, number];
-      const axisLoc = group.axisLoc;
 
-      // Find min/max position along the axis using face bbox centers.
+      // Find extent along axis using bbox centers.
       let minProj = Infinity;
       let maxProj = -Infinity;
       for (const f of group.faces) {
         const c = f.bbox_center;
         const proj =
-          (c[0] - axisLoc[0]) * axisDir[0] +
-          (c[1] - axisLoc[1]) * axisDir[1] +
-          (c[2] - axisLoc[2]) * axisDir[2];
+          (c[0] - group.axisLoc[0]) * group.axisDir[0] +
+          (c[1] - group.axisLoc[1]) * group.axisDir[1] +
+          (c[2] - group.axisLoc[2]) * group.axisDir[2];
         if (proj < minProj) minProj = proj;
         if (proj > maxProj) maxProj = proj;
       }
 
-      // Check through/blind via ray casting.
-      let through: boolean | null = null;
-      const capFaces: string[] = [];
+      // Ray intersection in both axis directions.
+      let hitsPos: Array<{ face_id: string; distance: number; point: [number, number, number] }> =
+        [];
+      let hitsNeg: Array<{ face_id: string; distance: number; point: [number, number, number] }> =
+        [];
       try {
-        // Fire ray in +axis direction.
         const ext = Math.abs(maxProj - minProj) * 2;
-        const originPos: Vec3 = {
-          x: axisLoc[0] + axisDir[0] * (maxProj + ext * 0.5),
-          y: axisLoc[1] + axisDir[1] * (maxProj + ext * 0.5),
-          z: axisLoc[2] + axisDir[2] * (maxProj + ext * 0.5),
+        const posOrigin: Vec3 = {
+          x: group.axisLoc[0] + group.axisDir[0] * (maxProj + ext * 0.5),
+          y: group.axisLoc[1] + group.axisDir[1] * (maxProj + ext * 0.5),
+          z: group.axisLoc[2] + group.axisDir[2] * (maxProj + ext * 0.5),
         };
-        const originNeg: Vec3 = {
-          x: axisLoc[0] + axisDir[0] * (minProj - ext * 0.5),
-          y: axisLoc[1] + axisDir[1] * (minProj - ext * 0.5),
-          z: axisLoc[2] + axisDir[2] * (minProj - ext * 0.5),
+        const negOrigin: Vec3 = {
+          x: group.axisLoc[0] + group.axisDir[0] * (minProj - ext * 0.5),
+          y: group.axisLoc[1] + group.axisDir[1] * (minProj - ext * 0.5),
+          z: group.axisLoc[2] + group.axisDir[2] * (minProj - ext * 0.5),
         };
-        const dirNeg: Vec3 = { x: -axisDir[0], y: -axisDir[1], z: -axisDir[2] };
-        const axisVec: Vec3 = { x: axisDir[0], y: axisDir[1], z: axisDir[2] };
+        const negDir: Vec3 = { x: -group.axisDir[0], y: -group.axisDir[1], z: -group.axisDir[2] };
+        const posDir: Vec3 = { x: group.axisDir[0], y: group.axisDir[1], z: group.axisDir[2] };
 
-        const hitsPos = resolveRayHits(
-          kernel,
-          shape,
-          kernel.rayIntersect(shape, originPos, dirNeg),
-        );
-        const hitsNeg = resolveRayHits(
-          kernel,
-          shape,
-          kernel.rayIntersect(shape, originNeg, axisVec),
-        );
-
-        // Find planar face hits near ends.
-        if (hitsPos.length > 0) {
-          const firstHit = hitsPos[0];
-          const hitFace = allFaces[parseInt(firstHit.face_id.split(':')[1], 10)];
-          if (hitFace?.surface_type === 'plane') capFaces.push(firstHit.face_id);
-        }
-        if (hitsNeg.length > 0) {
-          const firstHit = hitsNeg[0];
-          const hitFace = allFaces[parseInt(firstHit.face_id.split(':')[1], 10)];
-          if (hitFace?.surface_type === 'plane') capFaces.push(firstHit.face_id);
-        }
-
-        // Through if both ends hit something and at least one is a planar face.
-        through = hitsPos.length > 0 && hitsNeg.length > 0;
+        hitsPos = resolveRayHits(kernel, shape, kernel.rayIntersect(shape, posOrigin, negDir));
+        hitsNeg = resolveRayHits(kernel, shape, kernel.rayIntersect(shape, negOrigin, posDir));
       } catch {
-        // Ray intersection failed; leave through as null.
+        // Ray intersection failed; leave arrays empty.
       }
 
-      features.push({
+      result.push({
         id: `cyl:${gi}`,
         diameter_mm: group.radius * 2,
-        axis: { direction: axisDir, location: axisLoc },
-        through,
-        cylindrical_faces: group.faces.map((f) => f.id),
-        cap_faces: capFaces,
+        axis: { direction: group.axisDir, location: group.axisLoc },
+        extent_along_axis_mm: maxProj - minProj,
+        face_ids: group.faces.map((f) => f.id),
+        ray_hits_pos_axis: hitsPos,
+        ray_hits_neg_axis: hitsNeg,
       });
     }
 
     // Sort by diameter descending.
-    features.sort((a, b) => b.diameter_mm - a.diameter_mm);
+    result.sort((a, b) => b.diameter_mm - a.diameter_mm);
 
     const resultMode = input.return_type ?? 'entities';
-    const total = features.length;
-    const { limit, offset } = (() => {
-      const l = input.limit ?? 100;
-      const o = input.offset ?? 0;
-      return { limit: l, offset: o };
-    })();
-    const paginated = resultMode === 'entities' ? features.slice(offset, offset + limit) : [];
-    const pagination = createPagination(limit, offset, paginated.length, total);
+    const total = result.length;
+    const lim = input.limit ?? 100;
+    const off = input.offset ?? 0;
+    const paginated = resultMode === 'entities' ? result.slice(off, off + lim) : [];
+    const pagination = createPagination(lim, off, paginated.length, total);
 
     return createQueryResponse(
       filePath,
-      { ...input, return_type: resultMode, limit, offset },
+      { ...input, return_type: resultMode, limit: lim, offset: off },
       pagination,
       paginated as never,
-      {
-        total_cylindrical_faces: cylindricalFaces.length,
-        total_features: total,
-      },
+      { total_cylindrical_faces: cylindricalFaces.length, total_groups: total },
       [],
       [],
       [
-        'Cylindrical features are inferred from B-rep geometry, not original CAD feature history. Threads and non-cylindrical holes are not detected.',
+        'Cylindrical groups are derived from B-rep geometry, not CAD feature history. Threads and non-cylindrical openings are not grouped.',
       ],
     );
   });

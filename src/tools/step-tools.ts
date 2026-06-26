@@ -4,9 +4,11 @@ import { withStepModel } from '../model-store.js';
 import { CAD_RESPONSE_SCHEMA_VERSION } from '../schema-version.js';
 import { queryStepEdges as queryEdgesService } from '../query/edges.js';
 import { canDirectGetEntities, getStepEntitiesDirect } from '../query/entities.js';
-import { findCylindricalFeatures } from '../query/features.js';
+import { findCoaxialCylinders } from '../query/features.js';
 import { queryStepFaces as queryFacesService } from '../query/faces.js';
 import { queryStepPmi as queryPmiService } from '../query/pmi.js';
+import { queryRay } from '../kernel/ray-utils.js';
+import { createPagination, createQueryResponse } from '../query/shared.js';
 import { wrapTool } from './shared.js';
 
 const filePathInput = {
@@ -19,6 +21,8 @@ const direction3Schema = z
   .refine(([x, y, z]) => x !== 0 || y !== 0 || z !== 0, {
     message: 'Direction vector must be non-zero.',
   });
+
+const point3Schema = z.array(z.number().finite()).length(3);
 
 const resultModeSchema = z
   .enum(['summary', 'entities', 'groups'])
@@ -358,7 +362,20 @@ export const stepToolSchemas = {
   getStepEntities: getStepEntitiesSchema,
   compareStepFiles: compareStepFilesSchema,
   queryStepPmi: pmiQuerySchema,
-  findCylindricalFeatures: {
+  queryRayIntersect: {
+    ...filePathInput,
+    origin: point3Schema.describe('Ray origin point [x, y, z] in mm.'),
+    direction: direction3Schema.describe('Ray direction vector [dx, dy, dz].'),
+    body_ids: z
+      .array(bodyIdSchema)
+      .min(1)
+      .refine(uniqueArray, 'Body IDs must be unique.')
+      .describe('Restrict to specific bodies. Omit to intersect the whole shape.')
+      .optional(),
+    limit: limitSchema,
+    offset: offsetSchema,
+  },
+  findCoaxialCylinders: {
     ...filePathInput,
     min_diameter_mm: z
       .number()
@@ -466,7 +483,8 @@ export const stepToolOutputSchemas = {
   getStepEntities: queryOutputSchema,
   compareStepFiles: compareOutputSchema,
   queryStepPmi: queryOutputSchema,
-  findCylindricalFeatures: queryOutputSchema,
+  findCoaxialCylinders: queryOutputSchema,
+  queryRayIntersect: queryOutputSchema,
 } as const;
 
 /* ------------------------------------------------------------------ */
@@ -684,12 +702,42 @@ export async function handleQueryStepPmi(
   });
 }
 
-export async function handleFindCylindricalFeatures(
+export async function handleFindCoaxialCylinders(
   filePath: string,
   query: Record<string, unknown> | undefined,
 ) {
   return wrapTool(async () =>
-    findCylindricalFeatures(filePath, (query ?? {}) as never),
+    findCoaxialCylinders(filePath, (query ?? {}) as never),
+  );
+}
+
+export async function handleQueryRayIntersect(
+  filePath: string,
+  query: Record<string, unknown> | undefined,
+) {
+  return wrapTool(async () =>
+    withStepModel(filePath, async (model) => {
+      const q = query ?? {};
+      const { kernel, shape } = await model.getShapeContext('query_ray_intersect');
+      const origin = (q.origin as number[]) ?? [0, 0, 0];
+      const direction = (q.direction as number[]) ?? [0, 0, 1];
+      const hits = queryRay(
+        kernel,
+        shape,
+        { x: origin[0], y: origin[1], z: origin[2] },
+        { x: direction[0], y: direction[1], z: direction[2] },
+      );
+      return createQueryResponse(
+        String(q.file_path ?? ''),
+        { origin, direction },
+        createPagination(hits.length, 0, hits.length, hits.length),
+        hits as never,
+        { total_hits: hits.length },
+        [],
+        [],
+        [],
+      );
+    }),
   );
 }
 
