@@ -34,7 +34,7 @@ Direct npm equivalents: `npm test`, `npm run build`, `npm run lint`, `npm run ty
 
 ```
 src/                   MCP server source
-  tools/               Tool handlers (thin adapters)
+  tools/               Tool handlers and schemas
   query/               Query services (face/edge/PMI search)
   kernel/              OCCT WASM kernel bindings
   pmi/                 Lightweight STEP PMI parsers
