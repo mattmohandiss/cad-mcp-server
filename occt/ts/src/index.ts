@@ -951,7 +951,8 @@ export class OcctKernel {
     /**
      * Fire a ray from origin in direction and return all face intersections
      * sorted by distance. Each hit: [faceHash, distance, x, y, z, u, v].
-     * Use `resolveRayHits` to map faceHash → face id.
+     * faceHash encodes the face identity — the MCP server resolves these to
+     * face IDs via `resolveRayHits` in ray-utils.ts.
      */
     rayIntersect(shape: ShapeHandle, origin: Vec3, direction: Vec3): number[] {
         return wrap("rayIntersect", () =>
@@ -963,49 +964,6 @@ export class OcctKernel {
                 ),
             ),
         );
-    }
-
-    /**
-     * Annotate raw ray intersection results with face IDs.
-     * Returns an array of { face_id, distance, point, u, v } objects
-     * sorted by distance from the ray origin.
-     */
-    resolveRayHits(raw: number[], shape: ShapeHandle): Array<{
-        face_id: string;
-        distance: number;
-        point: [number, number, number];
-        u: number;
-        v: number;
-    }> {
-        const stride = 7;
-        const faces = this.getSubShapes(shape, 'face');
-        const HASH_UPPER = 1 << 30;
-        const hashToIdx = new Map<number, number>();
-        for (let i = 0; i < faces.length; i++) {
-            const f = faces[i];
-            if (!f) continue;
-            hashToIdx.set(this.#raw.hashCode(f, HASH_UPPER), i);
-        }
-        const hits: Array<{
-            face_id: string;
-            distance: number;
-            point: [number, number, number];
-            u: number;
-            v: number;
-        }> = [];
-        for (let i = 0; i + stride <= raw.length; i += stride) {
-            const faceHash = raw[i] ?? 0;
-            const faceIdx = hashToIdx.get(faceHash);
-            if (faceIdx === undefined) continue;
-            hits.push({
-                face_id: `face:${faceIdx}`,
-                distance: raw[i + 1] ?? 0,
-                point: [raw[i + 2] ?? 0, raw[i + 3] ?? 0, raw[i + 4] ?? 0],
-                u: raw[i + 5] ?? 0,
-                v: raw[i + 6] ?? 0,
-            });
-        }
-        return hits;
     }
 
     // ── BRepGraph topology queries ────────────────────────────────
