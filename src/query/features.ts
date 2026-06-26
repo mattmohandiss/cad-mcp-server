@@ -15,7 +15,8 @@ export interface QueryFeaturesInput {
   offset?: number;
 }
 
-interface CoaxialGroup {
+export interface CoaxialGroup {
+  [key: string]: unknown;
   id: string;
   diameter_mm: number;
   axis: { direction: [number, number, number]; location: [number, number, number] };
@@ -157,7 +158,7 @@ export async function findCoaxialCylinders(filePath: string, input: QueryFeature
       filePath,
       { ...input, return_type: resultMode, limit: lim, offset: off },
       pagination,
-      paginated as never,
+      paginated,
       { total_cylindrical_faces: cylindricalFaces.length, total_groups: total },
       [],
       [],

@@ -375,8 +375,6 @@ export const stepToolSchemas = {
       .positive()
       .describe('When set, fires a grid of rays perpendicular to direction across the bounding box extent. Returns all hits. Omit for single-ray mode.')
       .optional(),
-    limit: limitSchema,
-    offset: offsetSchema,
   },
   measureDistance: {
     ...filePathInput,
@@ -752,7 +750,7 @@ export async function handleMeasureDistance(
         String(q.file_path ?? ''),
         { entity_a: a, entity_b: b },
         createPagination(1, 0, 1, 1),
-        [{ entity_a: a, entity_b: b, distance_mm: dist }] as never,
+        [{ entity_a: a, entity_b: b, distance_mm: dist }],
         { distance_mm: dist },
       );
     }),
@@ -773,54 +771,44 @@ export async function handleQueryRayIntersect(
       // Grid mode.
       const spacing = q.grid_spacing_mm as number | undefined;
       if (spacing && spacing > 0) {
-        const allHits: Array<{ face_id: string; distance: number; point: [number, number, number] }> = [];
+        const hits: Array<{ face_id: string; distance: number; point: [number, number, number] }> = [];
         const bbox = kernel.getBoundingBox(shape, false);
-        const rayCounts: number[] = [];
         let totalRays = 0;
+        const MAX_RAYS = 10000;
 
         // Pick two perpendicular axes in the plane orthogonal to dir.
         const absDir = [Math.abs(dir.x), Math.abs(dir.y), Math.abs(dir.z)];
         let uAxis = absDir[0] < absDir[1] && absDir[0] < absDir[2]
           ? { x: 1, y: 0, z: 0 } : { x: 0, y: 1, z: 0 };
-        // Orthogonalize uAxis against dir.
         const udot = uAxis.x * dir.x + uAxis.y * dir.y + uAxis.z * dir.z;
         uAxis = { x: uAxis.x - udot * dir.x, y: uAxis.y - udot * dir.y, z: uAxis.z - udot * dir.z };
         const uLen = Math.sqrt(uAxis.x * uAxis.x + uAxis.y * uAxis.y + uAxis.z * uAxis.z);
         if (uLen > 1e-9) { uAxis = { x: uAxis.x / uLen, y: uAxis.y / uLen, z: uAxis.z / uLen }; }
-        // v = dir × u.
         const vAxis = {
           x: dir.y * uAxis.z - dir.z * uAxis.y,
           y: dir.z * uAxis.x - dir.x * uAxis.z,
           z: dir.x * uAxis.y - dir.y * uAxis.x,
         };
 
-        // Project bbox corners onto u/v axes to get extents.
         const corners = [
-          { x: bbox.xmin, y: bbox.ymin, z: bbox.zmin },
-          { x: bbox.xmax, y: bbox.ymin, z: bbox.zmin },
-          { x: bbox.xmin, y: bbox.ymax, z: bbox.zmin },
-          { x: bbox.xmin, y: bbox.ymin, z: bbox.zmax },
-          { x: bbox.xmax, y: bbox.ymax, z: bbox.zmin },
-          { x: bbox.xmax, y: bbox.ymin, z: bbox.zmax },
-          { x: bbox.xmin, y: bbox.ymax, z: bbox.zmax },
-          { x: bbox.xmax, y: bbox.ymax, z: bbox.zmax },
+          { x: bbox.xmin, y: bbox.ymin, z: bbox.zmin }, { x: bbox.xmax, y: bbox.ymin, z: bbox.zmin },
+          { x: bbox.xmin, y: bbox.ymax, z: bbox.zmin }, { x: bbox.xmin, y: bbox.ymin, z: bbox.zmax },
+          { x: bbox.xmax, y: bbox.ymax, z: bbox.zmin }, { x: bbox.xmax, y: bbox.ymin, z: bbox.zmax },
+          { x: bbox.xmin, y: bbox.ymax, z: bbox.zmax }, { x: bbox.xmax, y: bbox.ymax, z: bbox.zmax },
         ];
         let uMin = Infinity, uMax = -Infinity, vMin = Infinity, vMax = -Infinity;
         for (const c of corners) {
           const ud = c.x * uAxis.x + c.y * uAxis.y + c.z * uAxis.z;
           const vd = c.x * vAxis.x + c.y * vAxis.y + c.z * vAxis.z;
-          if (ud < uMin) uMin = ud;
-          if (ud > uMax) uMax = ud;
-          if (vd < vMin) vMin = vd;
-          if (vd > vMax) vMax = vd;
+          if (ud < uMin) uMin = ud; if (ud > uMax) uMax = ud;
+          if (vd < vMin) vMin = vd; if (vd > vMax) vMax = vd;
         }
 
         const cols = Math.max(1, Math.ceil((uMax - uMin) / spacing));
         const rows = Math.max(1, Math.ceil((vMax - vMin) / spacing));
-        const limit = Math.max(1, (q.limit as number) ?? cols * rows);
 
-        for (let r = 0; r < rows && totalRays < limit; r++) {
-          for (let c = 0; c < cols && totalRays < limit; c++) {
+        for (let r = 0; r < rows && totalRays < MAX_RAYS; r++) {
+          for (let c = 0; c < cols && totalRays < MAX_RAYS; c++) {
             const uu = uMin + (c + 0.5) * spacing;
             const vv = vMin + (r + 0.5) * spacing;
             const origin: Vec3 = {
@@ -828,8 +816,8 @@ export async function handleQueryRayIntersect(
               y: uAxis.y * uu + vAxis.y * vv,
               z: uAxis.z * uu + vAxis.z * vv,
             };
-            const hits = queryRay(kernel, shape, origin, dir);
-            for (const h of hits) allHits.push(h);
+            const rayHits = queryRay(kernel, shape, origin, dir);
+            for (const h of rayHits) hits.push(h);
             totalRays++;
           }
         }
@@ -837,9 +825,9 @@ export async function handleQueryRayIntersect(
         return createQueryResponse(
           String(q.file_path ?? ''),
           { grid_spacing_mm: spacing, direction: dirArr, total_rays: totalRays },
-          createPagination(allHits.length, 0, allHits.length, allHits.length),
-          allHits as never,
-          { total_hits: allHits.length, total_rays: totalRays },
+          createPagination(hits.length, 0, hits.length, hits.length),
+          hits,
+          { total_hits: hits.length, total_rays: totalRays },
           [],
           [],
           ['Sampled estimate; not an exhaustive wall thickness survey.'],
@@ -856,9 +844,9 @@ export async function handleQueryRayIntersect(
       );
       return createQueryResponse(
         String(q.file_path ?? ''),
-        { origin, direction: dirArr },
+        { origin: origin, direction: dirArr },
         createPagination(hits.length, 0, hits.length, hits.length),
-        hits as never,
+        hits,
         { total_hits: hits.length },
       );
     }),

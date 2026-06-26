@@ -188,7 +188,7 @@ registerTool(
   {
     title: 'Query Ray Intersect',
     description:
-      'Fire a ray into the model and return all face intersections sorted by distance. Returns face ID, intersection point, and distance for each hit. Use for line-of-sight, wall thickness estimation, through-hole detection, and accessibility analysis.',
+      'Fire a single ray or a grid of rays into the model. Single-ray: provide origin + direction. Grid mode: set grid_spacing_mm to fire a grid of rays perpendicular to direction across the bounding box extent. Returns face ID, intersection point, and distance for each hit sorted by distance. Use single-ray for line-of-sight and accessibility. Use grid mode for wall thickness estimation (the LLM computes min/max/avg from the returned distances).',
     inputSchema: stepToolSchemas.queryRayIntersect,
     outputSchema: stepToolOutputSchemas.queryRayIntersect,
   },
