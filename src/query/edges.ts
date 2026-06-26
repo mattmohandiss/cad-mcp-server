@@ -28,12 +28,7 @@ export interface QueryEdgesInput {
 
 export async function queryStepEdges(filePath: string, input: QueryEdgesInput) {
   return withStepModel(filePath, async (model) => {
-    const includeBodyId = Boolean(
-      input.body_ids?.length ||
-      input.fields?.includes('body_id') ||
-      input.group_by?.includes('body_id'),
-    );
-    const allEdges = await model.getEdgeEntities(includeBodyId);
+    const allEdges = await model.getEdgeEntities();
     const { kernel, shape } = await model.getShapeContext('query_step_edges');
 
     let filtered = applyEdgeFilters(allEdges, input);
@@ -86,6 +81,9 @@ export async function queryStepEdges(filePath: string, input: QueryEdgesInput) {
   });
 }
 
+/**
+ * Build edge-to-face adjacency map for paginated edges using BRepGraph.
+ */
 function buildEdgeToFaceAdjacencies(
   kernel: OcctKernel,
   shape: ShapeHandle,
@@ -94,43 +92,21 @@ function buildEdgeToFaceAdjacencies(
 ): Map<string, Array<{ face_id: string; surface_type: string }>> | undefined {
   if (!fields?.includes('adjacent_faces')) return undefined;
 
-  const edgeShapes = kernel.getSubShapes(shape, 'edge');
   const faceShapes = kernel.getSubShapes(shape, 'face');
-  const HASH_UPPER = 1 << 30;
-
-  const edgeToFaceIndices = new Map<number, number[]>();
-  for (let fi = 0; fi < faceShapes.length; fi++) {
-    const faceEdgeShapes = kernel.getSubShapes(faceShapes[fi], 'edge');
-    for (const fe of faceEdgeShapes) {
-      const h = kernel.hashCode(fe, HASH_UPPER);
-      const bucket = edgeToFaceIndices.get(h);
-      if (bucket) bucket.push(fi);
-      else edgeToFaceIndices.set(h, [fi]);
-    }
-  }
 
   const result = new Map<string, Array<{ face_id: string; surface_type: string }>>();
 
   for (const edge of paginated) {
-    const edgeShape = edgeShapes[edge.index];
-    const edgeHash = kernel.hashCode(edgeShape, HASH_UPPER);
-    const candidateFaces = edgeToFaceIndices.get(edgeHash) ?? [];
-    const seen = new Set<number>();
+    const faceIndices = kernel.graphEdgeFaces(edge.index);
     const entries: Array<{ face_id: string; surface_type: string }> = [];
-
-    for (const fi of candidateFaces) {
-      if (seen.has(fi)) continue;
-      seen.add(fi);
-      const faceEdgeShapes = kernel.getSubShapes(faceShapes[fi], 'edge');
-      if (faceEdgeShapes.some((fe) => kernel.isSame(fe, edgeShape))) {
-        entries.push({
-          face_id: `face:${fi}`,
-          surface_type: kernel.surfaceType(faceShapes[fi]),
-        });
-        if (entries.length === 2) break;
-      }
+    for (const fi of faceIndices) {
+      if (fi < 0 || fi >= faceShapes.length) continue;
+      entries.push({
+        face_id: `face:${fi}`,
+        surface_type: kernel.surfaceType(faceShapes[fi]),
+      });
+      if (entries.length === 2) break;
     }
-
     result.set(edge.id, entries);
   }
 
@@ -246,8 +222,11 @@ function projectEdge(
   edge: ExtractedEdgeEntity,
   fields: QueryEdgesInput['fields'],
 ): Record<string, unknown> {
-  const selected = fields ?? ['id', 'curve_type', 'length', 'bbox', 'bbox_center'];
+  const selected = fields ?? ['id', 'curve_type', 'length', 'bbox', 'bbox_center', 'body_id'];
   const result: Record<string, unknown> = {};
+
+  // Always surface body_id when available.
+  if (edge.body_id !== undefined) result.body_id = edge.body_id;
 
   for (const field of selected) {
     switch (field) {
@@ -275,11 +254,20 @@ function projectEdge(
       case 'end_point':
         if (edge.end_point !== undefined) result.end_point = edge.end_point;
         break;
+      case 'start_vertex':
+        if (edge.start_vertex !== undefined) result.start_vertex = edge.start_vertex;
+        break;
+      case 'end_vertex':
+        if (edge.end_vertex !== undefined) result.end_vertex = edge.end_vertex;
+        break;
+      case 'convexity':
+        if (edge.convexity !== undefined) result.convexity = edge.convexity;
+        break;
       case 'adjacent_faces':
         if (edge.adjacent_faces !== undefined) result.adjacent_faces = edge.adjacent_faces;
         break;
       case 'body_id':
-        if (edge.body_id !== undefined) result.body_id = edge.body_id;
+        // Already surfaced above; no-op.
         break;
     }
   }

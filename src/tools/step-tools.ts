@@ -4,6 +4,7 @@ import { withStepModel } from '../model-store.js';
 import { CAD_RESPONSE_SCHEMA_VERSION } from '../schema-version.js';
 import { queryStepEdges as queryEdgesService } from '../query/edges.js';
 import { canDirectGetEntities, getStepEntitiesDirect } from '../query/entities.js';
+import { findCylindricalFeatures } from '../query/features.js';
 import { queryStepFaces as queryFacesService } from '../query/faces.js';
 import { queryStepPmi as queryPmiService } from '../query/pmi.js';
 import { wrapTool } from './shared.js';
@@ -60,6 +61,8 @@ const FACE_FIELDS = [
   'closest_face_distance',
   'has_inner_wires',
   'body_id',
+  'outer_edges',
+  'inner_wires',
 ] as const;
 
 const EDGE_FIELDS = [
@@ -71,6 +74,9 @@ const EDGE_FIELDS = [
   'radius',
   'start_point',
   'end_point',
+  'start_vertex',
+  'end_vertex',
+  'convexity',
   'adjacent_faces',
   'body_id',
 ] as const;
@@ -89,9 +95,11 @@ function uniqueArray<T>(values: T[]): boolean {
 const faceFieldsSchema = z
   .array(z.enum(FACE_FIELDS as unknown as [string, ...string[]]))
   .min(1)
-  .max(12)
+  .max(14)
   .refine(uniqueArray, 'Field values must be unique.')
-  .describe('Face fields to include. Default: id,surface_type,area,bbox,bbox_center.')
+  .describe(
+    'Face fields to include. Default: id,surface_type,area,bbox,bbox_center. New: outer_edges=edge IDs of outer boundary, inner_wires=array of edge ID arrays per hole.',
+  )
   .optional();
 
 const faceGroupBySchema = z
@@ -160,9 +168,11 @@ const findStepFacesSchema = {
 const edgeFieldsSchema = z
   .array(z.enum(EDGE_FIELDS as unknown as [string, ...string[]]))
   .min(1)
-  .max(10)
+  .max(13)
   .refine(uniqueArray, 'Field values must be unique.')
-  .describe('Edge fields to include. Default: id,curve_type,length,bbox,bbox_center.')
+  .describe(
+    'Edge fields to include. Default: id,curve_type,length,bbox,bbox_center. New: start_vertex,end_vertex=vertex IDs for cross-edge reference, convexity=concave/convex/smooth for interior edges.',
+  )
   .optional();
 
 const edgeGroupBySchema = z
@@ -243,7 +253,7 @@ const getStepEntitiesSchema = {
       ] as unknown as [string, ...string[]]),
     )
     .min(1)
-    .max(16)
+    .max(18)
     .refine(uniqueArray, 'Field values must be unique.')
     .describe('Entity fields to include.')
     .optional(),
@@ -348,6 +358,32 @@ export const stepToolSchemas = {
   getStepEntities: getStepEntitiesSchema,
   compareStepFiles: compareStepFilesSchema,
   queryStepPmi: pmiQuerySchema,
+  findCylindricalFeatures: {
+    ...filePathInput,
+    min_diameter_mm: z
+      .number()
+      .nonnegative()
+      .describe('Minimum diameter in mm. Filters cylindrical features by diameter.')
+      .optional(),
+    max_diameter_mm: z
+      .number()
+      .nonnegative()
+      .describe('Maximum diameter in mm.')
+      .optional(),
+    axis_tolerance_deg: z
+      .number()
+      .nonnegative()
+      .describe('Angle tolerance in degrees for grouping coaxial faces (default: 5).')
+      .optional(),
+    merge_coaxial_tolerance_mm: z
+      .number()
+      .nonnegative()
+      .describe('Distance tolerance in mm for merging coaxial faces (default: 0.1).')
+      .optional(),
+    return_type: resultModeSchema,
+    limit: limitSchema,
+    offset: offsetSchema,
+  },
 } as const;
 
 /* ------------------------------------------------------------------ */
@@ -430,6 +466,7 @@ export const stepToolOutputSchemas = {
   getStepEntities: queryOutputSchema,
   compareStepFiles: compareOutputSchema,
   queryStepPmi: queryOutputSchema,
+  findCylindricalFeatures: queryOutputSchema,
 } as const;
 
 /* ------------------------------------------------------------------ */
@@ -440,6 +477,23 @@ export async function handleInspectStepFile(filePath: string) {
   return wrapTool(async () => {
     return withStepModel(filePath, async (model) => {
       const [brep, semantic] = await Promise.all([model.getBRepModel(), model.getSemanticModel()]);
+      const { kernel, shape } = await model.getShapeContext('inspect_step_file');
+
+      // Principal properties (may fail for wireframe/non-manifold shapes).
+      let principal: number[] | undefined;
+      try { principal = kernel.getPrincipalProperties(shape); } catch { /* ignore */ }
+
+      // Oriented bounding box (may fail same as above).
+      let obb: number[] | undefined;
+      try { obb = kernel.getOrientedBoundingBox(shape); } catch { /* ignore */ }
+
+      // Shell watertight analysis.
+      let freeEdgeCount = -1;
+      try { freeEdgeCount = kernel.freeEdgeCount(shape); } catch { /* ignore */ }
+
+      // Shape contents inventory.
+      let contents: number[] | undefined;
+      try { contents = kernel.shapeContents(shape); } catch { /* ignore */ }
 
       return {
         schema_version: CAD_RESPONSE_SCHEMA_VERSION,
@@ -456,6 +510,23 @@ export async function handleInspectStepFile(filePath: string) {
           surface_area: brep.surfaceArea,
           units: brep.units,
         },
+        principal_axes: principal
+          ? {
+              moments: [principal[0], principal[1], principal[2]],
+              axis_1: [principal[3], principal[4], principal[5]],
+              axis_2: [principal[6], principal[7], principal[8]],
+              axis_3: [principal[9], principal[10], principal[11]],
+            }
+          : undefined,
+        bounding_box_obb: obb
+          ? {
+              center: [obb[0], obb[1], obb[2]],
+              half_extents: [obb[3], obb[4], obb[5]],
+              axis_1: [obb[6], obb[7], obb[8]],
+              axis_2: [obb[9], obb[10], obb[11]],
+              axis_3: [obb[12], obb[13], obb[14]],
+            }
+          : undefined,
         structure: {
           body_count: brep.bodyCount,
           is_assembly: semantic.hasAssembly,
@@ -473,6 +544,24 @@ export async function handleInspectStepFile(filePath: string) {
             edge_count: brep.edgeStatistics?.count,
           },
         },
+        quality: freeEdgeCount >= 0
+          ? {
+              free_edge_count: freeEdgeCount,
+              is_watertight: freeEdgeCount === 0,
+              shape_contents: contents
+                ? {
+                    faces: contents[0],
+                    edges: contents[1],
+                    free_faces: contents[2],
+                    free_wires: contents[3],
+                    free_edges: contents[4],
+                    c0_surfaces: contents[5],
+                    bspline_surfaces: contents[6],
+                    offset_surfaces: contents[7],
+                  }
+                : undefined,
+            }
+          : undefined,
         pmi: {
           has_pmi: semantic.pmi?.hasGdt || semantic.pmi?.hasDimensions || false,
           has_gdt: semantic.pmi?.hasGdt || false,
@@ -498,6 +587,13 @@ export async function handleInspectStepFile(filePath: string) {
           edges_length_lt_1_mm: brep.edgeStatistics ? brep.edgeStatistics.byLengthRange.tiny : 0,
           min_edge_length: brep.edgeStatistics?.minLength || 0,
         },
+        bodies: brep.bodies.map((b) => ({
+          id: b.id,
+          volume: b.volume,
+          surface_area: b.surfaceArea,
+          dimensions: b.dimensions,
+          center_of_mass: b.centerOfMass,
+        })),
         warnings: brep.health.warnings,
         limitations: [
           ...semantic.limitations,
@@ -586,6 +682,15 @@ export async function handleQueryStepPmi(
     }
     return queryPmiService(filePath, q as never);
   });
+}
+
+export async function handleFindCylindricalFeatures(
+  filePath: string,
+  query: Record<string, unknown> | undefined,
+) {
+  return wrapTool(async () =>
+    findCylindricalFeatures(filePath, (query ?? {}) as never),
+  );
 }
 
 /* ------------------------------------------------------------------ */

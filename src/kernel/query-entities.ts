@@ -2,10 +2,8 @@ import type { OcctKernel, ShapeHandle } from 'occt-wasm';
 import type { BoundingBox, Point3D } from '../types/schema.js';
 import { makeId } from '../utils/ids.js';
 import { toBoundingBox } from './measure.js';
+import { computeEdgeConvexity } from './aag-utils.js';
 
-/**
- * Convert BoundingBox to tuple format for query response.
- */
 function bboxToTuple(bbox: BoundingBox): {
   min: [number, number, number];
   max: [number, number, number];
@@ -16,16 +14,10 @@ function bboxToTuple(bbox: BoundingBox): {
   };
 }
 
-/**
- * Convert Point3D to tuple format.
- */
 function pointToTuple(p: Point3D): [number, number, number] {
   return [p.x, p.y, p.z];
 }
 
-/**
- * Calculate center of a bounding box.
- */
 function bboxCenter(bbox: BoundingBox): [number, number, number] {
   return [
     (bbox.min.x + bbox.max.x) / 2,
@@ -35,77 +27,22 @@ function bboxCenter(bbox: BoundingBox): [number, number, number] {
 }
 
 /**
- * Build a face-index-to-body-index and edge-index-to-body-index map by
- * iterating sub-shapes of each body (solid). Faces/edges not belonging
- * to any body get index -1 (shells, faces-only models, etc.).
+ * Build face/edge → body index via BRepGraph reverse indices (O(1) per entity).
+ * Replaces the old hash-based buildBodyMap.
  */
 export function buildBodyMap(
   kernel: OcctKernel,
   shape: ShapeHandle,
 ): { faceBody: number[]; edgeBody: number[] } {
-  const bodies = kernel.getSubShapes(shape, 'solid');
-  const allFaces = kernel.getSubShapes(shape, 'face');
-  const allEdges = kernel.getSubShapes(shape, 'edge');
-  const faceBody = new Array(allFaces.length).fill(-1);
-  const edgeBody = new Array(allEdges.length).fill(-1);
-
-  const HASH_UPPER = 1 << 30;
-  const faceByHash = new Map<number, number[]>();
-  for (let i = 0; i < allFaces.length; i++) {
-    const h = kernel.hashCode(allFaces[i], HASH_UPPER);
-    const bucket = faceByHash.get(h);
-    if (bucket) bucket.push(i);
-    else faceByHash.set(h, [i]);
-  }
-  const edgeByHash = new Map<number, number[]>();
-  for (let i = 0; i < allEdges.length; i++) {
-    const h = kernel.hashCode(allEdges[i], HASH_UPPER);
-    const bucket = edgeByHash.get(h);
-    if (bucket) bucket.push(i);
-    else edgeByHash.set(h, [i]);
-  }
-
-  for (let bi = 0; bi < bodies.length; bi++) {
-    try {
-      const bodyFaces = kernel.getSubShapes(bodies[bi], 'face');
-      for (const bf of bodyFaces) {
-        const candidates = faceByHash.get(kernel.hashCode(bf, HASH_UPPER));
-        if (!candidates) continue;
-        for (const fi of candidates) {
-          if (kernel.isSame(allFaces[fi], bf)) {
-            faceBody[fi] = bi;
-            break;
-          }
-        }
-      }
-    } catch {
-      /* body may not expose faces */
-    }
-    try {
-      const bodyEdges = kernel.getSubShapes(bodies[bi], 'edge');
-      for (const be of bodyEdges) {
-        const candidates = edgeByHash.get(kernel.hashCode(be, HASH_UPPER));
-        if (!candidates) continue;
-        for (const ei of candidates) {
-          if (kernel.isSame(allEdges[ei], be)) {
-            edgeBody[ei] = bi;
-            break;
-          }
-        }
-      }
-    } catch {
-      /* body may not expose edges */
-    }
-  }
-
+  kernel.graphBuild(shape);
+  const bodyMap = kernel.graphBodyMap(); // [faceCount, edgeCount, faceBody..., edgeBody...]
+  const fc = bodyMap[0];
+  const ec = bodyMap[1];
+  const faceBody = Array.from(bodyMap.slice(2, 2 + fc));
+  const edgeBody = Array.from(bodyMap.slice(2 + fc, 2 + fc + ec));
   return { faceBody, edgeBody };
 }
 
-/**
- * Extract deterministic edge entities from a STEP shape.
- * Each edge gets a stable ID like "edge:0", "edge:1", etc.
- * Based on traversal order from getSubShapes.
- */
 export interface ExtractedEdgeEntity {
   id: string;
   index: number;
@@ -115,12 +52,12 @@ export interface ExtractedEdgeEntity {
   bbox_center: [number, number, number];
   start_point?: [number, number, number];
   end_point?: [number, number, number];
+  start_vertex?: string;
+  end_vertex?: string;
   radius?: number;
+  convexity?: string;
   body_id?: string;
-  adjacent_faces?: Array<{
-    face_id: string;
-    surface_type: string;
-  }>;
+  adjacent_faces?: Array<{ face_id: string; surface_type: string }>;
 }
 
 export function extractEdgeEntities(
@@ -128,6 +65,7 @@ export function extractEdgeEntities(
   shape: ShapeHandle,
   bodyMap?: { faceBody: number[]; edgeBody: number[] },
 ): ExtractedEdgeEntity[] {
+  kernel.graphBuild(shape);
   const edges = kernel.getSubShapes(shape, 'edge');
   const entities: ExtractedEdgeEntity[] = [];
 
@@ -152,17 +90,43 @@ export function extractEdgeEntities(
       entity.radius = estimateCircleRadius(kernel, edge, length);
     }
 
-    // Try to get start/end points if available.
+    // Vertex IDs via BRepGraph.
     try {
-      const params = kernel.curveParameters(edge);
-      if (params && params.first !== undefined && params.last !== undefined) {
-        const start = kernel.curvePointAtParam(edge, params.first);
-        const end = kernel.curvePointAtParam(edge, params.last);
-        if (start) entity.start_point = pointToTuple(start);
-        if (end) entity.end_point = pointToTuple(end);
+      const verts = kernel.graphEdgeVertices(i);
+      if (verts.length >= 2) {
+        entity.start_vertex = makeId('vertex', verts[0]);
+        entity.end_vertex = makeId('vertex', verts[1]);
       }
     } catch {
-      // If point extraction fails, continue without them.
+      // Vertex lookup failed, skip.
+    }
+
+    // Convexity for edges with exactly two faces.
+    try {
+      const faceIndices = kernel.graphEdgeFaces(i);
+      if (faceIndices.length === 2) {
+        const allFaces = kernel.getSubShapes(shape, 'face');
+        const fA = allFaces[faceIndices[0]];
+        const fB = allFaces[faceIndices[1]];
+        if (fA && fB) {
+          entity.convexity = computeEdgeConvexity(kernel, fA, fB, edge).convexity;
+        }
+      }
+    } catch {
+      // Convexity computation failed, skip.
+    }
+
+    // Endpoint coordinates via traditional TopoDS kernel methods.
+    try {
+      const edgeVertices = kernel.getSubShapes(edge, 'vertex');
+      if (edgeVertices.length >= 2) {
+        const startP = kernel.vertexPosition(edgeVertices[0]);
+        const endP = kernel.vertexPosition(edgeVertices[1]);
+        if (startP) entity.start_point = pointToTuple(startP);
+        if (endP) entity.end_point = pointToTuple(endP);
+      }
+    } catch {
+      // Endpoint extraction failed, skip.
     }
 
     entity.body_id =
@@ -189,10 +153,6 @@ function estimateCircleRadius(
   return undefined;
 }
 
-/**
- * Extract deterministic face entities from a STEP shape.
- * Each face gets a stable ID like "face:0", "face:1", etc.
- */
 export interface ExtractedFaceEntity {
   id: string;
   index: number;
@@ -207,11 +167,13 @@ export interface ExtractedFaceEntity {
     location: [number, number, number];
   };
   body_id?: string;
-  has_inner_wires?: boolean;
+  outer_edges?: string[];
+  inner_wires?: string[][];
   adjacent_faces?: Array<{
     face_id: string;
     surface_type: string;
     dihedral_angle_deg: number;
+    shared_edge?: string;
   }>;
   closest_face_distance?: {
     face_id: string;
@@ -224,6 +186,7 @@ export function extractFaceEntities(
   shape: ShapeHandle,
   bodyMap?: { faceBody: number[]; edgeBody: number[] },
 ): ExtractedFaceEntity[] {
+  kernel.graphBuild(shape);
   const faces = kernel.getSubShapes(shape, 'face');
   const entities: ExtractedFaceEntity[] = [];
 
@@ -244,31 +207,25 @@ export function extractFaceEntities(
       bbox_center: center,
     };
 
-    // Try to get surface normal at bbox_center (via UV surface parameters).
+    // Surface normal.
     try {
       const uv = kernel.uvFromPoint(face, { x: center[0], y: center[1], z: center[2] });
       if (uv) {
         const normal = kernel.surfaceNormal(face, uv.u, uv.v);
-        if (normal) {
-          entity.normal = pointToTuple(normal);
-        }
+        if (normal) entity.normal = pointToTuple(normal);
       }
     } catch {
-      // Normal extraction failed, continue without it.
+      // Normal extraction failed.
     }
 
-    // Try to get radius for cylindrical surfaces.
+    // Cylinder data.
     if (surfaceType === 'cylinder') {
       try {
         const cylData = kernel.getFaceCylinderData(face);
-        if (cylData && cylData.radius !== undefined) {
-          entity.radius = cylData.radius;
-        }
+        if (cylData && cylData.radius !== undefined) entity.radius = cylData.radius;
       } catch {
-        // Radius extraction failed, continue without it.
+        // ignore
       }
-
-      // Extract cylinder axis direction and location.
       try {
         const axisData = kernel.getFaceCylinderAxis(face);
         if (axisData) {
@@ -278,16 +235,31 @@ export function extractFaceEntities(
           };
         }
       } catch {
-        // Axis extraction failed, continue without it.
+        // ignore
       }
     }
 
-    // Check if face has inner wires (holes/openings in the face boundary).
+    // Wire topology via BRepGraph.
     try {
-      const wires = kernel.getSubShapes(face, 'wire');
-      entity.has_inner_wires = wires.length > 1;
+      const wireData = kernel.graphWireTopology(i);
+      let pos = 0;
+      const outerCount = wireData[pos++];
+      if (outerCount > 0) {
+        entity.outer_edges = [];
+        for (let o = 0; o < outerCount; o++) entity.outer_edges.push(makeId('edge', wireData[pos++]));
+      }
+      const innerCount = wireData[pos++];
+      if (innerCount > 0) {
+        entity.inner_wires = [];
+        for (let w = 0; w < innerCount; w++) {
+          const ec = wireData[pos++];
+          const wireEdges: string[] = [];
+          for (let e = 0; e < ec; e++) wireEdges.push(makeId('edge', wireData[pos++]));
+          entity.inner_wires.push(wireEdges);
+        }
+      }
     } catch {
-      entity.has_inner_wires = false;
+      // Wire topology extraction failed.
     }
 
     entity.body_id =

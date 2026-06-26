@@ -14,6 +14,7 @@ export interface BRepBody {
   dimensions: Dimensions;
   volume: number;
   surfaceArea: number;
+  centerOfMass?: { x: number; y: number; z: number };
 }
 
 export interface BRepEdgeStatistics {

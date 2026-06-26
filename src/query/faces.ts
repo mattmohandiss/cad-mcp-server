@@ -1,6 +1,6 @@
 import type { OcctKernel, ShapeHandle } from 'occt-wasm';
 import { type ExtractedFaceEntity } from '../kernel/query-entities.js';
-import { computeDihedralAngle } from '../kernel/aag-utils.js';
+import { computeEdgeConvexity } from '../kernel/aag-utils.js';
 import { normalizeVector, angleDegreesNormalized } from '../utils/vectors.js';
 import { withStepModel } from '../model-store.js';
 import {
@@ -32,12 +32,7 @@ export interface QueryFacesInput {
 
 export async function queryStepFaces(filePath: string, input: QueryFacesInput) {
   return withStepModel(filePath, async (model) => {
-    const includeBodyId = Boolean(
-      input.body_ids?.length ||
-      input.fields?.includes('body_id') ||
-      input.group_by?.includes('body_id'),
-    );
-    const allFaces = await model.getFaceEntities(includeBodyId);
+    const allFaces = await model.getFaceEntities();
     const { kernel, shape } = await model.getShapeContext('query_step_faces');
 
     let filtered = applyFaceFilters(allFaces, input);
@@ -99,6 +94,9 @@ export async function queryStepFaces(filePath: string, input: QueryFacesInput) {
   });
 }
 
+/**
+ * Build adjacency data for paginated faces using BRepGraph reverse indices.
+ */
 function buildFaceAdjacencies(
   kernel: OcctKernel,
   shape: ShapeHandle,
@@ -106,35 +104,63 @@ function buildFaceAdjacencies(
   paginated: ExtractedFaceEntity[],
   fields: QueryFacesInput['fields'],
 ):
-  | Map<string, Array<{ face_id: string; surface_type: string; dihedral_angle_deg: number }>>
+  | Map<
+      string,
+      Array<{
+        face_id: string;
+        surface_type: string;
+        dihedral_angle_deg: number;
+        shared_edge?: string;
+        convexity?: string;
+      }>
+    >
   | undefined {
   if (!fields?.includes('adjacent_faces')) return undefined;
 
   const result = new Map<
     string,
-    Array<{ face_id: string; surface_type: string; dihedral_angle_deg: number }>
+    Array<{
+      face_id: string;
+      surface_type: string;
+      dihedral_angle_deg: number;
+      shared_edge?: string;
+      convexity?: string;
+    }>
   >();
 
   for (const face of paginated) {
     const idx = face.index;
     const faceShape = faceShapes[idx];
-    const adjacent = kernel.adjacentFaces(shape, faceShape);
+    const adjData = kernel.graphFaceAdjacency(idx);
     const entries: Array<{
       face_id: string;
       surface_type: string;
       dihedral_angle_deg: number;
+      shared_edge?: string;
+      convexity?: string;
     }> = [];
 
-    for (const adjFace of adjacent) {
-      const adjIdx = faceShapes.findIndex((s) => kernel.isSame(s, adjFace));
-      if (adjIdx === -1) continue;
-      const sharedEdges = kernel.sharedEdges(faceShape, adjFace);
-      if (sharedEdges.length === 0) continue;
+    // adjData encoding: [adjFace0, sharedEdge0, adjFace1, sharedEdge1, ...]
+    for (let a = 0; a + 1 < adjData.length; a += 2) {
+      const adjIdx = adjData[a];
+      const sharedEdgeIdx = adjData[a + 1];
+      if (adjIdx < 0 || adjIdx >= faceShapes.length) continue;
+
+      const adjFaceShape = faceShapes[adjIdx];
+      const sharedEdgeShape =
+        sharedEdgeIdx >= 0 ? kernel.getSubShapes(shape, 'edge')[sharedEdgeIdx] : undefined;
+
+      const sharedEdgeId = sharedEdgeIdx >= 0 ? `edge:${sharedEdgeIdx}` : undefined;
+      const conv = sharedEdgeShape
+        ? computeEdgeConvexity(kernel, faceShape, adjFaceShape, sharedEdgeShape)
+        : { dihedral_angle_deg: 0, convexity: 'smooth' as const };
 
       entries.push({
         face_id: `face:${adjIdx}`,
-        surface_type: kernel.surfaceType(adjFace),
-        dihedral_angle_deg: computeDihedralAngle(kernel, faceShape, adjFace, sharedEdges[0]),
+        surface_type: kernel.surfaceType(adjFaceShape),
+        dihedral_angle_deg: conv.dihedral_angle_deg,
+        shared_edge: sharedEdgeId,
+        convexity: conv.convexity,
       });
     }
 
@@ -293,8 +319,11 @@ function projectFace(
   face: ExtractedFaceEntity,
   fields: QueryFacesInput['fields'],
 ): Record<string, unknown> {
-  const selected = fields ?? ['id', 'surface_type', 'area', 'bbox', 'bbox_center'];
+  const selected = fields ?? ['id', 'surface_type', 'area', 'bbox', 'bbox_center', 'body_id'];
   const result: Record<string, unknown> = {};
+
+  // Always surface body_id when available (even if not explicitly requested).
+  if (face.body_id !== undefined) result.body_id = face.body_id;
 
   for (const field of selected) {
     switch (field) {
@@ -332,10 +361,16 @@ function projectFace(
           result.closest_face_distance = face.closest_face_distance;
         break;
       case 'has_inner_wires':
-        if (face.has_inner_wires !== undefined) result.has_inner_wires = face.has_inner_wires;
+        if (face.inner_wires !== undefined) result.has_inner_wires = face.inner_wires.length > 0;
         break;
       case 'body_id':
-        if (face.body_id !== undefined) result.body_id = face.body_id;
+        // Already surfaced above; no-op.
+        break;
+      case 'outer_edges':
+        if (face.outer_edges !== undefined) result.outer_edges = face.outer_edges;
+        break;
+      case 'inner_wires':
+        if (face.inner_wires !== undefined) result.inner_wires = face.inner_wires;
         break;
     }
   }

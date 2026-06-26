@@ -7,6 +7,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import {
   handleCompareStepFiles,
+  handleFindCylindricalFeatures,
   handleFindStepEdges,
   handleFindStepFaces,
   handleGetStepEntities,
@@ -177,6 +178,23 @@ registerTool(
   withErrorContext('query_step_pmi', async (args) => {
     const query = args as Record<string, unknown>;
     return jsonToolResult(await handleQueryStepPmi(String(query.file_path), query as never));
+  }),
+);
+
+registerTool(
+  'find_cylindrical_features',
+  {
+    title: 'Find Cylindrical Features',
+    description:
+      'Group coaxial cylindrical faces into candidate hole, boss, and shaft features. Classifies through vs blind where possible via ray intersection. Returns feature candidates with diameter, axis, and entity references. All features are inferred from B-rep geometry — not original CAD feature history. Threads and non-cylindrical holes are not detected.',
+    inputSchema: stepToolSchemas.findCylindricalFeatures,
+    outputSchema: stepToolOutputSchemas.findCylindricalFeatures,
+  },
+  withErrorContext('find_cylindrical_features', async (args) => {
+    const query = args as Record<string, unknown>;
+    return jsonToolResult(
+      await handleFindCylindricalFeatures(String(query.file_path), query as never),
+    );
   }),
 );
 

@@ -50,11 +50,9 @@ class LoadedStepModel {
 
   private stepTextPromise?: Promise<string>;
   private shapePromise?: Promise<ShapeContext>;
-  private bodyMap?: { faceBody: number[]; edgeBody: number[] };
+  private bodyMapPromise?: Promise<{ faceBody: number[]; edgeBody: number[] }>;
   private faceEntities?: ExtractedFaceEntity[];
-  private faceEntitiesWithBody?: ExtractedFaceEntity[];
   private edgeEntities?: ExtractedEdgeEntity[];
-  private edgeEntitiesWithBody?: ExtractedEdgeEntity[];
   private brepPromise?: Promise<BRepModel>;
   private semanticPromise?: Promise<SemanticModel>;
   private pmiPromise?: Promise<{ pmi_entities: PmiEntity[] }>;
@@ -75,36 +73,33 @@ class LoadedStepModel {
     return this.shapePromise;
   }
 
-  async getFaceEntities(includeBodyId: boolean): Promise<ExtractedFaceEntity[]> {
+  async getFaceEntities(): Promise<ExtractedFaceEntity[]> {
     this.lastAccess = Date.now();
-    if (includeBodyId) {
-      this.faceEntitiesWithBody ??= extractFaceEntities(
-        ...(await this.shapeAndBodyMap('query_step_faces')),
-      );
-      return this.faceEntitiesWithBody;
-    }
-
     if (!this.faceEntities) {
       const { kernel, shape } = await this.getShapeContext('query_step_faces');
-      this.faceEntities = extractFaceEntities(kernel, shape);
+      const bodyMap = await this.getBodyMap();
+      this.faceEntities = extractFaceEntities(kernel, shape, bodyMap);
     }
     return this.faceEntities;
   }
 
-  async getEdgeEntities(includeBodyId: boolean): Promise<ExtractedEdgeEntity[]> {
+  async getEdgeEntities(): Promise<ExtractedEdgeEntity[]> {
     this.lastAccess = Date.now();
-    if (includeBodyId) {
-      this.edgeEntitiesWithBody ??= extractEdgeEntities(
-        ...(await this.shapeAndBodyMap('query_step_edges')),
-      );
-      return this.edgeEntitiesWithBody;
-    }
-
     if (!this.edgeEntities) {
       const { kernel, shape } = await this.getShapeContext('query_step_edges');
-      this.edgeEntities = extractEdgeEntities(kernel, shape);
+      const bodyMap = await this.getBodyMap();
+      this.edgeEntities = extractEdgeEntities(kernel, shape, bodyMap);
     }
     return this.edgeEntities;
+  }
+
+  private async getBodyMap(): Promise<{ faceBody: number[]; edgeBody: number[] }> {
+    if (!this.bodyMapPromise) {
+      this.bodyMapPromise = this.getShapeContext('BRepGraph body map').then(
+        ({ kernel, shape }) => buildBodyMap(kernel, shape),
+      );
+    }
+    return this.bodyMapPromise;
   }
 
   async getBRepModel(): Promise<BRepModel> {
@@ -166,14 +161,6 @@ class LoadedStepModel {
     return this.stepTextPromise;
   }
 
-  private async shapeAndBodyMap(
-    action: string,
-  ): Promise<[OcctKernel, ShapeHandle, { faceBody: number[]; edgeBody: number[] }]> {
-    const { kernel, shape } = await this.getShapeContext(action);
-    this.bodyMap ??= buildBodyMap(kernel, shape);
-    return [kernel, shape, this.bodyMap];
-  }
-
   private async buildBRepModel(): Promise<BRepModel> {
     const { kernel, shape } = await this.getShapeContext('STEP import');
     const boundingBox = toBoundingBox(kernel, shape);
@@ -183,6 +170,12 @@ class LoadedStepModel {
     const bodyShapes = solids.length ? solids : [shape];
     const bodies = bodyShapes.map((body, index): BRepBody => {
       const bodyBox = bodyShapes.length === 1 ? boundingBox : toBoundingBox(kernel, body);
+      let centerOfMass: { x: number; y: number; z: number } | undefined;
+      try {
+        centerOfMass = kernel.getCenterOfMass(body);
+      } catch {
+        // Center of mass may fail for non-manifold or wireframe shapes.
+      }
       return {
         id: makeId('body', index),
         index,
@@ -190,6 +183,7 @@ class LoadedStepModel {
         dimensions: getDimensions(bodyBox),
         volume: kernel.getVolume(body),
         surfaceArea: kernel.getSurfaceArea(body),
+        centerOfMass,
       };
     });
 

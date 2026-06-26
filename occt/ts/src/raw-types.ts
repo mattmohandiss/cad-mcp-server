@@ -212,7 +212,21 @@ export interface OcctRawKernel {
     getLength(id: number): number;
     getCenterOfMass(id: number): EmbindVectorF64;
     getInertia(id: number): EmbindVectorF64;
+    getPrincipalProperties(id: number): EmbindVectorF64;
+    getOrientedBoundingBox(id: number): EmbindVectorF64;
     containsPoint(id: number, x: number, y: number, z: number, tolerance: number): boolean;
+    hasFreeEdges(id: number): boolean;
+    freeEdgeCount(id: number): number;
+    shapeContents(id: number): EmbindVectorF64;
+    rayIntersect(id: number, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number): EmbindVectorF64;
+
+    // BRepGraph
+    graphBuild(id: number): void;
+    graphBodyMap(): EmbindVectorI32;
+    graphFaceAdjacency(faceIdx: number): EmbindVectorI32;
+    graphEdgeFaces(edgeIdx: number): EmbindVectorI32;
+    graphWireTopology(faceIdx: number): EmbindVectorI32;
+    graphEdgeVertices(edgeIdx: number): EmbindVectorI32;
     getSurfaceCenterOfMass(faceId: number): EmbindVectorF64;
     getLinearCenterOfMass(id: number): EmbindVectorF64;
     surfaceCurvature(faceId: number, u: number, v: number): EmbindVectorF64;

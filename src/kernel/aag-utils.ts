@@ -1,17 +1,23 @@
 import type { OcctKernel, ShapeHandle, Vec3 } from 'occt-wasm';
 
+export type EdgeVexity = 'convex' | 'concave' | 'smooth';
+
 /**
- * Compute the dihedral angle (in degrees) between two faces along a shared edge.
- * Returns the signed angle where positive indicates the faces open toward each
- * other (convex crease) and negative indicates they fold inward (concave crease).
- * LLM should interpret the magnitude and sign for engineering meaning.
+ * Compute the dihedral angle and edge convexity between two faces along a
+ * shared edge. The convexity classification is deterministic — it derives
+ * from the sign of the cross-product dot product (floating-point epsilon
+ * only guards against exact tangency noise).
+ *
+ *   dot > 0.05  → convex   (faces open away from each other)
+ *   dot < -0.05 → concave  (faces fold toward each other)
+ *   else        → smooth   (tangent/near-tangent)
  */
-export function computeDihedralAngle(
+export function computeEdgeConvexity(
   kernel: OcctKernel,
   faceA: ShapeHandle,
   faceB: ShapeHandle,
   sharedEdge: ShapeHandle,
-): number {
+): { dihedral_angle_deg: number; convexity: EdgeVexity } {
   try {
     const params = kernel.curveParameters(sharedEdge);
     const midParam = (params.first + params.last) / 2;
@@ -30,7 +36,7 @@ export function computeDihedralAngle(
     const nB: Vec3 = { x: normalB.x, y: normalB.y, z: normalB.z };
 
     const taLen = magnitude(ta);
-    if (taLen < 1e-12) return 0;
+    if (taLen < 1e-12) return { dihedral_angle_deg: 0, convexity: 'smooth' };
 
     const tHat = { x: ta.x / taLen, y: ta.y / taLen, z: ta.z / taLen };
     const cA = normalize(cross(nA, tHat));
@@ -39,9 +45,16 @@ export function computeDihedralAngle(
     const dot = dotProduct(cA, cB);
     const clamped = Math.max(-1, Math.min(1, dot));
     const angleRad = Math.acos(clamped);
-    return angleRad * (180 / Math.PI);
+    const dihedral_angle_deg = angleRad * (180 / Math.PI);
+
+    let convexity: EdgeVexity;
+    if (dot > 0.05) convexity = 'convex';
+    else if (dot < -0.05) convexity = 'concave';
+    else convexity = 'smooth';
+
+    return { dihedral_angle_deg, convexity };
   } catch {
-    return 0;
+    return { dihedral_angle_deg: 0, convexity: 'smooth' };
   }
 }
 

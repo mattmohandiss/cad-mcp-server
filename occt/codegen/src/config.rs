@@ -2352,6 +2352,206 @@ return result;",
         category: "query",
         return_type: ReturnType::VectorDouble,
     },
+    MethodSpec {
+        name: "getPrincipalProperties",
+        kind: MethodKind::CustomBody,
+        params: &[FacadeParam::ShapeId("id")],
+        occt_class: "",
+        ctor_args: "",
+        setup_code: "\
+const auto& shape = get(id);
+GProp_GProps props;
+BRepGProp::VolumeProperties(shape, props);
+GProp_PrincipalProps p = props.PrincipalProperties();
+double ix, iy, iz;
+p.Moments(ix, iy, iz);
+const gp_Vec& ax1 = p.FirstAxisOfInertia();
+const gp_Vec& ax2 = p.SecondAxisOfInertia();
+const gp_Vec& ax3 = p.ThirdAxisOfInertia();
+return {ix, iy, iz,
+        ax1.X(), ax1.Y(), ax1.Z(),
+        ax2.X(), ax2.Y(), ax2.Z(),
+        ax3.X(), ax3.Y(), ax3.Z()};",
+        includes: &["BRepGProp.hxx", "GProp_GProps.hxx", "GProp_PrincipalProps.hxx"],
+        category: "query",
+        return_type: ReturnType::VectorDouble,
+    },
+    MethodSpec {
+        name: "getOrientedBoundingBox",
+        kind: MethodKind::CustomBody,
+        params: &[FacadeParam::ShapeId("id")],
+        occt_class: "",
+        ctor_args: "",
+        setup_code: "\
+const auto& shape = get(id);
+Bnd_OBB obb;
+BRepBndLib::AddOBB(shape, obb);
+gp_Pnt c = obb.Center();
+gp_Dir xd = obb.XDirection();
+gp_Dir yd = obb.YDirection();
+gp_Dir zd = obb.ZDirection();
+return {c.X(), c.Y(), c.Z(),
+        obb.XHSize(), obb.YHSize(), obb.ZHSize(),
+        xd.X(), xd.Y(), xd.Z(),
+        yd.X(), yd.Y(), yd.Z(),
+        zd.X(), zd.Y(), zd.Z()};",
+        includes: &["Bnd_OBB.hxx", "BRepBndLib.hxx", "gp_Dir.hxx"],
+        category: "query",
+        return_type: ReturnType::VectorDouble,
+    },
+    MethodSpec {
+        name: "hasFreeEdges",
+        kind: MethodKind::CustomBody,
+        params: &[FacadeParam::ShapeId("id")],
+        occt_class: "",
+        ctor_args: "",
+          setup_code: "\
+const auto& shape = get(id);
+auto checkShell = [](const TopoDS_Shell& shell) -> bool {
+  ShapeAnalysis_Shell sa;
+  sa.CheckOrientedShells(shell, true);
+  return sa.HasFreeEdges();
+};
+if (shape.ShapeType() == TopAbs_SHELL) return checkShell(TopoDS::Shell(shape));
+if (shape.ShapeType() == TopAbs_SOLID) {
+  TopoDS_Shell sh;
+  for (TopExp_Explorer ex(shape, TopAbs_SHELL); ex.More(); ex.Next()) {
+    sh = TopoDS::Shell(ex.Current()); break;
+  }
+  return checkShell(sh);
+}
+if (shape.ShapeType() == TopAbs_COMPSOLID || shape.ShapeType() == TopAbs_COMPOUND) {
+  for (TopExp_Explorer ex(shape, TopAbs_SOLID); ex.More(); ex.Next()) {
+    TopoDS_Shell sh;
+    for (TopExp_Explorer ex2(ex.Current(), TopAbs_SHELL); ex2.More(); ex2.Next()) {
+      sh = TopoDS::Shell(ex2.Current()); break;
+    }
+    if (checkShell(sh)) return true;
+  }
+  for (TopExp_Explorer ex(shape, TopAbs_SHELL); ex.More(); ex.Next())
+    if (checkShell(TopoDS::Shell(ex.Current()))) return true;
+}
+return false;",
+        includes: &["ShapeAnalysis_Shell.hxx", "TopoDS.hxx", "TopAbs_ShapeEnum.hxx", "TopExp_Explorer.hxx"],
+        category: "query",
+        return_type: ReturnType::Bool,
+    },
+    MethodSpec {
+        name: "freeEdgeCount",
+        kind: MethodKind::CustomBody,
+        params: &[FacadeParam::ShapeId("id")],
+        occt_class: "",
+        ctor_args: "",
+          setup_code: "\
+const auto& shape = get(id);
+auto countFreeEdges = [](const TopoDS_Shell& shell) -> int {
+  ShapeAnalysis_Shell sa;
+  sa.CheckOrientedShells(shell, true);
+  if (!sa.HasFreeEdges()) return 0;
+  TopoDS_Compound freeEdges = sa.FreeEdges();
+  int c = 0;
+  for (TopExp_Explorer ex(freeEdges, TopAbs_EDGE); ex.More(); ex.Next()) c++;
+  return c;
+};
+auto firstShell = [](const TopoDS_Shape& sh) -> TopoDS_Shell {
+  for (TopExp_Explorer ex(sh, TopAbs_SHELL); ex.More(); ex.Next())
+    return TopoDS::Shell(ex.Current());
+  return TopoDS_Shell();
+};
+int total = 0;
+if (shape.ShapeType() == TopAbs_SHELL) total += countFreeEdges(TopoDS::Shell(shape));
+if (shape.ShapeType() == TopAbs_SOLID) total += countFreeEdges(firstShell(shape));
+for (TopExp_Explorer ex(shape, TopAbs_SOLID); ex.More(); ex.Next())
+  total += countFreeEdges(firstShell(ex.Current()));
+for (TopExp_Explorer ex(shape, TopAbs_SHELL); ex.More(); ex.Next())
+  total += countFreeEdges(TopoDS::Shell(ex.Current()));
+return total;",
+        includes: &["ShapeAnalysis_Shell.hxx", "TopoDS.hxx", "TopAbs_ShapeEnum.hxx", "TopExp_Explorer.hxx"],
+        category: "query",
+        return_type: ReturnType::Int,
+    },
+    MethodSpec {
+        name: "rayIntersect",
+        kind: MethodKind::Skip,
+        params: &[],
+        occt_class: "",
+        ctor_args: "",
+        setup_code: "",
+        includes: &[],
+        category: "query",
+        return_type: ReturnType::VectorDouble,
+    },
+    MethodSpec {
+        name: "shapeContents",
+        kind: MethodKind::CustomBody,
+        params: &[FacadeParam::ShapeId("id")],
+        occt_class: "",
+        ctor_args: "",
+        setup_code: "\
+const auto& shape = get(id);
+ShapeAnalysis_ShapeContents c;
+c.Perform(shape);
+return {static_cast<double>(c.NbFaces()),
+        static_cast<double>(c.NbEdges()),
+        static_cast<double>(c.NbFreeFaces()),
+        static_cast<double>(c.NbFreeWires()),
+        static_cast<double>(c.NbFreeEdges()),
+        static_cast<double>(c.NbC0Surfaces()),
+        static_cast<double>(c.NbBSplibeSurf()),
+        static_cast<double>(c.NbOffsetSurf())};",
+        includes: &["ShapeAnalysis_ShapeContents.hxx"],
+        category: "query",
+        return_type: ReturnType::VectorDouble,
+    },
+    // ── BRepGraph topology queries ─────────────────────────────────
+    MethodSpec {
+        name: "graphBuild",
+        kind: MethodKind::Skip,
+        params: &[],
+        occt_class: "", ctor_args: "", setup_code: "", includes: &[],
+        category: "query",
+        return_type: ReturnType::Void,
+    },
+    MethodSpec {
+        name: "graphBodyMap",
+        kind: MethodKind::Skip,
+        params: &[],
+        occt_class: "", ctor_args: "", setup_code: "", includes: &[],
+        category: "query",
+        return_type: ReturnType::VectorInt,
+    },
+    MethodSpec {
+        name: "graphFaceAdjacency",
+        kind: MethodKind::Skip,
+        params: &[],
+        occt_class: "", ctor_args: "", setup_code: "", includes: &[],
+        category: "query",
+        return_type: ReturnType::VectorInt,
+    },
+    MethodSpec {
+        name: "graphEdgeFaces",
+        kind: MethodKind::Skip,
+        params: &[],
+        occt_class: "", ctor_args: "", setup_code: "", includes: &[],
+        category: "query",
+        return_type: ReturnType::VectorInt,
+    },
+    MethodSpec {
+        name: "graphWireTopology",
+        kind: MethodKind::Skip,
+        params: &[],
+        occt_class: "", ctor_args: "", setup_code: "", includes: &[],
+        category: "query",
+        return_type: ReturnType::VectorInt,
+    },
+    MethodSpec {
+        name: "graphEdgeVertices",
+        kind: MethodKind::Skip,
+        params: &[],
+        occt_class: "", ctor_args: "", setup_code: "", includes: &[],
+        category: "query",
+        return_type: ReturnType::VectorInt,
+    },
     // ── Healing ──────────────────────────────────────────────────
     MethodSpec {
         name: "fixShape",

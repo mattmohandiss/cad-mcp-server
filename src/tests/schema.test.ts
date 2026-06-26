@@ -9,6 +9,7 @@ describe('public tool schema contract', () => {
   it('defines the approved public STEP tool schemas', () => {
     expect(Object.keys(stepToolSchemas).sort()).toEqual([
       'compareStepFiles',
+      'findCylindricalFeatures',
       'findStepEdges',
       'findStepFaces',
       'getStepEntities',
