@@ -931,6 +931,23 @@ export class OcctKernel {
         );
     }
 
+    /** Check if two axes are coaxial using OCCT's gp_Ax1::IsCoaxial. */
+    areAxesCoaxial(
+      axis1Dir: Vec3, axis1Loc: Vec3,
+      axis2Dir: Vec3, axis2Loc: Vec3,
+      angTol: number, linTol: number,
+    ): boolean {
+        return wrap("areAxesCoaxial", () =>
+            this.#raw.areAxesCoaxial(
+                axis1Dir.x, axis1Dir.y, axis1Dir.z,
+                axis1Loc.x, axis1Loc.y, axis1Loc.z,
+                axis2Dir.x, axis2Dir.y, axis2Dir.z,
+                axis2Loc.x, axis2Loc.y, axis2Loc.z,
+                angTol, linTol,
+            ),
+        );
+    }
+
     /**
      * Fire a ray from origin in direction and return all face intersections
      * sorted by distance. Each hit: [faceHash, distance, x, y, z, u, v].
@@ -1174,6 +1191,11 @@ export class OcctKernel {
 
     curveType(edge: ShapeHandle): CurveKind {
         return wrap("curveType", () => this.#raw.curveType(edge) as CurveKind);
+    }
+
+    /** Return the radius of a circular edge from Geom_Circle geometry, or -1 if not a circle. */
+    edgeCircleRadius(edge: ShapeHandle): number {
+        return wrap("edgeCircleRadius", () => this.#raw.edgeCircleRadius(edge));
     }
 
     curvePointAtParam(edge: ShapeHandle, param: number): Vec3 {

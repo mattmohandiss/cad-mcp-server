@@ -201,6 +201,13 @@ class OcctKernel {
     int freeEdgeCount(uint32_t id);
     std::vector<double> shapeContents(uint32_t id);
 
+    // --- Geometry Utilities ---
+    bool areAxesCoaxial(double ax1x, double ax1y, double ax1z,
+                        double al1x, double al1y, double al1z,
+                        double ax2x, double ax2y, double ax2z,
+                        double al2x, double al2y, double al2z,
+                        double angTol, double linTol);
+
     // --- Ray Intersection ---
     std::vector<double> rayIntersect(uint32_t id, double ox, double oy, double oz,
                                      double dx, double dy, double dz);
@@ -215,6 +222,7 @@ class OcctKernel {
 
     // --- Curve ops ---
     std::string curveType(uint32_t edgeId);
+    double edgeCircleRadius(uint32_t edgeId);
     std::vector<double> curvePointAtParam(uint32_t edgeId, double param);
     std::vector<double> curveTangent(uint32_t edgeId, double param);
     std::vector<double> curveParameters(uint32_t edgeId);

@@ -2552,6 +2552,44 @@ return {static_cast<double>(c.NbFaces()),
         category: "query",
         return_type: ReturnType::VectorInt,
     },
+    MethodSpec {
+        name: "areAxesCoaxial",
+        kind: MethodKind::CustomBody,
+        params: &[
+            FacadeParam::Double("ax1x"), FacadeParam::Double("ax1y"), FacadeParam::Double("ax1z"),
+            FacadeParam::Double("al1x"), FacadeParam::Double("al1y"), FacadeParam::Double("al1z"),
+            FacadeParam::Double("ax2x"), FacadeParam::Double("ax2y"), FacadeParam::Double("ax2z"),
+            FacadeParam::Double("al2x"), FacadeParam::Double("al2y"), FacadeParam::Double("al2z"),
+            FacadeParam::Double("angTol"), FacadeParam::Double("linTol"),
+        ],
+        occt_class: "",
+        ctor_args: "",
+        setup_code: "\
+gp_Ax1 a1(gp_Pnt(al1x, al1y, al1z), gp_Dir(ax1x, ax1y, ax1z));
+gp_Ax1 a2(gp_Pnt(al2x, al2y, al2z), gp_Dir(ax2x, ax2y, ax2z));
+return a1.IsCoaxial(a2, angTol, linTol);",
+        includes: &["gp_Ax1.hxx", "gp_Pnt.hxx", "gp_Dir.hxx"],
+        category: "query",
+        return_type: ReturnType::Bool,
+    },
+    MethodSpec {
+        name: "edgeCircleRadius",
+        kind: MethodKind::CustomBody,
+        params: &[FacadeParam::ShapeId("edgeId")],
+        occt_class: "",
+        ctor_args: "",
+        setup_code: "\
+const auto& edge = TopoDS::Edge(get(edgeId));
+double first, last;
+Handle(Geom_Curve) curve = BRep_Tool::Curve(edge, first, last);
+if (curve.IsNull()) return -1.0;
+Handle(Geom_Circle) circle = Handle(Geom_Circle)::DownCast(curve);
+if (circle.IsNull()) return -1.0;
+return circle->Radius();",
+        includes: &["BRep_Tool.hxx", "Geom_Circle.hxx", "TopoDS_Edge.hxx", "TopoDS.hxx"],
+        category: "curve",
+        return_type: ReturnType::Double,
+    },
     // ── Healing ──────────────────────────────────────────────────
     MethodSpec {
         name: "fixShape",

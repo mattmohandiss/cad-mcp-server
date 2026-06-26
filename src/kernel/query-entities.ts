@@ -87,7 +87,8 @@ export function extractEdgeEntities(
     };
 
     if (curveType === 'circle') {
-      entity.radius = estimateCircleRadius(kernel, edge, length);
+      entity.radius = kernel.edgeCircleRadius(edge);
+      if (entity.radius! < 0) entity.radius = undefined;
     }
 
     // Vertex IDs via BRepGraph.
@@ -136,21 +137,6 @@ export function extractEdgeEntities(
   }
 
   return entities;
-}
-
-function estimateCircleRadius(
-  kernel: OcctKernel,
-  edge: ShapeHandle,
-  length: number,
-): number | undefined {
-  try {
-    const params = kernel.curveParameters(edge);
-    const span = Math.abs(params.last - params.first);
-    if (span > 1e-9) return length / span;
-  } catch {
-    // OCCT could not surface curve parameters; radius is unavailable.
-  }
-  return undefined;
 }
 
 export interface ExtractedFaceEntity {

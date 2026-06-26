@@ -218,6 +218,13 @@ export interface OcctRawKernel {
     hasFreeEdges(id: number): boolean;
     freeEdgeCount(id: number): number;
     shapeContents(id: number): EmbindVectorF64;
+    areAxesCoaxial(
+      ax1x: number, ax1y: number, ax1z: number,
+      al1x: number, al1y: number, al1z: number,
+      ax2x: number, ax2y: number, ax2z: number,
+      al2x: number, al2y: number, al2z: number,
+      angTol: number, linTol: number,
+    ): boolean;
     rayIntersect(id: number, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number): EmbindVectorF64;
 
     // BRepGraph
@@ -246,6 +253,7 @@ export interface OcctRawKernel {
 
     // Curves
     curveType(edgeId: number): string;
+    edgeCircleRadius(edgeId: number): number;
     curvePointAtParam(edgeId: number, param: number): EmbindVectorF64;
     curveTangent(edgeId: number, param: number): EmbindVectorF64;
     curveParameters(edgeId: number): EmbindVectorF64;

@@ -24,10 +24,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include <BRepAdaptor_Surface.hxx>
-#include <BRepClass_FaceClassifier.hxx>
-#include <GeomAPI_IntCS.hxx>
-#include <Geom_Line.hxx>
+#include <IntCurvesFace_ShapeIntersector.hxx>
 
 #include <BRepGraph.hxx>
 #include <BRepGraph_Builder.hxx>
@@ -309,55 +306,31 @@ int EdgeData::getEdgeGroupsPtr() const {
     return static_cast<int>(reinterpret_cast<uintptr_t>(edgeGroups));
 }
 
-// --- Ray intersection ---
+// --- Ray intersection (OCCT native IntCurvesFace_ShapeIntersector) ---
 
 std::vector<double> OcctKernel::rayIntersect(uint32_t id, double ox, double oy, double oz,
                                              double dx, double dy, double dz) {
     const auto& shape = get(id);
-    Handle(Geom_Line) line = new Geom_Line(gp_Pnt(ox, oy, oz), gp_Dir(dx, dy, dz));
-    const double dirLen = std::sqrt(dx * dx + dy * dy + dz * dz);
-    if (dirLen < 1e-12) return {};
+    IntCurvesFace_ShapeIntersector intersector;
+    intersector.Load(shape, Precision::Confusion());
+    intersector.PerformNearest(gp_Lin(gp_Pnt(ox, oy, oz), gp_Dir(dx, dy, dz)),
+                              0.0, RealLast());
 
+    // Result format per hit: [faceHash, distance, point_x, point_y, point_z, u, v]
+    // faceHash uses the same modulo as kernel.hashCode for cross-call stability.
     std::vector<double> results;
-
-    for (TopExp_Explorer ex(shape, TopAbs_FACE); ex.More(); ex.Next()) {
-        const TopoDS_Face& face = TopoDS::Face(ex.Current());
-        Handle(Geom_Surface) surf = BRep_Tool::Surface(face);
-        if (surf.IsNull()) continue;
-
-        GeomAPI_IntCS intersector(line, surf);
-        if (!intersector.IsDone()) continue;
-
-        for (int i = 1; i <= intersector.NbPoints(); i++) {
-            gp_Pnt pt = intersector.Point(i);
-            double u = 0, v = 0, w = 0;
-            intersector.Parameters(i, u, v, w);
-
-            BRepClass_FaceClassifier classifier(face, gp_Pnt2d(u, v), 1e-7);
-            if (classifier.State() == TopAbs_OUT) continue;
-
-            double dist = pt.Distance(gp_Pnt(ox, oy, oz));
-            int faceHash = static_cast<int>(TopTools_ShapeMapHasher{}(face) % 2147483647);
-            results.push_back(static_cast<double>(faceHash));
-            results.push_back(dist);
-            results.push_back(pt.X());
-            results.push_back(pt.Y());
-            results.push_back(pt.Z());
-            results.push_back(u);
-            results.push_back(v);
-        }
+    const int HASH_BOUND = 1 << 30;
+    for (int i = 1; i <= intersector.NbPnt(); i++) {
+        int faceHash = static_cast<int>(
+            TopTools_ShapeMapHasher{}(intersector.Face(i)) % HASH_BOUND);
+        results.push_back(static_cast<double>(faceHash));
+        results.push_back(intersector.WParameter(i));
+        results.push_back(intersector.Pnt(i).X());
+        results.push_back(intersector.Pnt(i).Y());
+        results.push_back(intersector.Pnt(i).Z());
+        results.push_back(intersector.UParameter(i));
+        results.push_back(intersector.VParameter(i));
     }
-
-    const int stride = 7;
-    for (size_t i = 0; i + stride <= results.size(); i += stride) {
-        for (size_t j = i + stride; j + stride <= results.size(); j += stride) {
-            if (results[j + 1] < results[i + 1]) {
-                for (int k = 0; k < stride; k++)
-                    std::swap(results[i + k], results[j + k]);
-            }
-        }
-    }
-
     return results;
 }
 

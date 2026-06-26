@@ -1,7 +1,7 @@
 import type { OcctKernel, ShapeHandle, Vec3 } from 'occt-wasm';
 import type { ExtractedFaceEntity } from '../kernel/query-entities.js';
 import { withStepModel } from '../model-store.js';
-import { normalizeVector, angleDegreesNormalized } from '../utils/vectors.js';
+import { normalizeVector } from '../utils/vectors.js';
 import { createPagination, createQueryResponse } from './shared.js';
 import { resolveRayHits } from '../kernel/ray-utils.js';
 
@@ -67,24 +67,16 @@ export async function findCoaxialCylinders(filePath: string, input: QueryFeature
 
       let matched = false;
       for (const group of groups) {
-        const ang = angleDegreesNormalized(dir, group.axisDir);
-        if (Math.min(ang, 180 - ang) >= axisTol) continue;
+        const axis1Dir: Vec3 = { x: group.axisDir[0], y: group.axisDir[1], z: group.axisDir[2] };
+        const axis1Loc: Vec3 = {
+          x: group.axisLoc[0],
+          y: group.axisLoc[1],
+          z: group.axisLoc[2],
+        };
+        const axis2Dir: Vec3 = { x: dir[0], y: dir[1], z: dir[2] };
+        const axis2Loc: Vec3 = { x: loc[0], y: loc[1], z: loc[2] };
 
-        // Check axis collinearity.
-        const toLoc = [
-          loc[0] - group.axisLoc[0],
-          loc[1] - group.axisLoc[1],
-          loc[2] - group.axisLoc[2],
-        ];
-        const projLen = Math.abs(
-          toLoc[0] * group.axisDir[0] + toLoc[1] * group.axisDir[1] + toLoc[2] * group.axisDir[2],
-        );
-        const perp = Math.sqrt(
-          (toLoc[0] - projLen * group.axisDir[0]) ** 2 +
-            (toLoc[1] - projLen * group.axisDir[1]) ** 2 +
-            (toLoc[2] - projLen * group.axisDir[2]) ** 2,
-        );
-        if (perp < mergeTol) {
+        if (kernel.areAxesCoaxial(axis1Dir, axis1Loc, axis2Dir, axis2Loc, axisTol, mergeTol)) {
           group.faces.push(face);
           matched = true;
           break;
