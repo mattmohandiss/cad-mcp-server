@@ -12,6 +12,7 @@ import {
   handleFindStepFaces,
   handleGetStepEntities,
   handleInspectStepFile,
+  handleMeasureDistance,
   handleQueryRayIntersect,
   handleQueryStepPmi,
   stepToolOutputSchemas,
@@ -194,6 +195,21 @@ registerTool(
   withErrorContext('query_ray_intersect', async (args) => {
     const query = args as Record<string, unknown>;
     return jsonToolResult(await handleQueryRayIntersect(String(query.file_path), query as never));
+  }),
+);
+
+registerTool(
+  'measure_distance',
+  {
+    title: 'Measure Distance',
+    description:
+      'Measure the minimum distance between two entities (faces, edges, or bodies). Returns distance in mm. Use for clearance checks, interference detection, and fit verification.',
+    inputSchema: stepToolSchemas.measureDistance,
+    outputSchema: stepToolOutputSchemas.measureDistance,
+  },
+  withErrorContext('measure_distance', async (args) => {
+    const query = args as Record<string, unknown>;
+    return jsonToolResult(await handleMeasureDistance(String(query.file_path), query as never));
   }),
 );
 

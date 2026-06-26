@@ -26,6 +26,7 @@ export interface QueryFacesInput {
   group_by?: string[];
   sort?: { by: string; direction?: 'asc' | 'desc' };
   return_type?: 'summary' | 'entities' | 'groups';
+  pull_direction?: number[];
   limit?: number;
   offset?: number;
 }
@@ -68,7 +69,7 @@ export async function queryStepFaces(filePath: string, input: QueryFacesInput) {
       ...(closestDistances ? { closest_face_distance: closestDistances.get(face.id) } : {}),
     }));
 
-    const entities = augmentedFaces.map((face) => projectFace(face, input.fields));
+    const entities = augmentedFaces.map((face) => projectFace(face, input.fields, input.pull_direction));
     const pagination = createPagination(limit, offset, paginated.length, total_matched);
 
     return createQueryResponse(
@@ -318,12 +319,30 @@ function sortFaces(
 function projectFace(
   face: ExtractedFaceEntity,
   fields: QueryFacesInput['fields'],
+  pullDirection?: number[],
 ): Record<string, unknown> {
   const selected = fields ?? ['id', 'surface_type', 'area', 'bbox', 'bbox_center', 'body_id'];
   const result: Record<string, unknown> = {};
 
   // Always surface body_id when available (even if not explicitly requested).
   if (face.body_id !== undefined) result.body_id = face.body_id;
+
+  // Compute draft angle when pull direction is provided.
+  if (pullDirection && face.normal) {
+    const pullLen = Math.sqrt(
+      pullDirection[0] ** 2 + pullDirection[1] ** 2 + pullDirection[2] ** 2,
+    );
+    if (pullLen > 0) {
+      const dot =
+        (face.normal[0] * pullDirection[0] +
+          face.normal[1] * pullDirection[1] +
+          face.normal[2] * pullDirection[2]) /
+        pullLen;
+      const clampedDot = Math.max(-1, Math.min(1, dot));
+      const angleDeg = (Math.acos(clampedDot) * 180) / Math.PI;
+      result.draft_angle_deg = 90 - angleDeg;
+    }
+  }
 
   for (const field of selected) {
     switch (field) {

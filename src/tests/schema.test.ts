@@ -14,6 +14,7 @@ describe('public tool schema contract', () => {
       'findStepFaces',
       'getStepEntities',
       'inspectStepFile',
+      'measureDistance',
       'queryRayIntersect',
       'queryStepPmi',
     ]);
