@@ -172,11 +172,6 @@ fn group_by_category<'a>(methods: &[&'a MethodSpec]) -> Vec<(&'a str, Vec<&'a Me
     groups
 }
 
-/// Emit static helper functions that generated methods depend on.
-fn emit_helper_functions(_buf: &mut String, _methods: &[&MethodSpec]) {
-    // No helpers currently needed after stripping evolution/projection/XCAF.
-}
-
 /// Generate the contents of `facade/generated/kernel.cpp`.
 #[allow(clippy::too_many_lines)]
 pub fn emit_kernel(methods: &[&MethodSpec]) -> String {
@@ -211,9 +206,6 @@ pub fn emit_kernel(methods: &[&MethodSpec]) -> String {
     let _ = writeln!(buf, "#include <string>");
     let _ = writeln!(buf, "#include <vector>");
     let _ = writeln!(buf);
-
-    // Emit helper functions needed by generated methods.
-    emit_helper_functions(&mut buf, methods);
 
     // Methods grouped by category.
     let groups = group_by_category(methods);

@@ -35,7 +35,7 @@ export async function getStepEntitiesDirect(filePath: string, input: PublicGetSt
       },
       [],
       [],
-      []
+      [],
     );
   });
 }
@@ -48,7 +48,7 @@ function projectFaces(
   kernel: OcctKernel,
   shape: ShapeHandle,
   ids: string[],
-  fields: string[]
+  fields: string[],
 ): Array<Record<string, unknown>> {
   const faces = kernel.getSubShapes(shape, 'face');
   return ids.map((id) => {
@@ -136,7 +136,7 @@ function projectEdges(
   kernel: OcctKernel,
   shape: ShapeHandle,
   ids: string[],
-  fields: string[]
+  fields: string[],
 ): Array<Record<string, unknown>> {
   const edges = kernel.getSubShapes(shape, 'edge');
   return ids.map((id) => {
@@ -175,7 +175,7 @@ function projectEdges(
             const params = kernel.curveParameters(edge);
             const point = kernel.curvePointAtParam(
               edge,
-              field === 'start_point' ? params.first : params.last
+              field === 'start_point' ? params.first : params.last,
             );
             result[field] = [point.x, point.y, point.z];
           } catch {
@@ -209,21 +209,14 @@ function edgeRadius(kernel: OcctKernel, edge: ShapeHandle): number | undefined {
     const span = Math.abs(params.last - params.first);
     if (span > 1e-9) return length / span;
   } catch {
-    // Fall back to bounding-box diameter below.
+    // OCCT could not surface curve parameters; radius is unavailable.
   }
-
-  const bbox = bboxToTuple(kernel, edge);
-  const diameter = Math.max(
-    bbox.max[0] - bbox.min[0],
-    bbox.max[1] - bbox.min[1],
-    bbox.max[2] - bbox.min[2]
-  );
-  return diameter > 0 ? diameter / 2 : undefined;
+  return undefined;
 }
 
 function bboxToTuple(
   kernel: OcctKernel,
-  shape: ShapeHandle
+  shape: ShapeHandle,
 ): { min: [number, number, number]; max: [number, number, number] } {
   const bbox = kernel.getBoundingBox(shape, false);
   return {

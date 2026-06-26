@@ -57,7 +57,7 @@ export async function parseStepMetadata(filePath: string): Promise<ParsedStepMet
   const schema = matchFirst(header, /FILE_SCHEMA\s*\(\s*\(\s*'([^']+)'/i);
   const authoringSystem = matchFirst(
     header,
-    /FILE_NAME\s*\([^;]*?\((?:[^']*'[^']*')*[^)]*\)\s*,\s*'([^']*)'/is
+    /FILE_NAME\s*\([^;]*?\((?:[^']*'[^']*')*[^)]*\)\s*,\s*'([^']*)'/is,
   );
   const productNames = uniqueMatches(text, /PRODUCT\s*\(\s*'([^']*)'/gi).slice(0, 50);
   const pmiKeywords = PMI_KEYWORDS.filter((keyword) => text.toUpperCase().includes(keyword));
@@ -72,7 +72,7 @@ export async function parseStepMetadata(filePath: string): Promise<ParsedStepMet
 
   const toleranceEntityCount = TOLERANCE_ENTITIES.reduce(
     (sum, entity) => sum + (entityCounts[entity] ?? 0),
-    0
+    0,
   );
 
   const shapeRepresentationCount =

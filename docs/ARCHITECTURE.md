@@ -7,9 +7,9 @@ This project is a portable, read-only MCP server for deterministic STEP inspecti
 ```text
 MCP host
   -> src/index.ts tool registrations
-  -> src/tools/step-tools.ts adapters and handlers
-  -> src/cad/query/* services
-  -> src/cad/model-store.ts cached imported model
+  -> src/tools/step-tools.ts handlers
+  -> src/query/* services
+  -> src/model-store.ts cached imported model
   -> occt-wasm + lightweight STEP text parsers
 ```
 
@@ -44,7 +44,7 @@ Full-model adjacency is not part of default inspection. Local adjacency is compu
 
 - `occt-wasm` handles STEP import, topology traversal, geometry measurements, and local adjacency helpers.
 - Lightweight STEP parsers handle metadata and PMI hints.
-- Tool handlers adapt public MCP schemas into internal query shapes.
+- Tool handlers pass validated public query params directly to query services.
 - Query services return factual JSON; the LLM interprets engineering meaning.
 
 ## Non-Goals
@@ -61,4 +61,4 @@ Possible future extensions should remain behind the same tool/service boundary:
 
 - Lazy/columnar face and edge extraction for faster first broad queries.
 - Optional explicit topology graph tool if full adjacency workflows become necessary.
-- Native OCCT/XDE sidecar for deeper assembly names, colors, PMI, or large-model performance.
+- OCCT XDE reader path (`STEPCAFControl_Reader` + `XCAFDoc_*Tool`) for assembly names, colors, GD&T-to-face links, and validation properties.

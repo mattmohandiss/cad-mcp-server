@@ -110,7 +110,7 @@ export function groupEntities<T extends { id: string }>(
   dimensions: string[],
   keyOf: (entity: T, dimension: string) => unknown,
   sampleLimit: number,
-  summarize?: (members: T[]) => Record<string, unknown>
+  summarize?: (members: T[]) => Record<string, unknown>,
 ): ComputedGroup[] {
   const buckets = new Map<string, { key: Record<string, unknown>; members: T[] }>();
 
@@ -153,7 +153,7 @@ export function groupEntities<T extends { id: string }>(
 
 export function normalizePagination(
   limit: number | undefined,
-  offset: number | undefined
+  offset: number | undefined,
 ): { limit: number; offset: number } {
   return {
     limit: limit ?? DEFAULT_QUERY_LIMITS.limit,
@@ -165,7 +165,7 @@ export function createPagination(
   limit: number,
   offset: number,
   returned: number,
-  total_matched: number
+  total_matched: number,
 ): StepQueryPagination {
   return {
     limit,
@@ -200,7 +200,7 @@ export function createQueryResponse<T extends Record<string, unknown>>(
   statistics?: Record<string, unknown>,
   groups: ComputedGroup[] = [],
   warnings: unknown[] = [],
-  limitations: unknown[] = []
+  limitations: unknown[] = [],
 ): StepQueryResponse<T> {
   return {
     schema_version: CAD_RESPONSE_SCHEMA_VERSION,
@@ -230,7 +230,7 @@ export function createQueryResponse<T extends Record<string, unknown>>(
  */
 export function sampleEntityIds(
   entity_ids: string[],
-  sample_limit: number
+  sample_limit: number,
 ): { sampled: string[]; is_complete: boolean } {
   if (sample_limit <= 0) {
     return { sampled: [], is_complete: entity_ids.length === 0 };

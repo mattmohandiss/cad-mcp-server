@@ -8,7 +8,6 @@ target/
 node_modules/
 
 # C++ / CMake build
-occt/
 facade/generated/
 *.o
 *.a

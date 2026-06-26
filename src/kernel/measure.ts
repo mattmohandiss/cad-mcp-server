@@ -17,11 +17,3 @@ export function getDimensions(boundingBox: BoundingBox): Dimensions {
     depth: boundingBox.max.z - boundingBox.min.z,
   };
 }
-
-export function guessShapeClass(dimensions: Dimensions): 'box' | 'cylindrical' | 'complex' {
-  const { width, height, depth } = dimensions;
-
-  if (width > height * 2 || width > depth * 2) return 'box';
-  if (Math.abs(height - depth) < Math.max(height, depth) * 0.2) return 'cylindrical';
-  return 'complex';
-}

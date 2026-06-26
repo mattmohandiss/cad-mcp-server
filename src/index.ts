@@ -15,10 +15,11 @@ import {
   stepToolOutputSchemas,
   stepToolSchemas,
 } from './tools/step-tools.js';
+import { CAD_MCP_SERVER_VERSION } from './schema-version.js';
 
 const server = new McpServer({
   name: 'cad-mcp-server',
-  version: '0.1.0',
+  version: CAD_MCP_SERVER_VERSION,
 });
 
 type ToolResponse<T> =
@@ -69,14 +70,14 @@ type RegisterTool = (
     inputSchema: Record<string, z.ZodType>;
     outputSchema?: Record<string, z.ZodType> | z.ZodTypeAny;
   },
-  callback: (args: Record<string, unknown>) => StepToolResult
+  callback: (args: Record<string, unknown>) => StepToolResult,
 ) => unknown;
 
 const registerTool = server.registerTool.bind(server) as RegisterTool;
 
 function withErrorContext(
   toolName: string,
-  handler: (args: Record<string, unknown>) => StepToolResult
+  handler: (args: Record<string, unknown>) => StepToolResult,
 ) {
   return async (args: Record<string, unknown>) => {
     try {
@@ -98,8 +99,8 @@ registerTool(
     outputSchema: stepToolOutputSchemas.inspectStepFile,
   },
   withErrorContext('inspect_step_file', async ({ file_path }) =>
-    jsonToolResult(await handleInspectStepFile(String(file_path)))
-  )
+    jsonToolResult(await handleInspectStepFile(String(file_path))),
+  ),
 );
 
 registerTool(
@@ -114,7 +115,7 @@ registerTool(
   withErrorContext('find_step_faces', async (args) => {
     const query = args as Record<string, unknown>;
     return jsonToolResult(await handleFindStepFaces(String(query.file_path), query as never));
-  })
+  }),
 );
 
 registerTool(
@@ -129,7 +130,7 @@ registerTool(
   withErrorContext('find_step_edges', async (args) => {
     const query = args as Record<string, unknown>;
     return jsonToolResult(await handleFindStepEdges(String(query.file_path), query as never));
-  })
+  }),
 );
 
 registerTool(
@@ -144,7 +145,7 @@ registerTool(
   withErrorContext('get_step_entities', async (args) => {
     const query = args as Record<string, unknown>;
     return jsonToolResult(await handleGetStepEntities(String(query.file_path), query as never));
-  })
+  }),
 );
 
 registerTool(
@@ -159,9 +160,9 @@ registerTool(
   withErrorContext('compare_step_files', async (args) => {
     const { baseline_file_path, comparison_file_path } = args as Record<string, string>;
     return jsonToolResult(
-      await handleCompareStepFiles(String(baseline_file_path), String(comparison_file_path))
+      await handleCompareStepFiles(String(baseline_file_path), String(comparison_file_path)),
     );
-  })
+  }),
 );
 
 registerTool(
@@ -176,7 +177,7 @@ registerTool(
   withErrorContext('query_step_pmi', async (args) => {
     const query = args as Record<string, unknown>;
     return jsonToolResult(await handleQueryStepPmi(String(query.file_path), query as never));
-  })
+  }),
 );
 
 async function main() {

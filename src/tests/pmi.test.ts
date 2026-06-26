@@ -52,7 +52,7 @@ END-ISO-10303-21;
         pmi_types: ['geometric_tolerance'],
         tolerance_subtypes: ['position'],
         value_max: 0.1,
-      })
+      }),
     );
     expect(filtered.data.schema_version).toBe('0.4');
     const entities = filtered.data.entities as Array<Record<string, unknown>>;
@@ -64,7 +64,7 @@ END-ISO-10303-21;
       await handleQueryStepPmi(filePath, {
         return_type: 'groups',
         group_by: ['type'],
-      })
+      }),
     );
     const groups = grouped.data.groups as Array<Record<string, unknown>>;
     expect(groups.map((group) => (group.key as Record<string, unknown>).type).sort()).toEqual([
@@ -86,7 +86,7 @@ END-ISO-10303-21;
   it('rejects invalid PMI value ranges', async () => {
     const filePath = await writeStepText("ISO-10303-21;\nDATA;\n#1=PRODUCT('x');\nENDSEC;");
     const result = expectFailure(
-      await handleQueryStepPmi(filePath, { value_min: 1, value_max: 0.5 })
+      await handleQueryStepPmi(filePath, { value_min: 1, value_max: 0.5 }),
     );
 
     expect(result.error.type).toBe('invalid_input');

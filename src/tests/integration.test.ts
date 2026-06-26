@@ -61,7 +61,7 @@ describe('CAD MCP factual integration smoke tests', () => {
         surface_types: ['plane'],
         fields: ['id', 'surface_type', 'bbox_center', 'adjacent_faces', 'has_inner_wires'],
         limit: 10,
-      })
+      }),
     );
     const entitiesData = entitiesResult.data;
     expect(entitiesData.schema_version).toBe('0.4');
@@ -73,24 +73,26 @@ describe('CAD MCP factual integration smoke tests', () => {
     expect(faces[0].has_inner_wires).toBeDefined();
     const adjacent = faces[0].adjacent_faces as Array<Record<string, unknown>>;
     expect(adjacent.length).toBeGreaterThan(0);
-    expect(adjacent[0].vexity).toBeUndefined();
     expect(adjacent[0].dihedral_angle_deg).toBeTypeOf('number');
+    expect(adjacent[0].vexity).toBeUndefined();
 
     const groupsResult = expectSuccess(
       await handleFindStepFaces(NIST_FILE, {
         return_type: 'groups',
         group_by: ['surface_type'],
-      })
+      }),
     );
     const groups = groupsResult.data.groups as Array<Record<string, unknown>>;
     expect((groupsResult.data.entities as unknown[]).length).toBe(0);
     expect(groups.length).toBeGreaterThan(0);
 
     const summaryResult = expectSuccess(
-      await handleFindStepFaces(NIST_FILE, { return_type: 'summary' })
+      await handleFindStepFaces(NIST_FILE, { return_type: 'summary' }),
     );
     expect((summaryResult.data.entities as unknown[]).length).toBe(0);
-    expect((summaryResult.data.statistics as Record<string, unknown>).total_faces).toBeGreaterThan(0);
+    expect((summaryResult.data.statistics as Record<string, unknown>).total_faces).toBeGreaterThan(
+      0,
+    );
   });
 
   it('finds edges with filters, projections, grouping, and sorting', async () => {
@@ -99,7 +101,7 @@ describe('CAD MCP factual integration smoke tests', () => {
         fields: ['id', 'curve_type', 'length', 'bbox_center', 'adjacent_faces'],
         sort: { by: 'length', direction: 'asc' },
         limit: 12,
-      })
+      }),
     );
     expect(entitiesResult.data.schema_version).toBe('0.4');
     const edges = entitiesResult.data.entities as Array<Record<string, unknown>>;
@@ -112,7 +114,7 @@ describe('CAD MCP factual integration smoke tests', () => {
       await handleFindStepEdges(NIST_FILE, {
         return_type: 'groups',
         group_by: ['length_range'],
-      })
+      }),
     );
     const groups = groupsResult.data.groups as Array<Record<string, unknown>>;
     expect(groups.length).toBeGreaterThan(0);
@@ -125,7 +127,7 @@ describe('CAD MCP factual integration smoke tests', () => {
         curve_types: ['circle'],
         fields: ['id', 'curve_type', 'radius'],
         limit: 5,
-      })
+      }),
     );
     const edges = found.data.entities as Array<Record<string, unknown>>;
     expect(edges.length).toBeGreaterThan(0);
@@ -138,16 +140,14 @@ describe('CAD MCP factual integration smoke tests', () => {
         entity_type: 'edge',
         entity_ids: [edges[0].id as string],
         fields: ['id', 'curve_type', 'radius'],
-      })
+      }),
     );
     const exactEdges = exact.data.entities as Array<Record<string, unknown>>;
     expect(exactEdges[0].radius).toBeTypeOf('number');
   });
 
   it('gets exact known STEP entities by ID', async () => {
-    const found = expectSuccess(
-      await handleFindStepFaces(NIST_FILE, { fields: ['id'], limit: 1 })
-    );
+    const found = expectSuccess(await handleFindStepFaces(NIST_FILE, { fields: ['id'], limit: 1 }));
     const firstFace = (found.data.entities as Array<Record<string, unknown>>)[0];
 
     const result = expectSuccess(
@@ -155,7 +155,7 @@ describe('CAD MCP factual integration smoke tests', () => {
         entity_type: 'face',
         entity_ids: [firstFace.id as string],
         fields: ['id', 'area', 'bbox_center'],
-      })
+      }),
     );
     expect(result.data.schema_version).toBe('0.4');
     const entities = result.data.entities as Array<Record<string, unknown>>;
@@ -171,7 +171,7 @@ describe('CAD MCP factual integration smoke tests', () => {
         entity_type: 'face',
         entity_ids: ['face:999'],
         fields: ['id', 'area'],
-      })
+      }),
     );
 
     expect(result.error.type).toBe('invalid_input');
@@ -186,17 +186,73 @@ describe('CAD MCP factual integration smoke tests', () => {
     expect(deltas.inferenceCount).toBeUndefined();
   });
 
+  it('compares two different STEP files and reports non-zero deltas', async () => {
+    const ap242File = path.join(
+      process.cwd(),
+      'samples',
+      'NIST-PMI-STEP-Files',
+      'nist_ftc_08_asme1_ap242-e2.stp',
+    );
+
+    const result = expectSuccess(await handleCompareStepFiles(NIST_FILE, ap242File));
+    const deltas = result.data.deltas as Record<string, unknown>;
+    const dimensions = deltas.dimensions as Record<string, number>;
+    const anyNonZero =
+      dimensions.width !== 0 ||
+      dimensions.height !== 0 ||
+      dimensions.depth !== 0 ||
+      deltas.volume !== 0 ||
+      deltas.surfaceArea !== 0;
+    expect(anyNonZero).toBe(true);
+  });
+
+  it('omits surface_parameters for non-cylindrical faces', async () => {
+    const result = expectSuccess(
+      await handleFindStepFaces(NIST_FILE, {
+        surface_types: ['plane'],
+        fields: ['id', 'surface_type', 'surface_parameters'],
+        limit: 5,
+      }),
+    );
+    const faces = result.data.entities as Array<Record<string, unknown>>;
+    expect(faces.length).toBeGreaterThan(0);
+    for (const face of faces) {
+      expect(face.surface_parameters).toBeUndefined();
+    }
+  });
+
+  it('PMI statistics reflect filtered counts, not totals', async () => {
+    const pmiFile = path.join(
+      process.cwd(),
+      'samples',
+      'NIST-PMI-STEP-Files',
+      'nist_ftc_08_asme1_ap242-e2.stp',
+    );
+
+    const all = expectSuccess(await handleQueryStepPmi(pmiFile, { return_type: 'summary' }));
+    const tolerances = expectSuccess(
+      await handleQueryStepPmi(pmiFile, {
+        pmi_types: ['geometric_tolerance'],
+        return_type: 'summary',
+      }),
+    );
+
+    const allStats = all.data.statistics as Record<string, number>;
+    const tolStats = tolerances.data.statistics as Record<string, number>;
+    expect(tolStats.matched_pmi).toBeLessThan(allStats.total_pmi);
+    expect(tolStats.geometric_tolerance).toBe(tolStats.matched_pmi);
+    expect(tolStats.dimension ?? 0).toBe(0);
+  });
+
   it('queries PMI from an AP242 STEP file', async () => {
     const pmiFile = path.join(
       process.cwd(),
       'samples',
       'NIST-PMI-STEP-Files',
-      'nist_ftc_08_asme1_ap242-e2.stp'
+      'nist_ftc_08_asme1_ap242-e2.stp',
     );
 
-    const summary = expectSuccess(
-      await handleQueryStepPmi(pmiFile, { return_type: 'summary' })
-    );
+    const summary = expectSuccess(await handleQueryStepPmi(pmiFile, { return_type: 'summary' }));
     expect(summary.data.schema_version).toBe('0.4');
     expect((summary.data.statistics as Record<string, unknown>).total_pmi).toBeGreaterThan(0);
 
@@ -204,7 +260,7 @@ describe('CAD MCP factual integration smoke tests', () => {
       await handleQueryStepPmi(pmiFile, {
         pmi_types: ['geometric_tolerance'],
         limit: 5,
-      })
+      }),
     );
     const items = entities.data.entities as Array<Record<string, unknown>>;
     expect(items.length).toBeGreaterThan(0);

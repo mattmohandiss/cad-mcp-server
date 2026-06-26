@@ -1,4 +1,5 @@
 import { readStepText } from '../kernel/import.js';
+import { CAD_RESPONSE_SCHEMA_VERSION } from '../schema-version.js';
 
 /* ------------------------------------------------------------------ */
 /*  STEP entity parser (lightweight, PMI-focused)                     */
@@ -123,7 +124,7 @@ function skipWhitespace(text: string, start: number): number {
     (text[i] === ' ' || text[i] === '\t' || text[i] === '\n' || text[i] === '\r')
   )
     i++;
-  return i; // unused, mutating i in place via loop
+  return i;
 }
 
 function parseString(text: string, start: number): { value: string; end: number } {
@@ -250,16 +251,17 @@ export type PmiExtractedEntity =
 
 function categorizePmiEntity(
   entity: RawStepEntity,
-  params: StepParam[]
+  params: StepParam[],
+  entityMap: Map<number, RawStepEntity>,
 ): PmiExtractedEntity | null {
   const upperType = entity.type.toUpperCase();
 
   if (GEOMETRIC_TOLERANCE_TYPES.has(upperType)) {
-    return extractGeometricTolerance(entity, params, upperType);
+    return extractGeometricTolerance(entity, params, upperType, entityMap);
   }
 
   if (DIMENSION_TYPES.has(upperType)) {
-    return extractDimension(entity, params, upperType);
+    return extractDimension(entity, params, upperType, entityMap);
   }
 
   if (DATUM_TYPES.has(upperType)) {
@@ -278,17 +280,20 @@ function categorizePmiEntity(
 function extractGeometricTolerance(
   entity: RawStepEntity,
   params: StepParam[],
-  upperType: string
+  upperType: string,
+  entityMap: Map<number, RawStepEntity>,
 ): PmiToleranceEntity {
   const toleranceType = toleranceTypeName(upperType);
-  const value = findNumberParam(params, 1) ?? findToleranceValueRef(entity.id, params);
+  const value =
+    findNumberParam(params, 1) ??
+    findAnyNumberParam(params) ??
+    findValueFromToleranceRef(params, entityMap);
   const refs: number[] = [];
   const matCond = findEnumParam(
     params,
-    upperType === 'POSITION_TOLERANCE' || params.length >= 4 ? 3 : 2
+    upperType === 'POSITION_TOLERANCE' || params.length >= 4 ? 3 : 2,
   );
 
-  // Collect entity references from parameters (they are SHAPE_ASPECT refs).
   for (const p of params) {
     if (p.kind === 'ref') refs.push(p.value);
     if (p.kind === 'list') {
@@ -308,16 +313,33 @@ function extractGeometricTolerance(
   };
 }
 
-function findToleranceValueRef(entityId: number, params: StepParam[]): number | null {
-  // A tolerance value might be stored in a separate TOLERANCE_VALUE entity
-  // referenced from the geometric tolerance params. In practice it's usually
-  // inline as a numeric param in position 2.
+function findAnyNumberParam(params: StepParam[]): number | null {
   for (const p of params) {
     if (p.kind === 'number') return p.value;
     if (p.kind === 'list') {
       for (const item of p.value) {
         if (item.kind === 'number') return item.value;
       }
+    }
+  }
+  return null;
+}
+
+function findValueFromToleranceRef(
+  params: StepParam[],
+  entityMap: Map<number, RawStepEntity>,
+): number | null {
+  for (const p of params) {
+    if (p.kind !== 'ref') continue;
+    const target = entityMap.get(p.value);
+    if (!target) continue;
+    if (!/^TOLERANCE_VALUE$|^PLUS_MINUS_TOLERANCE$/i.test(target.type)) continue;
+    try {
+      const targetParams = parseParams(target.raw);
+      const num = findAnyNumberParam(targetParams);
+      if (num !== null) return num;
+    } catch {
+      continue;
     }
   }
   return null;
@@ -350,10 +372,14 @@ function toleranceTypeName(upperType: string): string {
 function extractDimension(
   entity: RawStepEntity,
   params: StepParam[],
-  upperType: string
+  upperType: string,
+  entityMap: Map<number, RawStepEntity>,
 ): PmiDimensionEntity {
   const dimType = dimensionTypeName(upperType, params);
-  const value = findNumberParam(params, 1) ?? findNumberParam(params, 0);
+  const value =
+    findNumberParam(params, 1) ??
+    findNumberParam(params, 0) ??
+    findValueFromToleranceRef(params, entityMap);
   const refs: number[] = [];
   for (const p of params) {
     if (p.kind === 'ref') refs.push(p.value);
@@ -386,7 +412,7 @@ function dimensionTypeName(upperType: string, params: StepParam[]): string {
 function extractDatum(
   entity: RawStepEntity,
   params: StepParam[],
-  upperType: string
+  upperType: string,
 ): PmiDatumEntity {
   const label = findStringParam(params, 0);
 
@@ -408,7 +434,7 @@ function extractDatum(
 function extractAnnotation(
   entity: RawStepEntity,
   params: StepParam[],
-  upperType: string
+  upperType: string,
 ): PmiAnnotationEntity {
   const text = findStringParam(params, 0) ?? findStringParam(params, 1);
   const refs: number[] = [];
@@ -457,7 +483,7 @@ function findEnumParam(params: StepParam[], index: number): string | null {
 /* ------------------------------------------------------------------ */
 
 export interface PmiQueryResult {
-  schema_version: '0.4';
+  schema_version: typeof CAD_RESPONSE_SCHEMA_VERSION;
   file_path: string;
   pmi_entities: PmiExtractedEntity[];
   statistics: {
@@ -475,7 +501,7 @@ export async function extractPmiEntities(filePath: string): Promise<PmiQueryResu
   for (const entity of rawEntities.values()) {
     try {
       const params = parseParams(entity.raw);
-      const pmi = categorizePmiEntity(entity, params);
+      const pmi = categorizePmiEntity(entity, params, rawEntities);
       if (pmi) pmiEntities.push(pmi);
     } catch {
       // Skip unparseable entities.
@@ -488,7 +514,7 @@ export async function extractPmiEntities(filePath: string): Promise<PmiQueryResu
   }
 
   return {
-    schema_version: '0.4',
+    schema_version: CAD_RESPONSE_SCHEMA_VERSION,
     file_path: filePath,
     pmi_entities: pmiEntities,
     statistics: {

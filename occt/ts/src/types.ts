@@ -187,8 +187,6 @@ export interface MeshBatchData {
 export enum OcctErrorCode {
     /** Shape construction failed (Build()/IsDone() returned false). */
     ConstructionFailed = "CONSTRUCTION_FAILED",
-    /** Boolean operation failed (fuse/cut/common/intersect/section). */
-    BooleanFailed = "BOOLEAN_FAILED",
     /** Referenced shape ID does not exist in the arena. */
     InvalidShapeId = "INVALID_SHAPE_ID",
     /** Tessellation or meshing operation failed. */
@@ -211,15 +209,15 @@ export enum OcctErrorCode {
  * @example
  * ```ts
  * try {
- *   kernel.fuse(a, b);
+ *   kernel.translate(shape, dx, dy, dz);
  * } catch (e) {
  *   if (e instanceof OcctError) {
  *     switch (e.code) {
- *       case OcctErrorCode.BooleanFailed:
- *         // retry with simpler geometry
- *         break;
  *       case OcctErrorCode.InvalidShapeId:
  *         // shape was already released
+ *         break;
+ *       case OcctErrorCode.ConstructionFailed:
+ *         // build failed; check inputs
  *         break;
  *     }
  *   }
@@ -241,7 +239,6 @@ export class OcctError extends Error {
 }
 
 /** Operation categories used to infer error codes from context. */
-const BOOLEAN_OPS = new Set(["fuse", "cut", "common", "intersect", "section", "fuseAll", "cutAll", "split", "booleanPipeline"]);
 const TESSELLATION_OPS = new Set(["tessellate", "wireframe", "meshShape", "meshBatch"]);
 const IO_OPS = new Set(["importStep", "exportStep", "importStl", "exportStl", "toBREP", "fromBREP"]);
 const HEALING_OPS = new Set(["fixShape", "unifySameDomain", "healSolid", "healFace", "healWire", "fixFaceOrientations", "removeDegenerateEdges", "fixWireOnFace", "buildCurves3d"]);
@@ -253,21 +250,15 @@ const HEALING_OPS = new Set(["fixShape", "unifySameDomain", "healSolid", "healFa
 function classifyError(operation: string, message: string): OcctErrorCode {
     const msg = message.toLowerCase();
 
-    // Exact pattern matches from C++ facade
     if (msg.includes("invalid shape id")) return OcctErrorCode.InvalidShapeId;
-    if (msg.includes("boolean operation failed")) return OcctErrorCode.BooleanFailed;
     if (msg.includes("construction failed")) return OcctErrorCode.ConstructionFailed;
 
-    // Operation-category fallback
-    if (BOOLEAN_OPS.has(operation)) return OcctErrorCode.BooleanFailed;
     if (TESSELLATION_OPS.has(operation)) return OcctErrorCode.TessellationFailed;
     if (IO_OPS.has(operation)) return OcctErrorCode.ImportExportFailed;
     if (HEALING_OPS.has(operation)) return OcctErrorCode.HealingFailed;
 
-    // "operation failed" is the generic SetupShape/FilletLike pattern
     if (msg.includes("operation failed")) return OcctErrorCode.ConstructionFailed;
 
-    // Unmatched errors from known OCCT operations are Standard_Failure propagations
     if (operation) return OcctErrorCode.KernelError;
 
     return OcctErrorCode.Unknown;

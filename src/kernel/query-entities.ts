@@ -1,5 +1,6 @@
 import type { OcctKernel, ShapeHandle } from 'occt-wasm';
 import type { BoundingBox, Point3D } from '../types/schema.js';
+import { makeId } from '../utils/ids.js';
 import { toBoundingBox } from './measure.js';
 
 /**
@@ -40,7 +41,7 @@ function bboxCenter(bbox: BoundingBox): [number, number, number] {
  */
 export function buildBodyMap(
   kernel: OcctKernel,
-  shape: ShapeHandle
+  shape: ShapeHandle,
 ): { faceBody: number[]; edgeBody: number[] } {
   const bodies = kernel.getSubShapes(shape, 'solid');
   const allFaces = kernel.getSubShapes(shape, 'face');
@@ -48,12 +49,34 @@ export function buildBodyMap(
   const faceBody = new Array(allFaces.length).fill(-1);
   const edgeBody = new Array(allEdges.length).fill(-1);
 
+  const HASH_UPPER = 1 << 30;
+  const faceByHash = new Map<number, number[]>();
+  for (let i = 0; i < allFaces.length; i++) {
+    const h = kernel.hashCode(allFaces[i], HASH_UPPER);
+    const bucket = faceByHash.get(h);
+    if (bucket) bucket.push(i);
+    else faceByHash.set(h, [i]);
+  }
+  const edgeByHash = new Map<number, number[]>();
+  for (let i = 0; i < allEdges.length; i++) {
+    const h = kernel.hashCode(allEdges[i], HASH_UPPER);
+    const bucket = edgeByHash.get(h);
+    if (bucket) bucket.push(i);
+    else edgeByHash.set(h, [i]);
+  }
+
   for (let bi = 0; bi < bodies.length; bi++) {
     try {
       const bodyFaces = kernel.getSubShapes(bodies[bi], 'face');
       for (const bf of bodyFaces) {
-        const fi = allFaces.findIndex((f) => kernel.isSame(f, bf));
-        if (fi !== -1) faceBody[fi] = bi;
+        const candidates = faceByHash.get(kernel.hashCode(bf, HASH_UPPER));
+        if (!candidates) continue;
+        for (const fi of candidates) {
+          if (kernel.isSame(allFaces[fi], bf)) {
+            faceBody[fi] = bi;
+            break;
+          }
+        }
       }
     } catch {
       /* body may not expose faces */
@@ -61,8 +84,14 @@ export function buildBodyMap(
     try {
       const bodyEdges = kernel.getSubShapes(bodies[bi], 'edge');
       for (const be of bodyEdges) {
-        const ei = allEdges.findIndex((e) => kernel.isSame(e, be));
-        if (ei !== -1) edgeBody[ei] = bi;
+        const candidates = edgeByHash.get(kernel.hashCode(be, HASH_UPPER));
+        if (!candidates) continue;
+        for (const ei of candidates) {
+          if (kernel.isSame(allEdges[ei], be)) {
+            edgeBody[ei] = bi;
+            break;
+          }
+        }
       }
     } catch {
       /* body may not expose edges */
@@ -83,7 +112,7 @@ export interface ExtractedEdgeEntity {
   curve_type: string;
   length: number;
   bbox: { min: [number, number, number]; max: [number, number, number] };
-  center: [number, number, number];
+  bbox_center: [number, number, number];
   start_point?: [number, number, number];
   end_point?: [number, number, number];
   radius?: number;
@@ -97,7 +126,7 @@ export interface ExtractedEdgeEntity {
 export function extractEdgeEntities(
   kernel: OcctKernel,
   shape: ShapeHandle,
-  bodyMap?: { faceBody: number[]; edgeBody: number[] }
+  bodyMap?: { faceBody: number[]; edgeBody: number[] },
 ): ExtractedEdgeEntity[] {
   const edges = kernel.getSubShapes(shape, 'edge');
   const entities: ExtractedEdgeEntity[] = [];
@@ -111,16 +140,16 @@ export function extractEdgeEntities(
     const center = bboxCenter(brepBbox);
 
     const entity: ExtractedEdgeEntity = {
-      id: `edge:${i}`,
+      id: makeId('edge', i),
       index: i,
       curve_type: curveType,
       length,
       bbox,
-      center,
+      bbox_center: center,
     };
 
     if (curveType === 'circle') {
-      entity.radius = estimateCircleRadius(kernel, edge, length, bbox);
+      entity.radius = estimateCircleRadius(kernel, edge, length);
     }
 
     // Try to get start/end points if available.
@@ -137,7 +166,7 @@ export function extractEdgeEntities(
     }
 
     entity.body_id =
-      bodyMap && bodyMap.edgeBody[i] >= 0 ? `body:${bodyMap.edgeBody[i]}` : undefined;
+      bodyMap && bodyMap.edgeBody[i] >= 0 ? makeId('body', bodyMap.edgeBody[i]) : undefined;
 
     entities.push(entity);
   }
@@ -149,19 +178,15 @@ function estimateCircleRadius(
   kernel: OcctKernel,
   edge: ShapeHandle,
   length: number,
-  bbox: { min: [number, number, number]; max: [number, number, number] }
 ): number | undefined {
   try {
     const params = kernel.curveParameters(edge);
     const span = Math.abs(params.last - params.first);
     if (span > 1e-9) return length / span;
   } catch {
-    // Fall back to bounding-box diameter below.
+    // OCCT could not surface curve parameters; radius is unavailable.
   }
-
-  const extents = [bbox.max[0] - bbox.min[0], bbox.max[1] - bbox.min[1], bbox.max[2] - bbox.min[2]];
-  const diameter = Math.max(...extents);
-  return diameter > 0 ? diameter / 2 : undefined;
+  return undefined;
 }
 
 /**
@@ -174,7 +199,7 @@ export interface ExtractedFaceEntity {
   surface_type: string;
   area: number;
   bbox: { min: [number, number, number]; max: [number, number, number] };
-  center: [number, number, number];
+  bbox_center: [number, number, number];
   normal?: [number, number, number];
   radius?: number;
   axis?: {
@@ -197,7 +222,7 @@ export interface ExtractedFaceEntity {
 export function extractFaceEntities(
   kernel: OcctKernel,
   shape: ShapeHandle,
-  bodyMap?: { faceBody: number[]; edgeBody: number[] }
+  bodyMap?: { faceBody: number[]; edgeBody: number[] },
 ): ExtractedFaceEntity[] {
   const faces = kernel.getSubShapes(shape, 'face');
   const entities: ExtractedFaceEntity[] = [];
@@ -211,15 +236,15 @@ export function extractFaceEntities(
     const center = bboxCenter(brepBbox);
 
     const entity: ExtractedFaceEntity = {
-      id: `face:${i}`,
+      id: makeId('face', i),
       index: i,
       surface_type: surfaceType,
       area,
       bbox,
-      center,
+      bbox_center: center,
     };
 
-    // Try to get surface normal at center (via UV surface parameters).
+    // Try to get surface normal at bbox_center (via UV surface parameters).
     try {
       const uv = kernel.uvFromPoint(face, { x: center[0], y: center[1], z: center[2] });
       if (uv) {
@@ -266,7 +291,7 @@ export function extractFaceEntities(
     }
 
     entity.body_id =
-      bodyMap && bodyMap.faceBody[i] >= 0 ? `body:${bodyMap.faceBody[i]}` : undefined;
+      bodyMap && bodyMap.faceBody[i] >= 0 ? makeId('body', bodyMap.faceBody[i]) : undefined;
 
     entities.push(entity);
   }

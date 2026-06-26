@@ -33,22 +33,12 @@ export interface Provenance {
   method: 'measured' | 'derived' | 'heuristic' | 'ml' | 'semantic';
 }
 
-export interface Evidence {
-  confidence: number;
-  sourceIds: string[];
-  provider: string;
-  method: Provenance['method'];
-  explanation: string[];
-  limitations: string[];
-}
-
 export interface Warning {
   id: string;
   type: string;
   severity: 'info' | 'low' | 'medium' | 'high';
   message: string;
   sourceIds: string[];
-  evidence?: Evidence;
 }
 
 export interface Limitation {

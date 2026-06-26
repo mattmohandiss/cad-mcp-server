@@ -1,13 +1,17 @@
 import type { OcctKernel, ShapeHandle, Vec3 } from 'occt-wasm';
 
-export type EdgeVexity = 'convex' | 'concave' | 'smooth' | 'unknown';
-
-export function computeEdgeVexity(
+/**
+ * Compute the dihedral angle (in degrees) between two faces along a shared edge.
+ * Returns the signed angle where positive indicates the faces open toward each
+ * other (convex crease) and negative indicates they fold inward (concave crease).
+ * LLM should interpret the magnitude and sign for engineering meaning.
+ */
+export function computeDihedralAngle(
   kernel: OcctKernel,
   faceA: ShapeHandle,
   faceB: ShapeHandle,
-  sharedEdge: ShapeHandle
-): { vexity: EdgeVexity; dihedralAngleDeg: number } {
+  sharedEdge: ShapeHandle,
+): number {
   try {
     const params = kernel.curveParameters(sharedEdge);
     const midParam = (params.first + params.last) / 2;
@@ -26,24 +30,18 @@ export function computeEdgeVexity(
     const nB: Vec3 = { x: normalB.x, y: normalB.y, z: normalB.z };
 
     const taLen = magnitude(ta);
-    if (taLen < 1e-12) {
-      return { vexity: 'unknown', dihedralAngleDeg: 0 };
-    }
-    const tHat = { x: ta.x / taLen, y: ta.y / taLen, z: ta.z / taLen };
+    if (taLen < 1e-12) return 0;
 
+    const tHat = { x: ta.x / taLen, y: ta.y / taLen, z: ta.z / taLen };
     const cA = normalize(cross(nA, tHat));
     const cB = normalize(cross(nB, tHat));
 
     const dot = dotProduct(cA, cB);
     const clamped = Math.max(-1, Math.min(1, dot));
     const angleRad = Math.acos(clamped);
-    const dihedralAngleDeg = angleRad * (180 / Math.PI);
-
-    if (dot > 0.05) return { vexity: 'convex', dihedralAngleDeg };
-    if (dot < -0.05) return { vexity: 'concave', dihedralAngleDeg };
-    return { vexity: 'smooth', dihedralAngleDeg };
+    return angleRad * (180 / Math.PI);
   } catch {
-    return { vexity: 'unknown', dihedralAngleDeg: 0 };
+    return 0;
   }
 }
 
