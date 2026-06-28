@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [dev, main]
+    branches: [main]
     tags: ['v*']
 
 # Auto-cancel superseded runs for the same ref (PR or branch).
