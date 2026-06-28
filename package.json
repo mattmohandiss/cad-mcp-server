@@ -111,7 +111,7 @@
     "@ai-sdk/mcp": "^2.0.3",
     "@eslint/js": "^10.0.1",
     "@openrouter/ai-sdk-provider": "^6.0.0-alpha.1",
-    "@types/node": "^24.10.0",
+    "@types/node": "^26.0.1",
     "@typescript-eslint/eslint-plugin": "^8.61.0",
     "@typescript-eslint/parser": "^8.61.0",
     "ai": "^7.0.4",
