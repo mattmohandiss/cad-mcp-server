@@ -17,10 +17,13 @@ Local-first, read-only MCP server for STEP CAD inspection. Returns factual geome
 | `just dev` | Build and run server locally |
 | `just test` | Run test suite (vitest) |
 | `just lint` | TypeScript typecheck, ESLint, Prettier |
+| `just fmt` | Format source files with Prettier |
+| `just check` | Run lint + test (pre-commit) |
 | `just build` | Build optimized WASM kernel + npm tarball |
-| `just clean` | Remove generated artifacts and dependencies |
+| `just clean` | Remove generated artifacts, deps, eval logs |
+| `just check-clean` | Verify no build artifacts remain (pre-PR) |
 
-Direct npm equivalents: `npm test`, `npm run build`, `npm run lint`, `npm run typecheck`, `npm run fmt`.
+Direct npm equivalents: `npm test`, `npm run build`, `npm run lint`, `npm run typecheck`, `npx prettier --write`.
 
 ## Code Conventions
 

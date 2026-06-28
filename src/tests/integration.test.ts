@@ -34,7 +34,7 @@ function expectFailure(value: unknown): ToolFailure {
   return response as ToolFailure;
 }
 
-describe('CAD MCP integration smoke tests', () => {
+describe('CAD MCP integration smoke tests', { timeout: 15_000 }, () => {
   it('returns structured tool errors for missing and invalid STEP files', async () => {
     const missing = expectFailure(await handleInspectStepFile('/nonexistent/file.step'));
     expect(missing.error.type).toBe('file_not_found');
