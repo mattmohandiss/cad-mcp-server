@@ -11,17 +11,20 @@ Local-first, read-only MCP server for STEP CAD inspection. Returns factual geome
 
 ## Common Commands
 
-| Command | Purpose |
-|---------|---------|
-| `just setup` | Install dependencies |
-| `just dev` | Build and run server locally |
-| `just test` | Run test suite (vitest) |
-| `just lint` | TypeScript typecheck, ESLint, Prettier |
-| `just fmt` | Format source files with Prettier |
-| `just check` | Run lint + test (pre-commit) |
-| `just build` | Build optimized WASM kernel + npm tarball |
-| `just clean` | Remove generated artifacts, deps, eval logs |
-| `just check-clean` | Verify no build artifacts remain (pre-PR) |
+| Command            | Purpose                                                                                |
+| ------------------ | -------------------------------------------------------------------------------------- |
+| `just setup`       | Install dependencies                                                                   |
+| `just dev`         | Build and run server locally                                                           |
+| `just test`        | Run test suite (vitest) — kernel tests skip if WASM not built                          |
+| `just lint`        | TypeScript typecheck, ESLint, Prettier                                                 |
+| `just fmt`         | Format source files with Prettier                                                      |
+| `just fmt-check`   | Check formatting without writing                                                       |
+| `just check`       | Run lint + test (pre-commit)                                                           |
+| `just build-wasm`  | Build OCCT WASM kernel (Docker) and copy artifacts into `occt/dist` and `occt/ts/dist` |
+| `just build`       | Build optimized WASM kernel + npm tarball                                              |
+| `just eval`        | Run LLM eval against OpenRouter models (needs `OPENROUTER_API_KEY`)                    |
+| `just clean`       | Remove generated artifacts, deps, eval logs                                            |
+| `just check-clean` | Verify no build artifacts remain (pre-PR)                                              |
 
 Direct npm equivalents: `npm test`, `npm run build`, `npm run lint`, `npm run typecheck`, `npx prettier --write`.
 
@@ -63,6 +66,7 @@ docs/                  Project documentation
 ## npm Distribution
 
 The npm package (`cad-mcp-server`) should stay minimal. Include only:
+
 - `dist/` — compiled JS
 - `node_modules/occt-wasm/` — bundled WASM kernel
 - `README.md`, `THIRD_PARTY_NOTICES.md`, `docs/EXAMPLE_PROMPTS.md`
