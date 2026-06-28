@@ -14,6 +14,9 @@
 
 import { queryStepFaces as queryFacesService } from './faces.js';
 import { queryStepEdges as queryEdgesService } from './edges.js';
+import { withStepModel } from '../model-store.js';
+import { dispatchMeasure, type MeasureSpec } from './measure.js';
+import { dispatchAggregate, aggregateToStatistics } from './aggregate.js';
 import { CAD_RESPONSE_SCHEMA_VERSION } from '../schema-version.js';
 import type {
   StepQueryResponse,
@@ -69,43 +72,52 @@ export async function executeQuery(input: QueryInput): Promise<StepQueryResponse
     };
   }
 
-  /* The faces / edges services already implement filter / sort / pagination
-   * and return the queryOutputSchema envelope. We post-process to add
-   * `measure` results and `aggregate` values on top. */
+  /* Step 1: filter / sort / paginate via the entity-specific service. */
+  const base = await runEntityService(input);
 
-  const base = input.entities === 'faces'
-    ? await queryFacesService(input.file_path, {
-        entity_ids: input.entity_ids,
-        fields: input.select,
-        group_by: input.group_by as never,
-        sort: input.sort as never,
-        return_type: input.return_type,
-        limit: input.limit,
-        offset: input.offset,
-        ...stripEntitySpecificFilters(input.filter),
-      } as never)
-    : await queryEdgesService(input.file_path, {
-        entity_ids: input.entity_ids,
-        fields: input.select,
-        group_by: input.group_by as never,
-        sort: input.sort as never,
-        return_type: input.return_type,
-        limit: input.limit,
-        offset: input.offset,
-        ...stripEntitySpecificFilters(input.filter),
-      } as never);
+  /* Step 2: optionally run measure ops per entity and attach the results. */
+  if (input.measure?.length) {
+    await applyMeasureToEntities(input.file_path, base.entities, input.measure as unknown as MeasureSpec[]);
+  }
 
-  /* Compute measure / aggregate if requested.
-   * Note: measure and aggregate are not yet fully wired through the engine;
-   * this stub returns the base response with placeholders so the surface
-   * is end-to-end testable. A subsequent commit will implement the
-   * measure / aggregate dispatch. */
-  return applyMeasurePlaceholder(base, input);
+  /* Step 3: optionally compute aggregate statistics over the (now-augmented) entities. */
+  if (input.aggregate?.length) {
+    const agg = dispatchAggregate(base.entities, input.aggregate);
+    const stats = aggregateToStatistics(agg);
+    base.statistics = { ...base.statistics, ...stats };
+  }
+
+  return base;
 }
 
 /* ------------------------------------------------------------------ */
-/*  Internal helpers                                                   */
+/*  Internal: entity service dispatch                                  */
 /* ------------------------------------------------------------------ */
+
+async function runEntityService(input: QueryInput): Promise<StepQueryResponse<Record<string, unknown>>> {
+  if (input.entities === 'faces') {
+    return queryFacesService(input.file_path, {
+      ...(input.entity_ids !== undefined ? { entity_ids: input.entity_ids } : {}),
+      ...(input.select !== undefined ? { fields: input.select } : {}),
+      ...(input.group_by !== undefined ? { group_by: input.group_by as never } : {}),
+      ...(input.sort !== undefined ? { sort: input.sort as never } : {}),
+      return_type: input.return_type,
+      limit: input.limit,
+      offset: input.offset,
+      ...stripEntitySpecificFilters(input.filter),
+    } as never);
+  }
+  return queryEdgesService(input.file_path, {
+    ...(input.entity_ids !== undefined ? { entity_ids: input.entity_ids } : {}),
+    ...(input.select !== undefined ? { fields: input.select } : {}),
+    ...(input.group_by !== undefined ? { group_by: input.group_by as never } : {}),
+    ...(input.sort !== undefined ? { sort: input.sort as never } : {}),
+    return_type: input.return_type,
+    limit: input.limit,
+    offset: input.offset,
+    ...stripEntitySpecificFilters(input.filter),
+  } as never);
+}
 
 function stripEntitySpecificFilters(filter?: Record<string, unknown>): Record<string, unknown> {
   if (!filter) return {};
@@ -125,26 +137,79 @@ function stripEntitySpecificFilters(filter?: Record<string, unknown>): Record<st
   return out;
 }
 
-function applyMeasurePlaceholder(
-  base: StepQueryResponse<Record<string, unknown>>,
-  input: QueryInput,
-): StepQueryResponse<Record<string, unknown>> {
-  if (!input.measure?.length && !input.aggregate?.length) {
-    return base;
+/* ------------------------------------------------------------------ */
+/*  Internal: measure dispatch                                         */
+/* ------------------------------------------------------------------ */
+
+async function applyMeasureToEntities(
+  filePath: string,
+  entities: Array<Record<string, unknown>>,
+  specs: MeasureSpec[],
+): Promise<void> {
+  if (entities.length === 0) return;
+  await withStepModel(filePath, async (model) => {
+    const { kernel, shape } = await model.getShapeContext('query_step_measure');
+    /* Determine the sub-shape type from the first entity ID. */
+    const subType = entityTypeFromId(entities[0]?.id as string);
+    if (!subType) return;
+    const subShapes = kernel.getSubShapes(shape, subType);
+
+    for (const entity of entities) {
+      const idx = entityIndexFromId(entity.id as string);
+      if (idx === undefined) continue;
+      const handle = subShapes[idx];
+      if (!handle) continue;
+      const results = dispatchMeasure(kernel, shape, handle, specs);
+      /* Attach the full measure result under the op name, AND flatten
+       * commonly-aggregated scalar fields (e.g. ray_test_grid.hit_distance
+       * -> entity.hit_distance) so aggregates can find them without
+       * walking nested paths. */
+      for (const [opName, value] of Object.entries(results)) {
+        entity[opName] = value;
+        flattenMeasureScalars(entity, opName, value);
+      }
+    }
+  });
+}
+
+/**
+ * Copy commonly-aggregated scalar fields from a measure result up to
+ * the top level of the entity record. This makes aggregate specs like
+ * `count:hit_distance` work without the LLM having to know about the
+ * measure's nested structure.
+ */
+function flattenMeasureScalars(
+  entity: Record<string, unknown>,
+  opName: string,
+  value: unknown,
+): void {
+  if (opName === 'ray_test_grid' && value && typeof value === 'object') {
+    const grid = value as { hit_distance?: number[]; total_rays?: number };
+    if (Array.isArray(grid.hit_distance)) entity.hit_distance = grid.hit_distance;
+    if (typeof grid.total_rays === 'number') entity.total_rays = grid.total_rays;
   }
-  /* The full measure/aggregate dispatch is implemented in src/query/ops/measure.ts
-   * and src/query/ops/aggregate.ts. For this initial cut we surface a clear
-   * `limitations` entry so callers know the feature is staged. */
-  return {
-    ...base,
-    limitations: [
-      ...base.limitations,
-      {
-        source: 'query_step',
-        message: 'measure and aggregate dispatch is staged; the response returns the base query without per-entity measurements. Full implementation lands in the next release alongside the Tier A kernel methods.',
-      },
-    ],
-  };
+  if (opName === 'ray_test' && Array.isArray(value)) {
+    /* ray_test returns an array of hits; the distances are commonly
+     * aggregated. Flatten them as a top-level field. */
+    const distances = value
+      .map((h: { distance?: number }) => (typeof h?.distance === 'number' ? h.distance : undefined))
+      .filter((d): d is number => typeof d === 'number');
+    if (distances.length > 0) entity.hit_distance = distances;
+  }
+}
+
+function entityTypeFromId(id: string | undefined): 'face' | 'edge' | null {
+  if (!id) return null;
+  if (id.startsWith('face:')) return 'face';
+  if (id.startsWith('edge:')) return 'edge';
+  return null;
+}
+
+function entityIndexFromId(id: string | undefined): number | undefined {
+  if (!id) return undefined;
+  const m = /^(?:face|edge):(\d+)$/.exec(id);
+  if (!m) return undefined;
+  return Number(m[1]);
 }
 
 /* ------------------------------------------------------------------ */
