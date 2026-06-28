@@ -14,9 +14,12 @@
 
 import { describe, expect, it } from 'vitest';
 import * as path from 'node:path';
+import { loadEvalEnv } from '../../eval/runner/env-loader.js';
 import { EVAL_MODELS } from '../../eval/runner/model-registry.js';
 import { QUESTIONS } from '../../eval/runner/questions.js';
 import { runAll, formatReport, type RunResult } from '../../eval/runner/runner.js';
+
+loadEvalEnv();
 
 const LOG_DIR = path.join(process.cwd(), 'tests', 'eval-logs');
 const API_KEY_ENV = 'OPENROUTER_API_KEY';
