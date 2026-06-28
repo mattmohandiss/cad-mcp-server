@@ -124,7 +124,7 @@ export const filterSchema = z
   .object({
     /* faces */
     surface_type: z.enum(SURFACE_TYPES).optional().describe(
-      'Faces only. Cylinder = holes, bosses, shafts. Plane = planar faces. Bspline = freeform. "other" includes offset, swept, and other analytic surfaces.',
+      'Faces only. The OCCT class name as a single string. Valid values: "plane", "cylinder", "cone", "sphere", "torus", "bspline", "other" (use "cylinder", not "cylindrical"; use "plane", not "planar").',
     ),
     area_min: z.number().nonnegative().optional().describe('Faces only. Minimum area in mm^2. Use to filter out chamfers/fillets when analyzing only primary faces.'),
     area_max: z.number().nonnegative().optional().describe('Faces only. Maximum area in mm^2. Use to find small faces (potential artifacts).'),
@@ -248,7 +248,7 @@ export const queryStepInputSchema = {
   file_path: filePathSchema,
   entities: z
     .enum(ENTITIES)
-    .describe('Which entity type to query: faces, edges, bodies, vertices, pmi, color, layer, material, assembly_node.'),
+    .describe('Entity type to query. MUST be a single string — not an array. Valid values: "faces", "edges", "bodies", "vertices", "pmi", "color", "layer", "material", "assembly_node". Example: {"entities": "faces", ...}.'),
   entity_ids: z
     .array(nonEmpty)
     .min(1)
