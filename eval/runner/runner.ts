@@ -44,15 +44,51 @@ const openrouter = createOpenAI({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
+export interface ToolCallEntry {
+  name: string;
+  args: string;
+}
+
+export interface ToolResultEntry {
+  name: string;
+  args: string;
+  output: string;
+}
+
+export interface UsageEntry {
+  inputTokens: number | undefined;
+  outputTokens: number | undefined;
+  totalTokens: number | undefined;
+  inputTokenDetails?: { noCacheTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number };
+  outputTokenDetails?: { textTokens?: number; reasoningTokens?: number };
+  /** OpenRouter cost & provider-specific extras come through raw */
+  raw?: Record<string, unknown>;
+}
+
+export interface StepSummaryEntry {
+  stepNumber: number;
+  text: string;
+  toolCalls: ToolCallEntry[];
+  finishReason: string;
+  stepTimeMs: number;
+  responseTimeMs: number;
+  usage: { inputTokens: number | undefined; outputTokens: number | undefined; totalTokens: number | undefined };
+}
+
 export interface RunResult {
   questionId: string;
   modelLabel: string;
-  toolCalls: Array<{ name: string; args: string }>;
+  toolCalls: ToolCallEntry[];
+  toolResults: ToolResultEntry[];
   extracted: number | boolean | string | null;
   expected: number | boolean | string;
   correct: boolean;
   reason: string;
   text: string;
+  finishReason: string;
+  usage: UsageEntry | null;
+  steps: StepSummaryEntry[];
+  warnings: string[];
   durationMs: number;
 }
 
@@ -100,29 +136,74 @@ export async function runOne(
   }
 
   const text = result.text ?? '';
-  const toolCalls = (result.steps ?? []).flatMap((step) =>
+  const finishReason = result.finishReason ?? '';
+  const toolCalls: ToolCallEntry[] = (result.steps ?? []).flatMap((step) =>
     (step.toolCalls ?? []).map((tc) => ({
       name: tc.toolName,
       args: JSON.stringify(tc.input),
     })),
   );
+  const toolResults: ToolResultEntry[] = (result.toolResults ?? []).map((tr) => ({
+    name: tr.toolName,
+    args: JSON.stringify(tr.input),
+    output: truncate(JSON.stringify(tr.output), 2000),
+  }));
+  const usage: UsageEntry | null = result.usage
+    ? {
+        inputTokens: result.usage.inputTokens,
+        outputTokens: result.usage.outputTokens,
+        totalTokens: result.usage.totalTokens,
+        inputTokenDetails: result.usage.inputTokenDetails,
+        outputTokenDetails: result.usage.outputTokenDetails,
+        raw: result.usage.raw as Record<string, unknown> | undefined,
+      }
+    : null;
+  const steps: StepSummaryEntry[] = (result.steps ?? []).map((s) => ({
+    stepNumber: s.stepNumber,
+    text: s.text ?? '',
+    toolCalls: (s.toolCalls ?? []).map((tc) => ({ name: tc.toolName, args: JSON.stringify(tc.input) })),
+    finishReason: s.finishReason ?? '',
+    stepTimeMs: (s.performance as Record<string, unknown>)?.stepTimeMs as number ?? 0,
+    responseTimeMs: (s.performance as Record<string, unknown>)?.responseTimeMs as number ?? 0,
+    usage: {
+      inputTokens: s.usage?.inputTokens,
+      outputTokens: s.usage?.outputTokens,
+      totalTokens: s.usage?.totalTokens,
+    },
+  }));
+  const warnings: string[] = (result.warnings ?? []).map((w) => String(w));
 
   const extracted = question.extract(text, toolCalls);
   const correct = compare(extracted, question);
 
   if (logDir) {
-    writeLog(logDir, model, question, { text, toolCalls, extracted, correct });
+    writeLog(logDir, model, question, {
+      text,
+      toolCalls,
+      toolResults,
+      finishReason,
+      usage,
+      steps,
+      warnings,
+      extracted,
+      correct,
+    });
   }
 
   return {
     questionId: question.id,
     modelLabel: model.label,
     toolCalls,
+    toolResults,
     extracted,
     expected: question.expected.value,
     correct,
     reason: correct ? 'match' : extracted === null ? 'no extractable answer' : 'value mismatch',
     text,
+    finishReason,
+    usage,
+    steps,
+    warnings,
     durationMs: Date.now() - start,
   };
 }
@@ -200,7 +281,17 @@ function writeLog(
   logDir: string,
   model: EvalModel,
   question: EvalQuestion,
-  data: { text: string; toolCalls: RunResult['toolCalls']; extracted: unknown; correct: boolean },
+  data: {
+    text: string;
+    toolCalls: ToolCallEntry[];
+    toolResults: ToolResultEntry[];
+    finishReason: string;
+    usage: UsageEntry | null;
+    steps: StepSummaryEntry[];
+    warnings: string[];
+    extracted: unknown;
+    correct: boolean;
+  },
 ): void {
   fs.mkdirSync(logDir, { recursive: true });
   const slug = `${question.id}__${model.label.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
@@ -210,13 +301,23 @@ function writeLog(
     modelId: model.id,
     prompt: question.prompt,
     text: data.text,
+    finishReason: data.finishReason,
+    usage: data.usage,
+    steps: data.steps,
     toolCalls: data.toolCalls,
+    toolResults: data.toolResults,
+    warnings: data.warnings,
     extracted: data.extracted,
     correct: data.correct,
     expected: question.expected.value,
     timestamp: new Date().toISOString(),
   };
   fs.writeFileSync(path.join(logDir, `${slug}.json`), JSON.stringify(logEntry, null, 2));
+}
+
+function truncate(s: string, maxLen: number): string {
+  if (s.length <= maxLen) return s;
+  return s.slice(0, maxLen) + `\n... [truncated, total ${s.length} chars]`;
 }
 
 const SYSTEM_PROMPT = `You are an AI assistant with access to 4 tools for inspecting STEP CAD files:
