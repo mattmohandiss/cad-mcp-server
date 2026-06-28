@@ -160,9 +160,6 @@ fn collect_includes(methods: &[&MethodSpec]) -> BTreeSet<String> {
 fn group_by_category<'a>(methods: &[&'a MethodSpec]) -> Vec<(&'a str, Vec<&'a MethodSpec>)> {
     let mut groups: Vec<(&str, Vec<&MethodSpec>)> = Vec::new();
     for spec in methods {
-        if matches!(spec.kind, MethodKind::Skip) {
-            continue;
-        }
         if let Some(group) = groups.iter_mut().find(|(cat, _)| *cat == spec.category) {
             group.1.push(spec);
         } else {
@@ -170,11 +167,6 @@ fn group_by_category<'a>(methods: &[&'a MethodSpec]) -> Vec<(&'a str, Vec<&'a Me
         }
     }
     groups
-}
-
-/// Emit static helper functions that generated methods depend on.
-fn emit_helper_functions(_buf: &mut String, _methods: &[&MethodSpec]) {
-    // No helpers currently needed after stripping evolution/projection/XCAF.
 }
 
 /// Generate the contents of `facade/generated/kernel.cpp`.
@@ -211,9 +203,6 @@ pub fn emit_kernel(methods: &[&MethodSpec]) -> String {
     let _ = writeln!(buf, "#include <string>");
     let _ = writeln!(buf, "#include <vector>");
     let _ = writeln!(buf);
-
-    // Emit helper functions needed by generated methods.
-    emit_helper_functions(&mut buf, methods);
 
     // Methods grouped by category.
     let groups = group_by_category(methods);
@@ -465,7 +454,7 @@ mod tests {
         let bindings = emit_bindings(&methods);
 
         assert!(!kernel.contains("makeEllipsoid"));
-        assert!(!bindings.contains("makeEllipsoid"));
+        assert!(bindings.contains("makeEllipsoid"));
         assert!(kernel.contains("doSomething"));
         assert!(bindings.contains("doSomething"));
     }

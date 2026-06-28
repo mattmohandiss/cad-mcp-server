@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { stepToolSchemas } from '../tools/step-tools.js';
+import { stepToolSchemas, stepToolOutputSchemas } from '../tools/step-tools.js';
+import { CAD_RESPONSE_SCHEMA_VERSION } from '../schema-version.js';
 
 const filePath = '/tmp/model.step';
 
@@ -8,10 +9,13 @@ describe('public tool schema contract', () => {
   it('defines the approved public STEP tool schemas', () => {
     expect(Object.keys(stepToolSchemas).sort()).toEqual([
       'compareStepFiles',
+      'findCoaxialCylinders',
       'findStepEdges',
       'findStepFaces',
       'getStepEntities',
       'inspectStepFile',
+      'measureDistance',
+      'queryRayIntersect',
       'queryStepPmi',
     ]);
   });
@@ -33,7 +37,7 @@ describe('public tool schema contract', () => {
         return_type: 'groups',
         limit: 10,
         offset: 0,
-      }).success
+      }).success,
     ).toBe(true);
 
     for (const invalid of [
@@ -54,7 +58,7 @@ describe('public tool schema contract', () => {
   it('rejects removed fields in edge find schema', () => {
     const schema = z.object(stepToolSchemas.findStepEdges).strict();
     expect(schema.safeParse({ file_path: filePath, bbox_match: 'intersects_bbox' }).success).toBe(
-      false
+      false,
     );
   });
 
@@ -71,22 +75,22 @@ describe('public tool schema contract', () => {
         group_by: ['curve_type', 'length_range'],
         sort: { by: 'length', direction: 'asc' },
         return_type: 'entities',
-      }).success
+      }).success,
     ).toBe(true);
 
     expect(schema.safeParse({ file_path: filePath, edge_ids: ['edge:0'] }).success).toBe(false);
     expect(schema.safeParse({ file_path: filePath, fields: ['length', 'length'] }).success).toBe(
-      false
+      false,
     );
     expect(schema.safeParse({ file_path: filePath, fields: [] }).success).toBe(false);
     expect(schema.safeParse({ file_path: filePath, group_by: ['axis_direction'] }).success).toBe(
-      false
+      false,
     );
     expect(
       schema.safeParse({
         file_path: filePath,
         region: { bbox: { min: [0, 0, 0], max: [1, 1, 1] } },
-      }).success
+      }).success,
     ).toBe(false);
   });
 
@@ -101,7 +105,7 @@ describe('public tool schema contract', () => {
         entity_type: 'face',
         entity_ids: ['face:0'],
         fields: ['id', 'area', 'bbox_center'],
-      }).success
+      }).success,
     ).toBe(true);
 
     expect(
@@ -113,18 +117,27 @@ describe('public tool schema contract', () => {
         group_by: ['type', 'tolerance_type'],
         sort: { by: 'value' },
         return_type: 'groups',
-      }).success
+      }).success,
     ).toBe(true);
 
     expect(
       compareSchema.safeParse({
         baseline_file_path: '/tmp/a.step',
         comparison_file_path: '/tmp/b.step',
-      }).success
+      }).success,
     ).toBe(true);
 
     expect(compareSchema.safeParse({ file_a: '/tmp/a.step', file_b: '/tmp/b.step' }).success).toBe(
-      false
+      false,
     );
+  });
+
+  it('schema version constant is stable and flows through output schemas', () => {
+    // Changing this constant requires updating all output Zod literals.
+    // TypeScript enforces consistency because stepToolOutputSchemas uses
+    // z.literal(CAD_RESPONSE_SCHEMA_VERSION), which is typed to the const.
+    expect(CAD_RESPONSE_SCHEMA_VERSION).toBe('0.4');
+    // All output schemas reference the constant (TypeScript-checked)
+    expect(Object.keys(stepToolOutputSchemas).length).toBeGreaterThan(0);
   });
 });

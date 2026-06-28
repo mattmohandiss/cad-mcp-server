@@ -1,4 +1,3 @@
-import type { QueryStepPmiInput } from '../tools/step-tools.js';
 import type {
   PmiToleranceEntity,
   PmiDimensionEntity,
@@ -10,46 +9,57 @@ import {
   normalizePagination,
   createPagination,
   createQueryResponse,
+  groupEntities,
   DEFAULT_QUERY_LIMITS,
   type ComputedGroup,
 } from './shared.js';
 
 type PmiEntity = PmiToleranceEntity | PmiDimensionEntity | PmiDatumEntity | PmiAnnotationEntity;
 
-export async function queryStepPmi(filePath: string, input: QueryStepPmiInput) {
+export interface QueryPmiInput {
+  pmi_types?: string[];
+  tolerance_subtypes?: string[];
+  value_min?: number;
+  value_max?: number;
+  group_by?: string[];
+  sort?: { by: string; direction?: 'asc' | 'desc' };
+  return_type?: 'summary' | 'entities' | 'groups';
+  limit?: number;
+  offset?: number;
+}
+
+export async function queryStepPmi(filePath: string, input: QueryPmiInput) {
   return withStepModel(filePath, async (model) => {
     const full = await model.getPmiEntities();
     let filtered = [...full.pmi_entities];
 
-    // Apply filters.
-    if (input.filter?.pmi_types && input.filter.pmi_types.length > 0) {
-      const typeSet = new Set(input.filter.pmi_types);
+    if (input.pmi_types && input.pmi_types.length > 0) {
+      const typeSet = new Set(input.pmi_types);
       filtered = filtered.filter((e) => typeSet.has(e.type));
     }
 
-    if (input.filter?.tolerance_types && input.filter.tolerance_types.length > 0) {
-      const tolSet = new Set<string>(input.filter.tolerance_types);
+    if (input.tolerance_subtypes && input.tolerance_subtypes.length > 0) {
+      const tolSet = new Set<string>(input.tolerance_subtypes);
       filtered = filtered.filter(
         (e) =>
           e.type === 'geometric_tolerance' &&
           'tolerance_type' in e &&
-          tolSet.has((e as PmiToleranceEntity).tolerance_type)
+          tolSet.has((e as PmiToleranceEntity).tolerance_type),
       );
     }
 
-    if (input.filter?.value_min !== undefined) {
+    if (input.value_min !== undefined) {
       filtered = filtered.filter(
-        (e) => 'value' in e && e.value !== null && e.value >= input.filter!.value_min!
+        (e) => 'value' in e && e.value !== null && e.value >= input.value_min!,
       );
     }
 
-    if (input.filter?.value_max !== undefined) {
+    if (input.value_max !== undefined) {
       filtered = filtered.filter(
-        (e) => 'value' in e && e.value !== null && e.value <= input.filter!.value_max!
+        (e) => 'value' in e && e.value !== null && e.value <= input.value_max!,
       );
     }
 
-    // Sorting.
     if (input.sort) {
       const dir = input.sort.direction === 'desc' ? -1 : 1;
       filtered.sort((a, b) => {
@@ -76,93 +86,54 @@ export async function queryStepPmi(filePath: string, input: QueryStepPmiInput) {
       });
     }
 
-    // Grouping.
-    const resultMode = input.result_mode ?? 'entities';
+    const resultMode = input.return_type ?? 'entities';
     let groups: ComputedGroup[] = [];
 
     if (resultMode === 'groups') {
       const groupBy = input.group_by ?? ['type'];
-      const buckets = new Map<string, { key: Record<string, unknown>; members: PmiEntity[] }>();
-
-      for (const entity of filtered) {
-        const key: Record<string, unknown> = {};
-        for (const dim of groupBy) {
-          switch (dim) {
+      const withId = filtered.map((e) => ({ ...e, id: e.step_id })) as Array<PmiEntity & { id: string }>;
+      groups = groupEntities<PmiEntity & { id: string }>(
+        withId,
+        groupBy,
+        (entity, dimension) => {
+          switch (dimension) {
             case 'type':
-              key.type = entity.type;
-              break;
+              return entity.type;
             case 'tolerance_type':
-              if (entity.type === 'geometric_tolerance') {
-                key.tolerance_type = (entity as PmiToleranceEntity).tolerance_type;
-              } else {
-                key.tolerance_type = null;
-              }
-              break;
+              return entity.type === 'geometric_tolerance'
+                ? (entity as PmiToleranceEntity).tolerance_type
+                : null;
             case 'dimension_type':
-              if (entity.type === 'dimension') {
-                key.dimension_type = (entity as PmiDimensionEntity).dimension_type;
-              } else {
-                key.dimension_type = null;
-              }
-              break;
+              return entity.type === 'dimension'
+                ? (entity as PmiDimensionEntity).dimension_type
+                : null;
             case 'material_condition':
-              if (entity.type === 'geometric_tolerance') {
-                key.material_condition = (entity as PmiToleranceEntity).material_condition;
-              } else {
-                key.material_condition = null;
-              }
-              break;
+              return entity.type === 'geometric_tolerance'
+                ? (entity as PmiToleranceEntity).material_condition
+                : null;
+            default:
+              return null;
           }
-        }
-        const mapKey = JSON.stringify(groupBy.map((d) => key[d]));
-        let bucket = buckets.get(mapKey);
-        if (!bucket) {
-          bucket = { key, members: [] };
-          buckets.set(mapKey, bucket);
-        }
-        bucket.members.push(entity);
-      }
-
-      const sampleLimit = DEFAULT_QUERY_LIMITS.sample_entity_limit;
-      let groupIdx = 0;
-      groups = [...buckets.values()].map((bucket) => {
-        const ids = bucket.members.map((m) => m.step_id);
-        const sampled = ids.slice(0, sampleLimit);
-        const isComplete = ids.length <= sampleLimit;
-        return {
-          id: `group:${groupIdx++}`,
-          key: bucket.key,
-          entity_count: bucket.members.length,
-          entity_ids: ids,
-          sample_entity_ids: sampled,
-          sample_entity_limit: sampleLimit,
-          sample_is_complete: isComplete,
-          summary: {} as Record<string, unknown>,
-        };
-      });
-
-      groups.sort((a, b) => b.entity_count - a.entity_count);
+        },
+        DEFAULT_QUERY_LIMITS.sample_entity_limit,
+      );
     }
 
-    // Pagination.
     const { limit, offset } = normalizePagination(input.limit, input.offset);
     const paginated = resultMode === 'entities' ? filtered.slice(offset, offset + limit) : [];
 
     const pagination = createPagination(limit, offset, paginated.length, filtered.length);
 
-    // Statistics.
     const byType: Record<string, number> = {};
-    for (const e of full.pmi_entities) {
+    for (const e of filtered) {
       byType[e.type] = (byType[e.type] ?? 0) + 1;
     }
 
     return createQueryResponse(
       filePath,
       {
-        filter: input.filter ?? {},
-        group_by: input.group_by ?? null,
-        sort: input.sort ?? null,
-        result_mode: resultMode,
+        ...input,
+        return_type: resultMode,
         limit,
         offset,
       },
@@ -174,12 +145,24 @@ export async function queryStepPmi(filePath: string, input: QueryStepPmiInput) {
         ...byType,
       },
       groups,
-      full.pmi_entities.length === 0
-        ? [
-            'No PMI entities found. STEP file may be AP203 (no PMI) or may not contain GD&T annotations.',
-          ]
-        : [],
-      []
+      await buildNoPmiWarnings(model, full.pmi_entities.length),
+      [],
     );
   });
+}
+
+async function buildNoPmiWarnings(
+  model: { getSemanticModel(): Promise<{ schema?: string }> },
+  pmiCount: number,
+): Promise<string[]> {
+  if (pmiCount > 0) return [];
+  const schema = (await model.getSemanticModel()).schema;
+  if (schema && /AP2(03|14)/i.test(schema)) {
+    return [
+      `No PMI entities found. The STEP file uses schema ${schema}, which does not include GD&T annotations.`,
+    ];
+  }
+  return [
+    'No PMI entities found. The STEP file may not include GD&T, datum, or dimension annotations.',
+  ];
 }

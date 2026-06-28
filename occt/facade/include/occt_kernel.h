@@ -1,11 +1,15 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 #include <TopoDS_Shape.hxx>
+
+/// Opaque pointer to BRepGraph (heavy header, keep out of this file).
+class BRepGraph;
 
 /// Mesh data returned from tessellation.
 struct MeshData {
@@ -176,6 +180,8 @@ class OcctKernel {
     std::vector<double> getLinearCenterOfMass(uint32_t id);
     std::vector<double> surfaceCurvature(uint32_t faceId, double u, double v);
     std::vector<double> getInertia(uint32_t id);
+    std::vector<double> getPrincipalProperties(uint32_t id);
+    std::vector<double> getOrientedBoundingBox(uint32_t id);
     bool containsPoint(uint32_t id, double x, double y, double z, double tolerance);
     std::vector<double> vertexPosition(uint32_t vertexId);
     std::string surfaceType(uint32_t faceId);
@@ -190,8 +196,33 @@ class OcctKernel {
     bool hasTriangulation(uint32_t id);
     std::vector<double> queryBatch(std::vector<uint32_t> ids);
 
+    // --- Shape Analysis ---
+    bool hasFreeEdges(uint32_t id);
+    int freeEdgeCount(uint32_t id);
+    std::vector<double> shapeContents(uint32_t id);
+
+    // --- Geometry Utilities ---
+    bool areAxesCoaxial(double ax1x, double ax1y, double ax1z,
+                        double al1x, double al1y, double al1z,
+                        double ax2x, double ax2y, double ax2z,
+                        double al2x, double al2y, double al2z,
+                        double angTol, double linTol);
+
+    // --- Ray Intersection ---
+    std::vector<double> rayIntersect(uint32_t id, double ox, double oy, double oz,
+                                     double dx, double dy, double dz);
+
+    // --- BRepGraph topology queries (O(1) graph-native lookups) ---
+    void graphBuild(uint32_t id);
+    std::vector<int> graphBodyMap();
+    std::vector<int> graphFaceAdjacency(int faceIdx);
+    std::vector<int> graphEdgeFaces(int edgeIdx);
+    std::vector<int> graphWireTopology(int faceIdx);
+    std::vector<int> graphEdgeVertices(int edgeIdx);
+
     // --- Curve ops ---
     std::string curveType(uint32_t edgeId);
+    double edgeCircleRadius(uint32_t edgeId);
     std::vector<double> curvePointAtParam(uint32_t edgeId, double param);
     std::vector<double> curveTangent(uint32_t edgeId, double param);
     std::vector<double> curveParameters(uint32_t edgeId);
@@ -258,7 +289,10 @@ class OcctKernel {
     const TopoDS_Shape& get(uint32_t id) const;
     MeshData buildMeshData(const TopoDS_Shape& shape, double linearDeflection,
                            double angularDeflection, bool relative);
+    void ensureGraph(const TopoDS_Shape& shape);
 
     std::unordered_map<uint32_t, TopoDS_Shape> arena_;
     uint32_t nextId_ = 1;
+    std::unique_ptr<BRepGraph> graph_;
+    TopoDS_Shape graphShape_; // the shape that was used to build graph_
 };

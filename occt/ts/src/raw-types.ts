@@ -212,7 +212,28 @@ export interface OcctRawKernel {
     getLength(id: number): number;
     getCenterOfMass(id: number): EmbindVectorF64;
     getInertia(id: number): EmbindVectorF64;
+    getPrincipalProperties(id: number): EmbindVectorF64;
+    getOrientedBoundingBox(id: number): EmbindVectorF64;
     containsPoint(id: number, x: number, y: number, z: number, tolerance: number): boolean;
+    hasFreeEdges(id: number): boolean;
+    freeEdgeCount(id: number): number;
+    shapeContents(id: number): EmbindVectorF64;
+    areAxesCoaxial(
+      ax1x: number, ax1y: number, ax1z: number,
+      al1x: number, al1y: number, al1z: number,
+      ax2x: number, ax2y: number, ax2z: number,
+      al2x: number, al2y: number, al2z: number,
+      angTol: number, linTol: number,
+    ): boolean;
+    rayIntersect(id: number, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number): EmbindVectorF64;
+
+    // BRepGraph
+    graphBuild(id: number): void;
+    graphBodyMap(): EmbindVectorI32;
+    graphFaceAdjacency(faceIdx: number): EmbindVectorI32;
+    graphEdgeFaces(edgeIdx: number): EmbindVectorI32;
+    graphWireTopology(faceIdx: number): EmbindVectorI32;
+    graphEdgeVertices(edgeIdx: number): EmbindVectorI32;
     getSurfaceCenterOfMass(faceId: number): EmbindVectorF64;
     getLinearCenterOfMass(id: number): EmbindVectorF64;
     surfaceCurvature(faceId: number, u: number, v: number): EmbindVectorF64;
@@ -232,6 +253,7 @@ export interface OcctRawKernel {
 
     // Curves
     curveType(edgeId: number): string;
+    edgeCircleRadius(edgeId: number): number;
     curvePointAtParam(edgeId: number, param: number): EmbindVectorF64;
     curveTangent(edgeId: number, param: number): EmbindVectorF64;
     curveParameters(edgeId: number): EmbindVectorF64;

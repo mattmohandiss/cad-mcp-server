@@ -1,0 +1,9 @@
+# Python dependencies for the LLM eval's STEP file generation.
+# Install with: python -m venv eval/generate/.venv && eval/generate/.venv/bin/pip install -r eval/generate/requirements.txt
+#
+# cadquery is the OCCT-backed Python library used to construct test
+# STEP files with known design intent (e.g. "box with 3 through-holes
+# of diameters 5mm, 10mm, 15mm"). The generated files become the
+# ground-truth fixtures for the LLM eval.
+
+cadquery==2.8.0

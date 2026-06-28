@@ -17,10 +17,10 @@ export class LightweightStepSemanticProvider {
   async extract(filePath: string): Promise<SemanticModel> {
     const metadata = await parseStepMetadata(filePath);
     const hasGdt = metadata.pmiKeywords.some((keyword) =>
-      ['GEOMETRIC_TOLERANCE', 'DATUM'].includes(keyword)
+      ['GEOMETRIC_TOLERANCE', 'DATUM'].includes(keyword),
     );
     const hasDimensions = metadata.pmiKeywords.some((keyword) =>
-      ['DIMENSIONAL_LOCATION', 'DIMENSIONAL_SIZE'].includes(keyword)
+      ['DIMENSIONAL_LOCATION', 'DIMENSIONAL_SIZE'].includes(keyword),
     );
 
     const facts: SemanticFact[] = [];
@@ -67,7 +67,7 @@ export class LightweightStepSemanticProvider {
         type: 'shape_representation_count',
         value: metadata.shapeRepresentationCount,
         source: this.name,
-      }
+      },
     );
 
     return {

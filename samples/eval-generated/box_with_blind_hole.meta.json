@@ -1,0 +1,11 @@
+{
+  "file": "box_with_blind_hole.step",
+  "design_intent": "Box with 1 through-hole (8mm) and 1 blind hole (12mm, 8mm deep in 20mm box).",
+  "expected_answers": {
+    "cylindrical_face_groups": 2,
+    "smallest_diameter_mm": 8.0,
+    "largest_diameter_mm": 12.0,
+    "blind_hole_count": 1
+  },
+  "notes": "Use to test blind-hole detection via ray_test_segment in both directions."
+}

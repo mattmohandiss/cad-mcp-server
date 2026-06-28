@@ -1,13 +1,23 @@
 import type { OcctKernel, ShapeHandle, Vec3 } from 'occt-wasm';
 
-export type EdgeVexity = 'convex' | 'concave' | 'smooth' | 'unknown';
+export type EdgeVexity = 'convex' | 'concave' | 'smooth';
 
-export function computeEdgeVexity(
+/**
+ * Compute the dihedral angle and edge convexity between two faces along a
+ * shared edge. The convexity classification is deterministic — it derives
+ * from the sign of the cross-product dot product (floating-point epsilon
+ * only guards against exact tangency noise).
+ *
+ *   dot > 0.05  → convex   (faces open away from each other)
+ *   dot < -0.05 → concave  (faces fold toward each other)
+ *   else        → smooth   (tangent/near-tangent)
+ */
+export function computeEdgeConvexity(
   kernel: OcctKernel,
   faceA: ShapeHandle,
   faceB: ShapeHandle,
-  sharedEdge: ShapeHandle
-): { vexity: EdgeVexity; dihedralAngleDeg: number } {
+  sharedEdge: ShapeHandle,
+): { dihedral_angle_deg: number; convexity: EdgeVexity } {
   try {
     const params = kernel.curveParameters(sharedEdge);
     const midParam = (params.first + params.last) / 2;
@@ -26,24 +36,25 @@ export function computeEdgeVexity(
     const nB: Vec3 = { x: normalB.x, y: normalB.y, z: normalB.z };
 
     const taLen = magnitude(ta);
-    if (taLen < 1e-12) {
-      return { vexity: 'unknown', dihedralAngleDeg: 0 };
-    }
-    const tHat = { x: ta.x / taLen, y: ta.y / taLen, z: ta.z / taLen };
+    if (taLen < 1e-12) return { dihedral_angle_deg: 0, convexity: 'smooth' };
 
+    const tHat = { x: ta.x / taLen, y: ta.y / taLen, z: ta.z / taLen };
     const cA = normalize(cross(nA, tHat));
     const cB = normalize(cross(nB, tHat));
 
     const dot = dotProduct(cA, cB);
     const clamped = Math.max(-1, Math.min(1, dot));
     const angleRad = Math.acos(clamped);
-    const dihedralAngleDeg = angleRad * (180 / Math.PI);
+    const dihedral_angle_deg = angleRad * (180 / Math.PI);
 
-    if (dot > 0.05) return { vexity: 'convex', dihedralAngleDeg };
-    if (dot < -0.05) return { vexity: 'concave', dihedralAngleDeg };
-    return { vexity: 'smooth', dihedralAngleDeg };
+    let convexity: EdgeVexity;
+    if (dot > 0.05) convexity = 'convex';
+    else if (dot < -0.05) convexity = 'concave';
+    else convexity = 'smooth';
+
+    return { dihedral_angle_deg, convexity };
   } catch {
-    return { vexity: 'unknown', dihedralAngleDeg: 0 };
+    return { dihedral_angle_deg: 0, convexity: 'smooth' };
   }
 }
 

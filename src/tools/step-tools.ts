@@ -1,88 +1,34 @@
 import { z } from 'zod';
+import type { Vec3 } from 'occt-wasm';
 import { compareStepFiles } from '../compare.js';
 import { withStepModel } from '../model-store.js';
 import { CAD_RESPONSE_SCHEMA_VERSION } from '../schema-version.js';
 import { queryStepEdges as queryEdgesService } from '../query/edges.js';
 import { canDirectGetEntities, getStepEntitiesDirect } from '../query/entities.js';
+import { findCoaxialCylinders } from '../query/features.js';
 import { queryStepFaces as queryFacesService } from '../query/faces.js';
 import { queryStepPmi as queryPmiService } from '../query/pmi.js';
+import { queryRay } from '../kernel/ray-utils.js';
+import { createPagination, createQueryResponse } from '../query/shared.js';
 import { wrapTool } from './shared.js';
 
-const stepFileInput = {
+const filePathInput = {
   file_path: z.string().min(1).describe('Absolute or relative path to the STEP file.'),
 };
 
-const inspectStepFileSchema = {
-  ...stepFileInput,
-};
+const direction3Schema = z
+  .array(z.number().finite())
+  .length(3)
+  .refine(([x, y, z]) => x !== 0 || y !== 0 || z !== 0, {
+    message: 'Direction vector must be non-zero.',
+  });
 
 const point3Schema = z.array(z.number().finite()).length(3);
-
-const direction3Schema = point3Schema.refine(([x, y, z]) => x !== 0 || y !== 0 || z !== 0, {
-  message: 'Direction vector must be non-zero.',
-});
-
-const normalFilterSchema = z
-  .object({
-    parallel_to: direction3Schema.describe(
-      'Direction vector [x, y, z] to match face normals against. Only faces whose normal is parallel to this direction match.'
-    ),
-    tolerance_degrees: z
-      .number()
-      .nonnegative()
-      .max(180)
-      .describe(
-        'Angle tolerance in degrees (default: 10). Face normals within +/-tolerance of target direction match.'
-      )
-      .optional(),
-  })
-  .strict()
-  .describe(
-    'Filter by face normal direction. IMPORTANT: setting this restricts results to orientation-filtered faces. Only set when you need faces with a specific normal direction.'
-  )
-  .optional();
-
-const edgeRadiusSchema = z
-  .object({
-    min: z
-      .number()
-      .nonnegative()
-      .describe('Minimum radius in mm. Only affects circular/curved edges.')
-      .optional(),
-    max: z
-      .number()
-      .nonnegative()
-      .describe('Maximum radius in mm. Only affects circular/curved edges.')
-      .optional(),
-  })
-  .strict()
-  .refine((r) => r.min === undefined || r.max === undefined || r.min <= r.max, {
-    message: 'radius.min must be <= radius.max.',
-  })
-  .describe(
-    'Filter circular/curved edges by radius. IMPORTANT: setting this restricts results to edges that carry a radius (circular/curved only). Only set when querying circular edges by radius. Do NOT set as a placeholder.'
-  )
-  .optional();
-
-function uniqueArray<T>(values: T[]): boolean {
-  return new Set(values).size === values.length;
-}
-
-function boundedRange(input: { min?: number; max?: number }): boolean {
-  return input.min === undefined || input.max === undefined || input.min <= input.max;
-}
 
 const resultModeSchema = z
   .enum(['summary', 'entities', 'groups'])
   .describe(
-    'Shape of the result object. "summary" = statistics and counts only, no entity list (fastest, fewest tokens). "entities" (default) = paginated entity list with projections. "groups" = aggregate the matched entities into groups (requires group_by; returns counts plus sample entity IDs per group). Use "summary" or "groups" first in a conversation, then drill into specific entities.'
-  )
-  .optional();
-
-const returnTypeSchema = z
-  .enum(['summary', 'entities', 'groups'])
-  .describe(
-    'Result shape: "summary" returns statistics only (fastest). "entities" (default) returns paginated entities with projections. "groups" returns group counts with sample IDs (requires group_by).'
+    'Result shape: "summary" returns statistics only (fastest). "entities" (default) returns paginated entities with projections. "groups" returns group counts with sample IDs (requires group_by).',
   )
   .optional();
 
@@ -92,17 +38,19 @@ const limitSchema = z
   .positive()
   .max(1000)
   .describe(
-    'Maximum number of entities to return per page. Default: 100. Max: 1000. Use with offset for pagination.'
+    'Maximum number of entities to return per page. Default: 100. Max: 1000. Use with offset for pagination.',
   )
   .optional();
+
 const offsetSchema = z
   .number()
   .int()
   .nonnegative()
   .describe(
-    'Skip this many results before returning (for pagination). Default: 0. E.g., offset=100, limit=50 returns results 100-149.'
+    'Skip this many results before returning (for pagination). Default: 0. E.g., offset=100, limit=50 returns results 100-149.',
   )
   .optional();
+
 const bodyIdSchema = z.string().regex(/^body:\d+$/, 'Body IDs must match body:N.');
 
 const FACE_FIELDS = [
@@ -118,6 +66,8 @@ const FACE_FIELDS = [
   'closest_face_distance',
   'has_inner_wires',
   'body_id',
+  'outer_edges',
+  'inner_wires',
 ] as const;
 
 const EDGE_FIELDS = [
@@ -129,6 +79,9 @@ const EDGE_FIELDS = [
   'radius',
   'start_point',
   'end_point',
+  'start_vertex',
+  'end_vertex',
+  'convexity',
   'adjacent_faces',
   'body_id',
 ] as const;
@@ -136,366 +89,35 @@ const EDGE_FIELDS = [
 const FACE_GET_FIELDS = new Set<string>(FACE_FIELDS);
 const EDGE_GET_FIELDS = new Set<string>(EDGE_FIELDS);
 
-function mapBboxCenter(fields: string[] | undefined): string[] | undefined {
-  return fields?.map((f) => (f === 'bbox_center' ? 'center' : f));
+function uniqueArray<T>(values: T[]): boolean {
+  return new Set(values).size === values.length;
 }
 
-const faceIncludeSchema = z
-  .array(
-    z
-      .enum(
-        FACE_FIELDS.map((f) => (f === 'bbox_center' ? 'center' : f)) as unknown as [
-          string,
-          ...string[],
-        ]
-      )
-      .describe(
-        'Face projection fields: id=unique identifier, surface_type=geometry type, area=surface area mm^2, bbox=bounding box, center=centroid, normal=surface normal direction, surface_parameters=raw OCCT surface data (e.g. cylinder radius), axis=cylinder axis direction and location (cylindrical faces only), adjacent_faces=list of adjacent faces with dihedral angle, closest_face_distance=minimum distance to any other face in the model, has_inner_wires=whether the face boundary contains interior wire(s) (holes/openings), body_id=which body this face belongs to (body:0, body:1, ...). Default: id,surface_type,area,bbox,center.'
-      )
-  )
-  .min(1)
-  .max(12)
-  .refine(uniqueArray, 'Include values must be unique.')
-  .describe(
-    'List of face properties to include in results. Omit to get default projection (id, surface_type, area, bbox, center).'
-  )
-  .optional();
+/* ------------------------------------------------------------------ */
+/*  Face find schema                                                   */
+/* ------------------------------------------------------------------ */
 
 const faceFieldsSchema = z
   .array(z.enum(FACE_FIELDS as unknown as [string, ...string[]]))
   .min(1)
-  .max(12)
+  .max(14)
   .refine(uniqueArray, 'Field values must be unique.')
-  .describe('Face fields to include. Default: id,surface_type,area,bbox,bbox_center. New: axis returns {direction, location} for cylindrical faces.')
-  .optional();
-
-const edgeIncludeSchema = z
-  .array(
-    z
-      .enum(
-        EDGE_FIELDS.map((f) => (f === 'bbox_center' ? 'center' : f)) as unknown as [
-          string,
-          ...string[],
-        ]
-      )
-      .describe(
-        'Edge projection fields: id=unique identifier, curve_type=line/circle/ellipse/bspline/other, length=edge length mm, bbox=bounding box, center=midpoint or arc center, radius=radius for circular curves (null for lines), start_point=endpoint [x,y,z], end_point=other endpoint [x,y,z], adjacent_faces=the faces that bound this edge with face_id and surface_type, body_id=which body this edge belongs to (body:0, body:1, ...). Default: id,curve_type,length,bbox,center.'
-      )
-  )
-  .min(1)
-  .max(10)
-  .refine(uniqueArray, 'Include values must be unique.')
   .describe(
-    'List of edge properties to include in results. Omit to get default projection (id, curve_type, length, bbox, center).'
+    'Face fields to include. Default: id,surface_type,area,bbox,bbox_center. New: outer_edges=edge IDs of outer boundary, inner_wires=array of edge ID arrays per hole.',
   )
-  .optional();
-
-const edgeFieldsSchema = z
-  .array(z.enum(EDGE_FIELDS as unknown as [string, ...string[]]))
-  .min(1)
-  .max(10)
-  .refine(uniqueArray, 'Field values must be unique.')
-  .describe('Edge fields to include. Default: id,curve_type,length,bbox,bbox_center.')
   .optional();
 
 const faceGroupBySchema = z
-  .array(
-    z
-      .enum(['surface_type', 'normal_direction', 'area_range', 'radius', 'body_id'])
-      .describe(
-        'Grouping dimension: surface_type=plane/cylinder/cone/etc; normal_direction=nearest principal axis (+X..-Z within 15 degrees, else off-axis); area_range=fixed log-scale size bucket in mm^2 (0-1, 1-10, 10-100, ...); radius=rounded to 0.5mm (cylindrical faces only); body_id=which body the face belongs to.'
-      )
-  )
+  .array(z.enum(['surface_type', 'normal_direction', 'area_range', 'radius', 'body_id']))
   .min(1)
   .max(5)
   .refine(uniqueArray, 'Group-by values must be unique.')
-  .describe(
-    'List of dimensions to group faces by; required when result_mode is "groups". E.g., ["surface_type"] groups by geometry type. Combining dimensions produces one group per distinct key combination. Bucket widths are fixed by the server.'
-  )
+  .describe('List of dimensions to group faces by. E.g., ["surface_type"] groups by geometry type.')
   .optional();
 
-const edgeGroupBySchema = z
-  .array(
-    z
-      .enum(['curve_type', 'length_range', 'body_id'])
-      .describe(
-        'Grouping dimension: curve_type=line/circle/ellipse/bspline/other; length_range=fixed log-scale length bucket in mm (0-1, 1-10, 10-100, ...); body_id=which body the edge belongs to.'
-      )
-  )
-  .min(1)
-  .max(3)
-  .refine(uniqueArray, 'Group-by values must be unique.')
-  .describe(
-    'List of dimensions to group edges by; required when result_mode is "groups". E.g., ["curve_type","length_range"] groups by type and length bucket. Bucket widths are fixed by the server.'
-  )
-  .optional();
 const faceSortSchema = z
   .object({
-    by: z
-      .enum(['area', 'surface_type', 'center_x', 'center_y', 'center_z'])
-      .describe(
-        'Sort field: area=surface area, surface_type=plane/cylinder/etc (alphabetic), center_x/y/z=face centroid coordinate'
-      ),
-    direction: z
-      .enum(['asc', 'desc'])
-      .describe('"asc" (ascending, default) or "desc" (descending)')
-      .optional(),
-  })
-  .strict()
-  .describe(
-    'Sort results by one field and optional direction. E.g., {by:"area",direction:"desc"} sorts largest faces first.'
-  )
-  .optional();
-
-const edgeSortSchema = z
-  .object({
-    by: z
-      .enum(['length', 'curve_type', 'radius', 'center_x', 'center_y', 'center_z'])
-      .describe(
-        'Sort field: length=edge length, curve_type=line/circle/etc (alphabetic), radius=circular radius, center_x/y/z=edge center coordinate'
-      ),
-    direction: z
-      .enum(['asc', 'desc'])
-      .describe('"asc" (ascending, default) or "desc" (descending)')
-      .optional(),
-  })
-  .strict()
-  .describe(
-    'Sort results by one field and optional direction. E.g., {by:"length",direction:"asc"} sorts shortest edges first (useful for finding tiny edges).'
-  )
-  .optional();
-
-const faceFilterSchema = z
-  .object({
-    entity_ids: z
-      .array(z.string().min(1))
-      .min(1)
-      .max(200)
-      .refine(uniqueArray)
-      .describe(
-        'List of face IDs to retrieve (e.g., ["face:0", "face:5"]). Limits results to exactly these faces. Max 200 IDs.'
-      )
-      .optional(),
-    group_ids: z
-      .array(z.string().min(1))
-      .min(1)
-      .max(50)
-      .refine(uniqueArray)
-      .describe(
-        'Group IDs from a previous group_by result. Retrieves all entities within those groups. Requires the same group_by used to produce the groups. Use together to drill from grouped/counted populations into specific entities. Max 50 IDs.'
-      )
-      .optional(),
-    surface_type: z
-      .array(z.enum(['plane', 'cylinder', 'cone', 'sphere', 'torus', 'bspline', 'other']))
-      .min(1)
-      .max(7)
-      .describe(
-        'Surface geometry type(s). Returns only faces matching these types. "plane" = flat, "cylinder" = cylindrical, "cone" = conical, etc. Multiple types use AND logic (face must match one type).'
-      )
-      .refine(uniqueArray, 'Surface type values must be unique.')
-      .optional(),
-    area_min: z
-      .number()
-      .nonnegative()
-      .describe(
-        'Minimum face area in mm^2. Returns faces with area >= area_min. E.g., 100 returns faces >= 100 mm^2.'
-      )
-      .optional(),
-    area_max: z
-      .number()
-      .nonnegative()
-      .describe(
-        'Maximum face area in mm^2. Returns faces with area <= area_max. E.g., 1000 returns faces <= 1000 mm^2.'
-      )
-      .optional(),
-    normal_parallel_to: direction3Schema
-      .describe(
-        'Direction vector [x, y, z] to match face normals against. Returns faces whose surface normal is parallel to this direction. Normal tolerance determines how close "parallel" must be.'
-      )
-      .optional(),
-    normal_tolerance_degrees: z
-      .number()
-      .nonnegative()
-      .max(180)
-      .describe(
-        'Angle tolerance in degrees for normal_parallel_to matching. E.g., 10 degrees means normals within +/-10 degrees of the target direction pass.'
-      )
-      .optional(),
-    body_ids: z
-      .array(z.string().min(1))
-      .min(1)
-      .max(20)
-      .describe(
-        'Filter faces to specific body IDs (e.g., ["body:0", "body:1"]). Use after a summary/groups query to narrow to a subset of bodies in a multi-body model. Max 20 IDs.'
-      )
-      .optional(),
-  })
-  .strict()
-  .refine(({ area_min, area_max }) => boundedRange({ min: area_min, max: area_max }), {
-    message: 'area_min must be less than or equal to area_max.',
-  });
-
-const edgeFilterSchema = z
-  .object({
-    entity_ids: z
-      .array(z.string().min(1))
-      .min(1)
-      .max(200)
-      .refine(uniqueArray)
-      .describe(
-        'List of edge IDs to retrieve (e.g., ["edge:0", "edge:42"]). Limits results to exactly these edges. Max 200 IDs.'
-      )
-      .optional(),
-    group_ids: z
-      .array(z.string().min(1))
-      .min(1)
-      .max(50)
-      .refine(uniqueArray)
-      .describe(
-        'Group IDs from a previous group_by result. Retrieves all entities within those groups. Requires the same group_by used to produce the groups. Use together to drill from grouped/counted populations into specific entities. Max 50 IDs.'
-      )
-      .optional(),
-    curve_type: z
-      .array(z.enum(['line', 'circle', 'ellipse', 'bspline', 'other']))
-      .min(1)
-      .max(5)
-      .describe(
-        'Edge curve type(s). Returns only edges matching these types. "line" = straight, "circle" = circular, "ellipse" = elliptical, "bspline" = spline curve. Multiple types use AND logic.'
-      )
-      .refine(uniqueArray, 'Curve type values must be unique.')
-      .optional(),
-    length_min: z
-      .number()
-      .nonnegative()
-      .describe(
-        'Minimum edge length in mm. Returns edges with length >= length_min. E.g., 10 returns edges >= 10 mm.'
-      )
-      .optional(),
-    length_max: z
-      .number()
-      .nonnegative()
-      .describe(
-        'Maximum edge length in mm. Returns edges with length <= length_max. E.g., 100 returns edges <= 100 mm.'
-      )
-      .optional(),
-    radius_min: z
-      .number()
-      .nonnegative()
-      .describe(
-        'Minimum radius in mm for circular/curved edges. Returns edges with radius >= radius_min. Only applies to circular curves.'
-      )
-      .optional(),
-    radius_max: z
-      .number()
-      .nonnegative()
-      .describe(
-        'Maximum radius in mm for circular/curved edges. Returns edges with radius <= radius_max. Only applies to circular curves.'
-      )
-      .optional(),
-    body_ids: z
-      .array(z.string().min(1))
-      .min(1)
-      .max(20)
-      .describe(
-        'Filter edges to specific body IDs (e.g., ["body:0", "body:1"]). Use after a summary/groups query to narrow to a subset of bodies in a multi-body model. Max 20 IDs.'
-      )
-      .optional(),
-  })
-  .strict()
-  .refine(({ length_min, length_max }) => boundedRange({ min: length_min, max: length_max }), {
-    message: 'length_min must be less than or equal to length_max.',
-  })
-  .refine(({ radius_min, radius_max }) => boundedRange({ min: radius_min, max: radius_max }), {
-    message: 'radius_min must be less than or equal to radius_max.',
-  });
-
-/* ------------------------------------------------------------------ */
-/*  PMI query schema                                                   */
-/* ------------------------------------------------------------------ */
-
-const pmiTypeSchema = z
-  .enum(['geometric_tolerance', 'dimension', 'datum', 'annotation'])
-  .describe('PMI entity type category');
-
-const toleranceSubtypeSchema = z
-  .enum([
-    'position',
-    'flatness',
-    'straightness',
-    'circularity',
-    'cylindricity',
-    'profile',
-    'parallelism',
-    'perpendicularity',
-    'angularity',
-    'concentricity',
-    'runout',
-    'symmetry',
-    'coaxiality',
-    'circular_runout',
-    'total_runout',
-    'surface_profile',
-    'line_profile',
-  ])
-  .describe('Geometric tolerance subtype matching the STEP entity type name');
-
-const pmiFilterSchema = z
-  .object({
-    pmi_types: z
-      .array(pmiTypeSchema)
-      .min(1)
-      .max(5)
-      .describe(
-        'Filter by PMI entity type category: geometric_tolerance (GD&T callouts), dimension (linear/angular/diametral sizes and locations), datum (datum references and systems), annotation (notes, surface finish, callouts). Multiple types use OR logic.'
-      )
-      .optional(),
-    tolerance_types: z
-      .array(toleranceSubtypeSchema)
-      .min(1)
-      .max(17)
-      .describe(
-        'Filter geometric tolerances by subtype: position, flatness, straightness, circularity, cylindricity, profile, parallelism, perpendicularity, angularity, concentricity, runout, symmetry, coaxiality. Only applies when pmi_types includes geometric_tolerance.'
-      )
-      .optional(),
-    value_min: z
-      .number()
-      .nonnegative()
-      .describe('Minimum tolerance/dimension value in mm. Returns PMI with value >= value_min.')
-      .optional(),
-    value_max: z
-      .number()
-      .nonnegative()
-      .describe('Maximum tolerance/dimension value in mm. Returns PMI with value <= value_max.')
-      .optional(),
-  })
-  .strict()
-  .refine(({ value_min, value_max }) => boundedRange({ min: value_min, max: value_max }), {
-    message: 'value_min must be less than or equal to value_max.',
-  });
-
-const pmiGroupBySchema = z
-  .array(
-    z
-      .enum(['type', 'tolerance_type', 'dimension_type', 'material_condition'])
-      .describe(
-        'Grouping dimension: type=geometric_tolerance/dimension/datum/annotation; tolerance_type=position/flatness/etc (geometric tolerances only); dimension_type=diameter/radius/length/location (dimensions only); material_condition=mmc/lmc/rfs (geometric tolerances only).'
-      )
-  )
-  .min(1)
-  .max(3)
-  .refine(uniqueArray, 'Group-by values must be unique.')
-  .describe(
-    'List of dimensions to group PMI entities by. E.g., ["type"] groups by category; ["type","tolerance_type"] groups tolerances by subtype within the tolerance group.'
-  )
-  .optional();
-
-const pmiSortSchema = z
-  .object({
-    by: z
-      .enum(['type', 'value', 'tolerance_type'])
-      .describe(
-        'Sort field: type=entity category (alphabetic), value= tolerance/dimension value, tolerance_type=geometric tolerance subtype'
-      ),
+    by: z.enum(['area', 'surface_type', 'center_x', 'center_y', 'center_z']),
     direction: z
       .enum(['asc', 'desc'])
       .describe('"asc" (ascending, default) or "desc" (descending)')
@@ -503,61 +125,33 @@ const pmiSortSchema = z
   })
   .strict()
   .optional();
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const internalFaceQuerySchema = {
-  filter: faceFilterSchema.optional(),
-  include: faceIncludeSchema,
-  group_by: faceGroupBySchema,
-  sort: faceSortSchema,
-  result_mode: resultModeSchema,
-  limit: limitSchema,
-  offset: offsetSchema,
-};
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const internalEdgeQuerySchema = {
-  filter: edgeFilterSchema.optional(),
-  include: edgeIncludeSchema,
-  group_by: edgeGroupBySchema,
-  sort: edgeSortSchema,
-  result_mode: resultModeSchema,
-  limit: limitSchema,
-  offset: offsetSchema,
-};
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const internalPmiQuerySchema = {
-  filter: pmiFilterSchema.optional(),
-  group_by: pmiGroupBySchema,
-  sort: pmiSortSchema,
-  result_mode: resultModeSchema,
-  limit: limitSchema,
-  offset: offsetSchema,
-};
 
 const findStepFacesSchema = {
-  ...stepFileInput,
+  ...filePathInput,
   surface_types: z
     .array(z.enum(['plane', 'cylinder', 'cone', 'sphere', 'torus', 'bspline', 'other']))
     .min(1)
     .max(7)
     .refine(uniqueArray, 'Surface type values must be unique.')
-    .describe(
-      'Surface geometry types to match. Multiple values use OR logic. Omit to include all types.'
-    )
+    .describe('Surface geometry types to match. Omit to include all types.')
     .optional(),
-  area_min: z
-    .number()
-    .nonnegative()
-    .describe('Minimum face area in mm^2. Omit for no lower bound.')
+  area_min: z.number().nonnegative().describe('Minimum face area in mm^2.').optional(),
+  area_max: z.number().nonnegative().describe('Maximum face area in mm^2.').optional(),
+  normal: z
+    .object({
+      parallel_to: direction3Schema.describe(
+        'Direction vector [x, y, z] to match face normals against.',
+      ),
+      tolerance_degrees: z
+        .number()
+        .nonnegative()
+        .max(180)
+        .describe('Angle tolerance in degrees (default: 10).')
+        .optional(),
+    })
+    .strict()
+    .describe('Filter by face normal direction.')
     .optional(),
-  area_max: z
-    .number()
-    .nonnegative()
-    .describe('Maximum face area in mm^2. Omit for no upper bound.')
-    .optional(),
-  normal: normalFilterSchema,
   body_ids: z
     .array(bodyIdSchema)
     .min(1)
@@ -565,146 +159,271 @@ const findStepFacesSchema = {
     .describe('Restrict to specific bodies in multi-body models. Omit to search all bodies.')
     .optional(),
   fields: faceFieldsSchema,
-  group_by: z
-    .array(
-      z
-        .enum(['surface_type', 'area_range', 'radius', 'normal_direction', 'body_id'])
-        .describe(
-          'Grouping dimension: surface_type=plane/cylinder/etc; area_range=size bucket (0–1, 1–10, …); radius=rounded to 0.5mm (cylindrical faces only); normal_direction=nearest principal axis direction; body_id=which body the face belongs to.'
-        )
-    )
-    .min(1)
-    .max(5)
-    .refine(uniqueArray, 'Group-by values must be unique.')
-    .describe(
-      'Group dimensions. Requires return_type:"groups". Ignored otherwise. Example: ["surface_type"] groups by geometry type.'
-    )
-    .optional(),
+  group_by: faceGroupBySchema,
   sort: faceSortSchema,
-  return_type: returnTypeSchema,
+  return_type: resultModeSchema,
+  pull_direction: direction3Schema
+    .describe('Pull/draw direction [x, y, z]. When set, draft_angle_deg is computed per face as 90° − angle(normal, pull_direction). Negative values indicate undercut.')
+    .optional(),
   limit: limitSchema,
   offset: offsetSchema,
 };
 
+/* ------------------------------------------------------------------ */
+/*  Edge find schema                                                   */
+/* ------------------------------------------------------------------ */
+
+const edgeFieldsSchema = z
+  .array(z.enum(EDGE_FIELDS as unknown as [string, ...string[]]))
+  .min(1)
+  .max(13)
+  .refine(uniqueArray, 'Field values must be unique.')
+  .describe(
+    'Edge fields to include. Default: id,curve_type,length,bbox,bbox_center. New: start_vertex,end_vertex=vertex IDs for cross-edge reference, convexity=concave/convex/smooth for interior edges.',
+  )
+  .optional();
+
+const edgeGroupBySchema = z
+  .array(z.enum(['curve_type', 'length_range', 'body_id']))
+  .min(1)
+  .max(3)
+  .refine(uniqueArray, 'Group-by values must be unique.')
+  .describe('List of dimensions to group edges by. E.g., ["curve_type","length_range"].')
+  .optional();
+
+const edgeSortSchema = z
+  .object({
+    by: z.enum(['length', 'curve_type', 'radius', 'center_x', 'center_y', 'center_z']),
+    direction: z
+      .enum(['asc', 'desc'])
+      .describe('"asc" (ascending, default) or "desc" (descending)')
+      .optional(),
+  })
+  .strict()
+  .optional();
+
+const edgeRadiusSchema = z
+  .object({
+    min: z.number().nonnegative().describe('Minimum radius in mm.').optional(),
+    max: z.number().nonnegative().describe('Maximum radius in mm.').optional(),
+  })
+  .strict()
+  .refine((r) => r.min === undefined || r.max === undefined || r.min <= r.max, {
+    message: 'radius.min must be <= radius.max.',
+  })
+  .describe('Filter circular/curved edges by radius.')
+  .optional();
+
 const findStepEdgesSchema = {
-  ...stepFileInput,
+  ...filePathInput,
   curve_types: z
     .array(z.enum(['line', 'circle', 'ellipse', 'bspline', 'other']))
     .min(1)
     .max(5)
     .refine(uniqueArray, 'Curve type values must be unique.')
-    .describe('Edge curve types to match. Multiple values use OR logic. Omit to include all types.')
+    .describe('Edge curve types to match. Omit to include all types.')
     .optional(),
-  length_min: z
-    .number()
-    .nonnegative()
-    .describe('Minimum edge length in mm. Omit for no lower bound.')
-    .optional(),
-  length_max: z
-    .number()
-    .nonnegative()
-    .describe('Maximum edge length in mm. For tiny edges, set this alone and omit radius filters.')
-    .optional(),
+  length_min: z.number().nonnegative().describe('Minimum edge length in mm.').optional(),
+  length_max: z.number().nonnegative().describe('Maximum edge length in mm.').optional(),
   radius: edgeRadiusSchema,
   body_ids: z
     .array(bodyIdSchema)
     .min(1)
     .refine(uniqueArray, 'Body IDs must be unique.')
-    .describe('Restrict to specific bodies in multi-body models. Omit to search all bodies.')
+    .describe('Restrict to specific bodies in multi-body models.')
     .optional(),
   fields: edgeFieldsSchema,
   group_by: edgeGroupBySchema,
   sort: edgeSortSchema,
-  return_type: returnTypeSchema,
+  return_type: resultModeSchema,
   limit: limitSchema,
   offset: offsetSchema,
 };
 
+/* ------------------------------------------------------------------ */
+/*  Get entities schema                                                */
+/* ------------------------------------------------------------------ */
+
 const getStepEntitiesSchema = {
-  ...stepFileInput,
-  entity_type: z
-    .enum(['face', 'edge'])
-    .describe('Entity kind to retrieve. Determines valid ID prefix and field names.'),
+  ...filePathInput,
+  entity_type: z.enum(['face', 'edge']).describe('Entity kind to retrieve.'),
   entity_ids: z
     .array(z.string().min(1))
     .min(1)
     .max(200)
     .refine(uniqueArray, 'Entity IDs must be unique.')
-    .describe(
-      'Exact entity IDs. Must be face:N when entity_type is face, or edge:N when entity_type is edge.'
-    ),
+    .describe('Exact entity IDs. Must be face:N or edge:N.'),
   fields: z
     .array(
       z.enum([
         ...FACE_FIELDS,
         ...EDGE_FIELDS.filter((f) => !FACE_FIELDS.includes(f as never)),
-      ] as unknown as [string, ...string[]])
+      ] as unknown as [string, ...string[]]),
     )
     .min(1)
-    .max(16)
+    .max(18)
     .refine(uniqueArray, 'Field values must be unique.')
-    .describe('Entity fields to include. Face and edge fields are validated against entity_type.')
+    .describe('Entity fields to include.')
     .optional(),
 };
 
+/* ------------------------------------------------------------------ */
+/*  Compare schema                                                     */
+/* ------------------------------------------------------------------ */
+
+const compareStepFilesSchema = {
+  baseline_file_path: z
+    .string()
+    .min(1)
+    .describe('Absolute or relative path to the baseline STEP file.'),
+  comparison_file_path: z
+    .string()
+    .min(1)
+    .describe('Absolute or relative path to the comparison STEP file.'),
+};
+
+/* ------------------------------------------------------------------ */
+/*  PMI query schema                                                   */
+/* ------------------------------------------------------------------ */
+
+const pmiGroupBySchema = z
+  .array(z.enum(['type', 'tolerance_type', 'dimension_type', 'material_condition']))
+  .min(1)
+  .max(3)
+  .refine(uniqueArray, 'Group-by values must be unique.')
+  .describe('List of dimensions to group PMI entities by.')
+  .optional();
+
+const pmiSortSchema = z
+  .object({
+    by: z.enum(['type', 'value', 'tolerance_type']),
+    direction: z.enum(['asc', 'desc']).optional(),
+  })
+  .strict()
+  .optional();
+
 const pmiQuerySchema = {
-  ...stepFileInput,
+  ...filePathInput,
   pmi_types: z
-    .array(pmiTypeSchema)
+    .array(z.enum(['geometric_tolerance', 'dimension', 'datum', 'annotation']))
     .min(1)
     .max(5)
     .refine(uniqueArray, 'PMI type values must be unique.')
-    .describe(
-      'PMI categories to filter by: geometric_tolerance, dimension, datum, annotation. Omit to include all categories.'
-    )
+    .describe('PMI categories to filter by.')
     .optional(),
   tolerance_subtypes: z
-    .array(toleranceSubtypeSchema)
+    .array(
+      z.enum([
+        'position',
+        'flatness',
+        'straightness',
+        'circularity',
+        'cylindricity',
+        'profile',
+        'parallelism',
+        'perpendicularity',
+        'angularity',
+        'concentricity',
+        'runout',
+        'symmetry',
+        'coaxiality',
+        'circular_runout',
+        'total_runout',
+        'surface_profile',
+        'line_profile',
+      ]),
+    )
     .min(1)
     .max(17)
     .refine(uniqueArray, 'Tolerance subtype values must be unique.')
-    .describe(
-      'Geometric tolerance subtypes to filter by (e.g., position, flatness). Only applies to geometric tolerance type.'
-    )
+    .describe('Geometric tolerance subtypes to filter by.')
     .optional(),
   value_min: z
     .number()
     .nonnegative()
-    .describe('Minimum tolerance/dimension value in mm. Omit for no lower bound.')
+    .describe('Minimum tolerance/dimension value in mm.')
     .optional(),
   value_max: z
     .number()
     .nonnegative()
-    .describe('Maximum tolerance/dimension value in mm. Omit for no upper bound.')
+    .describe('Maximum tolerance/dimension value in mm.')
     .optional(),
   group_by: pmiGroupBySchema,
   sort: pmiSortSchema,
-  return_type: returnTypeSchema,
+  return_type: resultModeSchema,
   limit: limitSchema,
   offset: offsetSchema,
 };
 
+/* ------------------------------------------------------------------ */
+/*  Public exports                                                     */
+/* ------------------------------------------------------------------ */
+
 export const stepToolSchemas = {
-  inspectStepFile: inspectStepFileSchema,
+  inspectStepFile: filePathInput,
   findStepFaces: findStepFacesSchema,
   findStepEdges: findStepEdgesSchema,
   getStepEntities: getStepEntitiesSchema,
-  compareStepFiles: {
-    baseline_file_path: z
-      .string()
-      .min(1)
-      .describe('Absolute or relative path to the baseline/original STEP file.'),
-    comparison_file_path: z
-      .string()
-      .min(1)
-      .describe('Absolute or relative path to the comparison/changed STEP file.'),
-  },
+  compareStepFiles: compareStepFilesSchema,
   queryStepPmi: pmiQuerySchema,
+  queryRayIntersect: {
+    ...filePathInput,
+    origin: point3Schema.describe('Ray origin point [x, y, z] in mm.'),
+    direction: direction3Schema.describe('Ray direction vector [dx, dy, dz].'),
+    grid_spacing_mm: z
+      .number()
+      .positive()
+      .describe('When set, fires a grid of rays perpendicular to direction across the bounding box extent. Returns all hits. Omit for single-ray mode.')
+      .optional(),
+  },
+  measureDistance: {
+    ...filePathInput,
+    entity_a: z
+      .string()
+      .min(1)
+      .describe('First entity ID (e.g., "face:5", "body:0", "edge:3").'),
+    entity_b: z
+      .string()
+      .min(1)
+      .describe('Second entity ID.'),
+  },
+  findCoaxialCylinders: {
+    ...filePathInput,
+    min_diameter_mm: z
+      .number()
+      .nonnegative()
+      .describe('Minimum diameter in mm. Filters cylindrical features by diameter.')
+      .optional(),
+    max_diameter_mm: z
+      .number()
+      .nonnegative()
+      .describe('Maximum diameter in mm.')
+      .optional(),
+    axis_tolerance_deg: z
+      .number()
+      .nonnegative()
+      .describe('Angle tolerance in degrees for grouping coaxial faces (default: 5).')
+      .optional(),
+    merge_coaxial_tolerance_mm: z
+      .number()
+      .nonnegative()
+      .describe('Distance tolerance in mm for merging coaxial faces (default: 0.1).')
+      .optional(),
+    return_type: resultModeSchema,
+    limit: limitSchema,
+    offset: offsetSchema,
+  },
 } as const;
+
+/* ------------------------------------------------------------------ */
+/*  Output schemas                                                     */
+/* ------------------------------------------------------------------ */
+
+const schemaVersionField = { schema_version: z.literal(CAD_RESPONSE_SCHEMA_VERSION) };
 
 const queryOutputSchema = z
   .object({
-    schema_version: z.literal('0.4'),
+    ...schemaVersionField,
     file_path: z.string(),
     units: z.object({}).passthrough(),
     coordinate_system: z.object({}).passthrough(),
@@ -719,14 +438,14 @@ const queryOutputSchema = z
     }),
     entities: z.array(z.object({}).passthrough()),
     groups: z.array(z.object({}).passthrough()),
-    warnings: z.array(z.unknown()),
-    limitations: z.array(z.unknown()),
+    warnings: z.array(z.union([z.string(), z.object({}).passthrough()])),
+    limitations: z.array(z.union([z.string(), z.object({}).passthrough()])),
   })
   .passthrough();
 
 const compareOutputSchema = z
   .object({
-    schema_version: z.literal('0.4'),
+    ...schemaVersionField,
     files: z.object({ a: z.string(), b: z.string() }),
     deltas: z.object({}).passthrough(),
     exchange: z.object({}).passthrough(),
@@ -737,8 +456,8 @@ const compareOutputSchema = z
   .passthrough();
 
 export const stepToolOutputSchemas = {
-  inspectStepFile: {
-    schema_version: z.literal('0.4'),
+  inspectStepFile: z.object({
+    ...schemaVersionField,
     file_path: z.string(),
     identity: z.object({
       product_names: z.array(z.string()),
@@ -754,7 +473,6 @@ export const stepToolOutputSchemas = {
     }),
     structure: z.object({
       body_count: z.number(),
-      shape_type: z.string(),
       is_assembly: z.boolean(),
       product_count: z.number(),
       schema: z.string().optional(),
@@ -771,18 +489,42 @@ export const stepToolOutputSchemas = {
     geometry_extremes: z.object({}).passthrough().optional(),
     warnings: z.array(z.object({}).passthrough()),
     limitations: z.array(z.object({}).passthrough()),
-  },
+  }),
   findStepFaces: queryOutputSchema,
   findStepEdges: queryOutputSchema,
   getStepEntities: queryOutputSchema,
   compareStepFiles: compareOutputSchema,
   queryStepPmi: queryOutputSchema,
+  findCoaxialCylinders: queryOutputSchema,
+  queryRayIntersect: queryOutputSchema,
+  measureDistance: queryOutputSchema,
 } as const;
+
+/* ------------------------------------------------------------------ */
+/*  Handlers                                                           */
+/* ------------------------------------------------------------------ */
 
 export async function handleInspectStepFile(filePath: string) {
   return wrapTool(async () => {
     return withStepModel(filePath, async (model) => {
       const [brep, semantic] = await Promise.all([model.getBRepModel(), model.getSemanticModel()]);
+      const { kernel, shape } = await model.getShapeContext('inspect_step_file');
+
+      // Principal properties (may fail for wireframe/non-manifold shapes).
+      let principal: number[] | undefined;
+      try { principal = kernel.getPrincipalProperties(shape); } catch { /* ignore */ }
+
+      // Oriented bounding box (may fail same as above).
+      let obb: number[] | undefined;
+      try { obb = kernel.getOrientedBoundingBox(shape); } catch { /* ignore */ }
+
+      // Shell watertight analysis.
+      let freeEdgeCount = -1;
+      try { freeEdgeCount = kernel.freeEdgeCount(shape); } catch { /* ignore */ }
+
+      // Shape contents inventory.
+      let contents: number[] | undefined;
+      try { contents = kernel.shapeContents(shape); } catch { /* ignore */ }
 
       return {
         schema_version: CAD_RESPONSE_SCHEMA_VERSION,
@@ -799,9 +541,25 @@ export async function handleInspectStepFile(filePath: string) {
           surface_area: brep.surfaceArea,
           units: brep.units,
         },
+        principal_axes: principal
+          ? {
+              moments: [principal[0], principal[1], principal[2]],
+              axis_1: [principal[3], principal[4], principal[5]],
+              axis_2: [principal[6], principal[7], principal[8]],
+              axis_3: [principal[9], principal[10], principal[11]],
+            }
+          : undefined,
+        bounding_box_obb: obb
+          ? {
+              center: [obb[0], obb[1], obb[2]],
+              half_extents: [obb[3], obb[4], obb[5]],
+              axis_1: [obb[6], obb[7], obb[8]],
+              axis_2: [obb[9], obb[10], obb[11]],
+              axis_3: [obb[12], obb[13], obb[14]],
+            }
+          : undefined,
         structure: {
           body_count: brep.bodyCount,
-          shape_type: brep.shapeType,
           is_assembly: semantic.hasAssembly,
           product_count: semantic.productCount,
           schema: semantic.schema,
@@ -817,6 +575,24 @@ export async function handleInspectStepFile(filePath: string) {
             edge_count: brep.edgeStatistics?.count,
           },
         },
+        quality: freeEdgeCount >= 0
+          ? {
+              free_edge_count: freeEdgeCount,
+              is_watertight: freeEdgeCount === 0,
+              shape_contents: contents
+                ? {
+                    faces: contents[0],
+                    edges: contents[1],
+                    free_faces: contents[2],
+                    free_wires: contents[3],
+                    free_edges: contents[4],
+                    c0_surfaces: contents[5],
+                    bspline_surfaces: contents[6],
+                    offset_surfaces: contents[7],
+                  }
+                : undefined,
+            }
+          : undefined,
         pmi: {
           has_pmi: semantic.pmi?.hasGdt || semantic.pmi?.hasDimensions || false,
           has_gdt: semantic.pmi?.hasGdt || false,
@@ -825,9 +601,7 @@ export async function handleInspectStepFile(filePath: string) {
           tolerance_entity_count: semantic.toleranceEntityCount,
         },
         topology_summary: {
-          faces: {
-            total: brep.faceCount,
-          },
+          faces: { total: brep.faceCount },
           edges: brep.edgeStatistics
             ? {
                 total: brep.edgeStatistics.count,
@@ -844,6 +618,13 @@ export async function handleInspectStepFile(filePath: string) {
           edges_length_lt_1_mm: brep.edgeStatistics ? brep.edgeStatistics.byLengthRange.tiny : 0,
           min_edge_length: brep.edgeStatistics?.minLength || 0,
         },
+        bodies: brep.bodies.map((b) => ({
+          id: b.id,
+          volume: b.volume,
+          surface_area: b.surfaceArea,
+          dimensions: b.dimensions,
+          center_of_mass: b.centerOfMass,
+        })),
         warnings: brep.health.warnings,
         limitations: [
           ...semantic.limitations,
@@ -860,54 +641,56 @@ export async function handleInspectStepFile(filePath: string) {
 
 export async function handleFindStepFaces(
   filePath: string,
-  query: Record<string, unknown> | undefined
+  query: Record<string, unknown> | undefined,
 ) {
-  return wrapTool(async () =>
-    queryFacesService(
-      filePath,
-      adaptFindStepFaces(query as Partial<PublicFindStepFacesInput> | undefined)
-    )
-  );
+  return wrapTool(async () => queryFacesService(filePath, (query ?? {}) as never));
 }
 
 export async function handleFindStepEdges(
   filePath: string,
-  query: Record<string, unknown> | undefined
+  query: Record<string, unknown> | undefined,
 ) {
-  return wrapTool(async () =>
-    queryEdgesService(
-      filePath,
-      adaptFindStepEdges(query as Partial<PublicFindStepEdgesInput> | undefined)
-    )
-  );
+  return wrapTool(async () => queryEdgesService(filePath, (query ?? {}) as never));
 }
 
 export async function handleGetStepEntities(
   filePath: string,
-  query: Record<string, unknown> | undefined
+  query: Record<string, unknown> | undefined,
 ) {
   return wrapTool(async () => {
-    const publicQuery = query as Partial<PublicGetStepEntitiesInput> | undefined;
-    if (!publicQuery?.entity_type) throw invalidInput('entity_type is required.');
-    if (!publicQuery.entity_ids || publicQuery.entity_ids.length === 0) {
+    const q = query as Partial<PublicGetStepEntitiesInput> | undefined;
+    if (!q?.entity_type) throw invalidInput('entity_type is required.');
+    if (!q.entity_ids || q.entity_ids.length === 0) {
       throw invalidInput('entity_ids is required and must contain at least one ID.');
     }
 
-    if (publicQuery.entity_type === 'face') {
-      validateEntityIds(publicQuery.entity_ids, 'face');
-      validateEntityFields(publicQuery.fields, 'face');
-      if (canDirectGetEntities(publicQuery as PublicGetStepEntitiesInput)) {
-        return getStepEntitiesDirect(filePath, publicQuery as PublicGetStepEntitiesInput);
+    if (q.entity_type === 'face') {
+      validateEntityIds(q.entity_ids, 'face');
+      validateEntityFields(q.fields, 'face');
+      if (canDirectGetEntities(q as never)) {
+        return getStepEntitiesDirect(filePath, q as never);
       }
-      return queryFacesService(filePath, adaptGetStepFaces(publicQuery));
+      return queryFacesService(filePath, {
+        entity_ids: q.entity_ids,
+        fields: q.fields,
+        return_type: 'entities',
+        limit: q.entity_ids.length,
+        offset: 0,
+      } as never);
     }
 
-    validateEntityIds(publicQuery.entity_ids, 'edge');
-    validateEntityFields(publicQuery.fields, 'edge');
-    if (canDirectGetEntities(publicQuery as PublicGetStepEntitiesInput)) {
-      return getStepEntitiesDirect(filePath, publicQuery as PublicGetStepEntitiesInput);
+    validateEntityIds(q.entity_ids, 'edge');
+    validateEntityFields(q.fields, 'edge');
+    if (canDirectGetEntities(q as never)) {
+      return getStepEntitiesDirect(filePath, q as never);
     }
-    return queryEdgesService(filePath, adaptGetStepEdges(publicQuery));
+    return queryEdgesService(filePath, {
+      entity_ids: q.entity_ids,
+      fields: q.fields,
+      return_type: 'entities',
+      limit: q.entity_ids.length,
+      offset: 0,
+    } as never);
   });
 }
 
@@ -917,123 +700,177 @@ export async function handleCompareStepFiles(fileA: string, fileB: string) {
 
 export async function handleQueryStepPmi(
   filePath: string,
-  query: Record<string, unknown> | undefined
+  query: Record<string, unknown> | undefined,
+) {
+  return wrapTool(async () => {
+    const q = query ?? {};
+    if (
+      q.value_min !== undefined &&
+      q.value_max !== undefined &&
+      (q.value_min as number) > (q.value_max as number)
+    ) {
+      throw invalidInput('value_min must be less than or equal to value_max.');
+    }
+    return queryPmiService(filePath, q as never);
+  });
+}
+
+export async function handleFindCoaxialCylinders(
+  filePath: string,
+  query: Record<string, unknown> | undefined,
 ) {
   return wrapTool(async () =>
-    queryPmiService(filePath, adaptPmiQuery(query as Partial<PublicQueryStepPmiInput> | undefined))
+    findCoaxialCylinders(filePath, (query ?? {}) as never),
   );
 }
 
-export function adaptFindStepFaces(
-  query: Partial<PublicFindStepFacesInput> | undefined
-): QueryStepFacesInput {
-  if (!boundedRange({ min: query?.area_min, max: query?.area_max })) {
-    throw invalidInput('area_min must be less than or equal to area_max.');
-  }
+export async function handleMeasureDistance(
+  filePath: string,
+  query: Record<string, unknown> | undefined,
+) {
+  return wrapTool(async () =>
+    withStepModel(filePath, async (model) => {
+      const q = query ?? {};
+      const a = String(q.entity_a ?? '');
+      const b = String(q.entity_b ?? '');
+      const { kernel, shape } = await model.getShapeContext('measure_distance');
 
-  return {
-    filter: {
-      body_ids: query?.body_ids,
-      surface_type: query?.surface_types,
-      area_min: query?.area_min,
-      area_max: query?.area_max,
-      normal_parallel_to: query?.normal?.parallel_to,
-      normal_tolerance_degrees: query?.normal?.tolerance_degrees,
-    },
-    include: mapBboxCenter(query?.fields),
-    group_by: query?.group_by,
-    sort: query?.sort,
-    result_mode: query?.return_type,
-    limit: query?.limit,
-    offset: query?.offset,
-  };
+      const entityType = a.startsWith('face:') || b.startsWith('face:')
+        ? 'face' : a.startsWith('edge:') || b.startsWith('edge:') ? 'edge' : 'solid';
+      const subShapes = kernel.getSubShapes(shape, entityType as never);
+
+      const idxA = parseInt(a.split(':')[1], 10);
+      const idxB = parseInt(b.split(':')[1], 10);
+      if (isNaN(idxA) || isNaN(idxB) || idxA >= subShapes.length || idxB >= subShapes.length) {
+        throw { type: 'invalid_input', message: `Invalid entity ID(s): ${a}, ${b}.` };
+      }
+
+      const dist = kernel.distanceBetween(subShapes[idxA], subShapes[idxB]);
+      return createQueryResponse(
+        String(q.file_path ?? ''),
+        { entity_a: a, entity_b: b },
+        createPagination(1, 0, 1, 1),
+        [{ entity_a: a, entity_b: b, distance_mm: dist }],
+        { distance_mm: dist },
+      );
+    }),
+  );
 }
 
-export function adaptFindStepEdges(
-  query: Partial<PublicFindStepEdgesInput> | undefined
-): QueryStepEdgesInput {
-  if (!boundedRange({ min: query?.length_min, max: query?.length_max })) {
-    throw invalidInput('length_min must be less than or equal to length_max.');
-  }
-  if (!boundedRange({ min: query?.radius?.min, max: query?.radius?.max })) {
-    throw invalidInput('radius.min must be less than or equal to radius.max.');
-  }
+export async function handleQueryRayIntersect(
+  filePath: string,
+  query: Record<string, unknown> | undefined,
+) {
+  return wrapTool(async () =>
+    withStepModel(filePath, async (model) => {
+      const q = query ?? {};
+      const { kernel, shape } = await model.getShapeContext('query_ray_intersect');
+      const dirArr = (q.direction as number[]) ?? [0, 0, 1];
+      const dir: Vec3 = { x: dirArr[0], y: dirArr[1], z: dirArr[2] };
 
-  return {
-    filter: {
-      body_ids: query?.body_ids,
-      curve_type: query?.curve_types,
-      length_min: query?.length_min,
-      length_max: query?.length_max,
-      radius_min: query?.radius?.min,
-      radius_max: query?.radius?.max,
-    },
-    include: mapBboxCenter(query?.fields),
-    group_by: query?.group_by,
-    sort: query?.sort,
-    result_mode: query?.return_type,
-    limit: query?.limit,
-    offset: query?.offset,
-  };
+      // Grid mode.
+      const spacing = q.grid_spacing_mm as number | undefined;
+      if (spacing && spacing > 0) {
+        const hits: Array<{ face_id: string; distance: number; point: [number, number, number] }> = [];
+        const bbox = kernel.getBoundingBox(shape, false);
+        let totalRays = 0;
+        const MAX_RAYS = 10000;
+
+        // Pick two perpendicular axes in the plane orthogonal to dir.
+        const absDir = [Math.abs(dir.x), Math.abs(dir.y), Math.abs(dir.z)];
+        let uAxis = absDir[0] < absDir[1] && absDir[0] < absDir[2]
+          ? { x: 1, y: 0, z: 0 } : { x: 0, y: 1, z: 0 };
+        const udot = uAxis.x * dir.x + uAxis.y * dir.y + uAxis.z * dir.z;
+        uAxis = { x: uAxis.x - udot * dir.x, y: uAxis.y - udot * dir.y, z: uAxis.z - udot * dir.z };
+        const uLen = Math.sqrt(uAxis.x * uAxis.x + uAxis.y * uAxis.y + uAxis.z * uAxis.z);
+        if (uLen > 1e-9) { uAxis = { x: uAxis.x / uLen, y: uAxis.y / uLen, z: uAxis.z / uLen }; }
+        const vAxis = {
+          x: dir.y * uAxis.z - dir.z * uAxis.y,
+          y: dir.z * uAxis.x - dir.x * uAxis.z,
+          z: dir.x * uAxis.y - dir.y * uAxis.x,
+        };
+
+        const corners = [
+          { x: bbox.xmin, y: bbox.ymin, z: bbox.zmin }, { x: bbox.xmax, y: bbox.ymin, z: bbox.zmin },
+          { x: bbox.xmin, y: bbox.ymax, z: bbox.zmin }, { x: bbox.xmin, y: bbox.ymin, z: bbox.zmax },
+          { x: bbox.xmax, y: bbox.ymax, z: bbox.zmin }, { x: bbox.xmax, y: bbox.ymin, z: bbox.zmax },
+          { x: bbox.xmin, y: bbox.ymax, z: bbox.zmax }, { x: bbox.xmax, y: bbox.ymax, z: bbox.zmax },
+        ];
+        let uMin = Infinity, uMax = -Infinity, vMin = Infinity, vMax = -Infinity;
+        for (const c of corners) {
+          const ud = c.x * uAxis.x + c.y * uAxis.y + c.z * uAxis.z;
+          const vd = c.x * vAxis.x + c.y * vAxis.y + c.z * vAxis.z;
+          if (ud < uMin) uMin = ud; if (ud > uMax) uMax = ud;
+          if (vd < vMin) vMin = vd; if (vd > vMax) vMax = vd;
+        }
+
+        const cols = Math.max(1, Math.ceil((uMax - uMin) / spacing));
+        const rows = Math.max(1, Math.ceil((vMax - vMin) / spacing));
+
+        for (let r = 0; r < rows && totalRays < MAX_RAYS; r++) {
+          for (let c = 0; c < cols && totalRays < MAX_RAYS; c++) {
+            const uu = uMin + (c + 0.5) * spacing;
+            const vv = vMin + (r + 0.5) * spacing;
+            const origin: Vec3 = {
+              x: uAxis.x * uu + vAxis.x * vv,
+              y: uAxis.y * uu + vAxis.y * vv,
+              z: uAxis.z * uu + vAxis.z * vv,
+            };
+            const rayHits = queryRay(kernel, shape, origin, dir);
+            for (const h of rayHits) hits.push(h);
+            totalRays++;
+          }
+        }
+
+        return createQueryResponse(
+          String(q.file_path ?? ''),
+          { grid_spacing_mm: spacing, direction: dirArr, total_rays: totalRays },
+          createPagination(hits.length, 0, hits.length, hits.length),
+          hits,
+          { total_hits: hits.length, total_rays: totalRays },
+          [],
+          [],
+          ['Sampled estimate; not an exhaustive wall thickness survey.'],
+        );
+      }
+
+      // Single-ray mode.
+      const origin = (q.origin as number[]) ?? [0, 0, 0];
+      const hits = queryRay(
+        kernel,
+        shape,
+        { x: origin[0], y: origin[1], z: origin[2] },
+        dir,
+      );
+      return createQueryResponse(
+        String(q.file_path ?? ''),
+        { origin: origin, direction: dirArr },
+        createPagination(hits.length, 0, hits.length, hits.length),
+        hits,
+        { total_hits: hits.length },
+      );
+    }),
+  );
 }
 
-function adaptGetStepFaces(query: Partial<PublicGetStepEntitiesInput>): QueryStepFacesInput {
-  return {
-    filter: { entity_ids: query.entity_ids },
-    include: mapBboxCenter(query.fields),
-    group_by: undefined,
-    sort: undefined,
-    result_mode: 'entities',
-    limit: query.entity_ids?.length,
-    offset: 0,
-  };
-}
+/* ------------------------------------------------------------------ */
+/*  Validation helpers                                                 */
+/* ------------------------------------------------------------------ */
 
-function adaptGetStepEdges(query: Partial<PublicGetStepEntitiesInput>): QueryStepEdgesInput {
-  return {
-    filter: { entity_ids: query.entity_ids },
-    include: mapBboxCenter(query.fields),
-    group_by: undefined,
-    sort: undefined,
-    result_mode: 'entities',
-    limit: query.entity_ids?.length,
-    offset: 0,
-  };
-}
-
-export function adaptPmiQuery(
-  query: Partial<PublicQueryStepPmiInput> | undefined
-): QueryStepPmiInput {
-  if (!boundedRange({ min: query?.value_min, max: query?.value_max })) {
-    throw invalidInput('value_min must be less than or equal to value_max.');
-  }
-
-  return {
-    filter: {
-      pmi_types: query?.pmi_types,
-      tolerance_types: query?.tolerance_subtypes,
-      value_min: query?.value_min,
-      value_max: query?.value_max,
-    },
-    group_by: query?.group_by,
-    sort: query?.sort,
-    result_mode: query?.return_type,
-    limit: query?.limit,
-    offset: query?.offset,
-  };
-}
+export type PublicGetStepEntitiesInput = {
+  entity_type: 'face' | 'edge';
+  entity_ids: string[];
+  fields?: string[];
+};
 
 function validateEntityIds(entityIds: string[], entityType: 'face' | 'edge'): void {
   const valid = entityIds.every((id) =>
-    entityType === 'face' ? /^face:\d+$/.test(id) : /^edge:\d+$/.test(id)
+    entityType === 'face' ? /^face:\d+$/.test(id) : /^edge:\d+$/.test(id),
   );
   if (!valid) throw invalidInput(`All entity_ids must match ${entityType}:N.`);
 }
 
-function validateEntityFields(
-  fields: PublicGetStepEntitiesInput['fields'],
-  entityType: 'face' | 'edge'
-): void {
+function validateEntityFields(fields: string[] | undefined, entityType: 'face' | 'edge'): void {
   if (!fields) return;
   const allowed = entityType === 'face' ? FACE_GET_FIELDS : EDGE_GET_FIELDS;
   const invalid = fields.filter((field) => !allowed.has(field));
@@ -1046,17 +883,9 @@ function invalidInput(message: string) {
   return { type: 'invalid_input', message };
 }
 
-type InputFromShape<T extends Record<string, z.ZodType>> = {
-  [K in keyof T]: z.infer<T[K]>;
-};
-
-export type QueryStepFacesInput = InputFromShape<typeof internalFaceQuerySchema>;
-export type QueryStepEdgesInput = InputFromShape<typeof internalEdgeQuerySchema>;
-export type QueryStepPmiInput = InputFromShape<typeof internalPmiQuerySchema>;
-type PublicFindStepFacesInput = InputFromShape<typeof findStepFacesSchema>;
-type PublicFindStepEdgesInput = InputFromShape<typeof findStepEdgesSchema>;
-export type PublicGetStepEntitiesInput = InputFromShape<typeof getStepEntitiesSchema>;
-type PublicQueryStepPmiInput = InputFromShape<typeof pmiQuerySchema>;
+/* ------------------------------------------------------------------ */
+/*  Response types (exported for consumers)                            */
+/* ------------------------------------------------------------------ */
 
 export interface StepQueryUnits {
   length: 'mm';

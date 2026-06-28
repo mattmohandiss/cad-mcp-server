@@ -24,6 +24,15 @@
 #include <stdexcept>
 #include <vector>
 
+#include <IntCurvesFace_ShapeIntersector.hxx>
+
+#include <BRepGraph.hxx>
+#include <BRepGraph_Builder.hxx>
+#include <BRepGraph_Tool.hxx>
+#include <BRepGraph_TopoView.hxx>
+#include <BRepGraph_WireExplorer.hxx>
+#include <TopAbs_ShapeEnum.hxx>
+
 // --- MeshData implementation ---
 
 MeshData::~MeshData() {
@@ -91,8 +100,6 @@ const TopoDS_Shape& OcctKernel::get(uint32_t id) const {
     return it->second;
 }
 
-// Shared mesh builder for tessellate() and tessellateRelative(). `relative`
-// selects per-edge size-relative deflection vs. absolute.
 MeshData OcctKernel::buildMeshData(const TopoDS_Shape& shape, double linearDeflection,
                                    double angularDeflection, bool relative) {
     BRepMesh_IncrementalMesh mesher(shape, linearDeflection, relative, angularDeflection, false);
@@ -100,9 +107,6 @@ MeshData OcctKernel::buildMeshData(const TopoDS_Shape& shape, double linearDefle
         throw std::runtime_error("tessellate: meshing failed");
     }
 
-    // Cache each face's triangulation during this single traversal so the fill
-    // pass below reuses it instead of re-exploring the shape and re-fetching
-    // every triangulation handle a second time.
     struct FaceEntry {
         Handle(Poly_Triangulation) tri;
         TopLoc_Location loc;
@@ -301,3 +305,162 @@ int EdgeData::getPointsPtr() const {
 int EdgeData::getEdgeGroupsPtr() const {
     return static_cast<int>(reinterpret_cast<uintptr_t>(edgeGroups));
 }
+
+// --- Ray intersection (OCCT native IntCurvesFace_ShapeIntersector) ---
+
+std::vector<double> OcctKernel::rayIntersect(uint32_t id, double ox, double oy, double oz,
+                                             double dx, double dy, double dz) {
+    const auto& shape = get(id);
+    IntCurvesFace_ShapeIntersector intersector;
+    intersector.Load(shape, Precision::Confusion());
+    intersector.PerformNearest(gp_Lin(gp_Pnt(ox, oy, oz), gp_Dir(dx, dy, dz)),
+                              0.0, RealLast());
+
+    // Result format per hit: [faceHash, distance, point_x, point_y, point_z, u, v]
+    // faceHash uses the same modulo as kernel.hashCode for cross-call stability.
+    std::vector<double> results;
+    const int HASH_BOUND = 1 << 30;
+    for (int i = 1; i <= intersector.NbPnt(); i++) {
+        int faceHash = static_cast<int>(
+            TopTools_ShapeMapHasher{}(intersector.Face(i)) % HASH_BOUND);
+        results.push_back(static_cast<double>(faceHash));
+        results.push_back(intersector.WParameter(i));
+        results.push_back(intersector.Pnt(i).X());
+        results.push_back(intersector.Pnt(i).Y());
+        results.push_back(intersector.Pnt(i).Z());
+        results.push_back(intersector.UParameter(i));
+        results.push_back(intersector.VParameter(i));
+    }
+    return results;
+}
+
+// --- BRepGraph topology queries ---
+
+void OcctKernel::ensureGraph(const TopoDS_Shape& shape) {
+    if (graph_ && graphShape_.IsSame(shape)) return;
+    auto g = std::make_unique<BRepGraph>();
+    BRepGraph_Builder::Options opts;
+    opts.CreateAutoProduct = false;
+    auto result = BRepGraph_Builder::Add(*g, shape, opts);
+    if (!result.Ok) {
+        throw std::runtime_error("graphBuild: failed to populate BRepGraph from shape");
+    }
+    graph_ = std::move(g);
+    graphShape_ = shape;
+}
+
+void OcctKernel::graphBuild(uint32_t id) {
+    const auto& shape = get(id);
+    ensureGraph(shape);
+}
+
+std::vector<int> OcctKernel::graphBodyMap() {
+    if (!graph_)
+        throw std::runtime_error("graphBodyMap: no graph built");
+    const auto& topo = graph_->Topo();
+    const auto& faces = topo.Faces();
+    const auto& edges = topo.Edges();
+    const auto& shells = topo.Shells();
+    const int fc = faces.NbActive();
+    const int ec = edges.NbActive();
+    std::vector<int> bodyMap;
+    bodyMap.reserve(2 + fc + ec);
+    bodyMap.push_back(fc);
+    bodyMap.push_back(ec);
+    for (int fi = 0; fi < fc; fi++) {
+        auto fId = BRepGraph_FaceId(fi);
+        const auto& parShells = faces.Shells(fId);
+        int body = -1;
+        if (parShells.Size() > 0) {
+            const auto& parSolids = shells.Solids(parShells[0]);
+            if (parSolids.Size() > 0) body = static_cast<int>(parSolids[0].Index);
+        }
+        bodyMap.push_back(body);
+    }
+    for (int ei = 0; ei < ec; ei++) {
+        auto eId = BRepGraph_EdgeId(ei);
+        const auto& edgeFaces = edges.Faces(eId);
+        int body = -1;
+        for (const auto& efId : edgeFaces) {
+            const auto& parShells = faces.Shells(efId);
+            if (parShells.Size() > 0) {
+                const auto& parSolids = shells.Solids(parShells[0]);
+                if (parSolids.Size() > 0) { body = static_cast<int>(parSolids[0].Index); break; }
+            }
+        }
+        bodyMap.push_back(body);
+    }
+    return bodyMap;
+}
+
+std::vector<int> OcctKernel::graphFaceAdjacency(int faceIdx) {
+    if (!graph_)
+        throw std::runtime_error("graphFaceAdjacency: no graph built");
+    const auto& faces = graph_->Topo().Faces();
+    auto fId = BRepGraph_FaceId(faceIdx);
+    occ::handle<NCollection_BaseAllocator> alloc;
+    auto adjFaces = faces.Adjacent(fId, alloc);
+    std::vector<int> result;
+    for (const auto& adjId : adjFaces) {
+        result.push_back(static_cast<int>(adjId.Index));
+        auto shared = faces.SharedEdges(fId, adjId, alloc);
+        result.push_back(shared.Size() > 0 ? static_cast<int>(shared[0].Index) : -1);
+    }
+    return result;
+}
+
+std::vector<int> OcctKernel::graphEdgeFaces(int edgeIdx) {
+    if (!graph_)
+        throw std::runtime_error("graphEdgeFaces: no graph built");
+    auto eId = BRepGraph_EdgeId(edgeIdx);
+    const auto& edgeFaces = graph_->Topo().Edges().Faces(eId);
+    std::vector<int> result;
+    for (const auto& fId : edgeFaces)
+        result.push_back(static_cast<int>(fId.Index));
+    return result;
+}
+
+std::vector<int> OcctKernel::graphWireTopology(int faceIdx) {
+    if (!graph_)
+        throw std::runtime_error("graphWireTopology: no graph built");
+    const auto& topo = graph_->Topo();
+    auto fId = BRepGraph_FaceId(faceIdx);
+    auto outerWireId = BRepGraph_Tool::Face::OuterWireId(*graph_, fId);
+    std::vector<int> result;
+    auto collectEdges = [&](BRepGraph_WireId wId) -> std::vector<int> {
+        std::vector<int> egs;
+        BRepGraph_WireExplorer exp(*graph_, wId);
+        for (; exp.More(); exp.Next())
+            egs.push_back(static_cast<int>(
+                BRepGraph_Tool::CoEdge::EdgeOf(*graph_, exp.CurrentCoEdgeId()).Index));
+        return egs;
+    };
+    auto outerEg = collectEdges(outerWireId);
+    result.push_back(static_cast<int>(outerEg.size()));
+    for (auto e : outerEg) result.push_back(e);
+    int innerCount = 0;
+    int innerCountPos = static_cast<int>(result.size());
+    result.push_back(0);
+    for (int wi = 0; wi < topo.Wires().NbActive(); wi++) {
+        auto wId = BRepGraph_WireId(wi);
+        if (wId.Index == outerWireId.Index) continue;
+        auto owner = BRepGraph_Tool::Wire::FaceOf(*graph_, wId);
+        if (static_cast<int>(owner.Index) != faceIdx) continue;
+        auto eg = collectEdges(wId);
+        result.push_back(static_cast<int>(eg.size()));
+        for (auto e : eg) result.push_back(e);
+        innerCount++;
+    }
+    result[innerCountPos] = innerCount;
+    return result;
+}
+
+std::vector<int> OcctKernel::graphEdgeVertices(int edgeIdx) {
+    if (!graph_)
+        throw std::runtime_error("graphEdgeVertices: no graph built");
+    auto eId = BRepGraph_EdgeId(edgeIdx);
+    auto v0 = BRepGraph_Tool::Edge::StartVertexId(*graph_, eId);
+    auto v1 = BRepGraph_Tool::Edge::EndVertexId(*graph_, eId);
+    return {static_cast<int>(v0.Index), static_cast<int>(v1.Index)};
+}
+

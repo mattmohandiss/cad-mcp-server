@@ -52,6 +52,6 @@ export async function compareStepFiles(fileA: string, fileB: string) {
           b: [brepB.provider, semanticB.provider],
         },
       };
-    })
+    }),
   );
 }

@@ -886,6 +886,130 @@ export class OcctKernel {
     }
 
     /**
+     * Principal moments of inertia (I₁, I₂, I₃) and principal axes
+     * (3 direction vectors). Returns [I₁,I₂,I₃, ax1, ax2, ax3] where
+     * each axis is [x,y,z]. Two equal moments → symmetry about that axis.
+     */
+    getPrincipalProperties(shape: ShapeHandle): number[] {
+        return wrap("getPrincipalProperties", () =>
+            Array.from(this.#drainVector(this.#raw.getPrincipalProperties(shape), Float64Array)),
+        );
+    }
+
+    /**
+     * Oriented bounding box (OBB) aligned to the shape's natural axes.
+     * Returns [cx,cy,cz, hx,hy,hz, ax1,ax2,ax3] where h* are half-extents
+     * and each axis is [x,y,z]. Tighter than the AABB for rotated parts.
+     */
+    getOrientedBoundingBox(shape: ShapeHandle): number[] {
+        return wrap("getOrientedBoundingBox", () =>
+            Array.from(this.#drainVector(this.#raw.getOrientedBoundingBox(shape), Float64Array)),
+        );
+    }
+
+    /**
+     * Whether the shape's shell has any free (boundary) edges — i.e.,
+     * edges referenced by only one face. A closed solid has no free edges.
+     */
+    hasFreeEdges(shape: ShapeHandle): boolean {
+        return wrap("hasFreeEdges", () => this.#raw.hasFreeEdges(shape));
+    }
+
+    /** Number of free (boundary) edges in the shape's shell. 0 = watertight. */
+    freeEdgeCount(shape: ShapeHandle): number {
+        return wrap("freeEdgeCount", () => this.#raw.freeEdgeCount(shape));
+    }
+
+    /**
+     * Shape contents inventory counts. Returns
+     * [NbFaces, NbEdges, NbFreeFaces, NbFreeWires, NbFreeEdges,
+     *  NbC0Surfaces, NbBSplSurf, NbOffsetSurf].
+     */
+    shapeContents(shape: ShapeHandle): number[] {
+        return wrap("shapeContents", () =>
+            Array.from(this.#drainVector(this.#raw.shapeContents(shape), Float64Array)),
+        );
+    }
+
+    /** Check if two axes are coaxial using OCCT's gp_Ax1::IsCoaxial. */
+    areAxesCoaxial(
+      axis1Dir: Vec3, axis1Loc: Vec3,
+      axis2Dir: Vec3, axis2Loc: Vec3,
+      angTol: number, linTol: number,
+    ): boolean {
+        return wrap("areAxesCoaxial", () =>
+            this.#raw.areAxesCoaxial(
+                axis1Dir.x, axis1Dir.y, axis1Dir.z,
+                axis1Loc.x, axis1Loc.y, axis1Loc.z,
+                axis2Dir.x, axis2Dir.y, axis2Dir.z,
+                axis2Loc.x, axis2Loc.y, axis2Loc.z,
+                angTol, linTol,
+            ),
+        );
+    }
+
+    /**
+     * Fire a ray from origin in direction and return all face intersections
+     * sorted by distance. Each hit: [faceHash, distance, x, y, z, u, v].
+     * faceHash encodes the face identity — the MCP server resolves these to
+     * face IDs via `resolveRayHits` in ray-utils.ts.
+     */
+    rayIntersect(shape: ShapeHandle, origin: Vec3, direction: Vec3): number[] {
+        return wrap("rayIntersect", () =>
+            Array.from(
+                this.#drainVector(
+                    this.#raw.rayIntersect(shape, origin.x, origin.y, origin.z,
+                                           direction.x, direction.y, direction.z),
+                    Float64Array,
+                ),
+            ),
+        );
+    }
+
+    // ── BRepGraph topology queries ────────────────────────────────
+
+    /**
+     * Build a BRepGraph from a shape in the arena. Must be called once
+     * before any graph* query methods. Subsequent calls with the same shape
+     * are no-ops.
+     */
+    graphBuild(shape: ShapeHandle): void {
+        this.#raw.graphBuild(shape);
+    }
+
+    /** Map faces (indices 0..N) and edges (indices 0..M) to their parent body index. */
+    graphBodyMap(): number[] {
+        return this.#drainVector(this.#raw.graphBodyMap(), Int32Array);
+    }
+
+    /**
+     * Adjacent faces for a face index. Returns interleaved
+     * [adjFaceIdx, sharedEdgeIdx, ...] pairs. Empty if none.
+     */
+    graphFaceAdjacency(faceIdx: number): number[] {
+        return this.#drainVector(this.#raw.graphFaceAdjacency(faceIdx), Int32Array);
+    }
+
+    /** Faces that reference an edge index. Returns list of face indices. */
+    graphEdgeFaces(edgeIdx: number): number[] {
+        return this.#drainVector(this.#raw.graphEdgeFaces(edgeIdx), Int32Array);
+    }
+
+    /**
+     * Wire topology for a face index. Encoding:
+     * [outerEdgeCount, outerEdges..., innerWireCount,
+     *  innerEdgeCount1, innerEdges1..., innerEdgeCount2, innerEdges2..., ...]
+     */
+    graphWireTopology(faceIdx: number): number[] {
+        return this.#drainVector(this.#raw.graphWireTopology(faceIdx), Int32Array);
+    }
+
+    /** Start and end vertex indices for an edge. Returns [startIdx, endIdx]. */
+    graphEdgeVertices(edgeIdx: number): number[] {
+        return this.#drainVector(this.#raw.graphEdgeVertices(edgeIdx), Int32Array);
+    }
+
+    /**
      * Surface (area-weighted) center of mass for a face. Equivalent to
      * `BRepGProp::SurfaceProperties(face, props).CentreOfMass()`.
      *
@@ -1025,6 +1149,11 @@ export class OcctKernel {
 
     curveType(edge: ShapeHandle): CurveKind {
         return wrap("curveType", () => this.#raw.curveType(edge) as CurveKind);
+    }
+
+    /** Return the radius of a circular edge from Geom_Circle geometry, or -1 if not a circle. */
+    edgeCircleRadius(edge: ShapeHandle): number {
+        return wrap("edgeCircleRadius", () => this.#raw.edgeCircleRadius(edge));
     }
 
     curvePointAtParam(edge: ShapeHandle, param: number): Vec3 {

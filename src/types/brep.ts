@@ -14,6 +14,7 @@ export interface BRepBody {
   dimensions: Dimensions;
   volume: number;
   surfaceArea: number;
+  centerOfMass?: { x: number; y: number; z: number };
 }
 
 export interface BRepEdgeStatistics {
@@ -40,7 +41,6 @@ export interface BRepModel {
   volume: number;
   surfaceArea: number;
   bodyCount: number;
-  shapeType: 'box' | 'cylindrical' | 'complex';
   faceCount?: number;
   edgeStatistics?: BRepEdgeStatistics;
   bodies: BRepBody[];

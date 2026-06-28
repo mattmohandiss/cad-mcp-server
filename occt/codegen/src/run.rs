@@ -39,7 +39,7 @@ pub fn run() -> Result<()> {
     );
 
     let kernel_cpp = emitter::emit_kernel(&generable);
-    let bindings_cpp = emitter::emit_bindings(&generable);
+    let bindings_cpp = emitter::emit_bindings(&all_methods.iter().collect::<Vec<_>>());
 
     let kernel_path = facade_out.join("kernel.cpp");
     let bindings_path = facade_out.join("bindings.cpp");

@@ -1,0 +1,9 @@
+{
+  "file": "stepped_cylinder.step",
+  "design_intent": "Stepped shaft: 10mm radius for 30mm, then 15mm radius for 20mm, with R1 and R3 fillets.",
+  "expected_answers": {
+    "smallest_fillet_radius_mm": 1.0,
+    "circular_edges": 4
+  },
+  "notes": "Use to test smallest-fillet query, circular edge filtering by radius."
+}

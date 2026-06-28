@@ -7,9 +7,9 @@ This project is a portable, read-only MCP server for deterministic STEP inspecti
 ```text
 MCP host
   -> src/index.ts tool registrations
-  -> src/tools/step-tools.ts adapters and handlers
-  -> src/cad/query/* services
-  -> src/cad/model-store.ts cached imported model
+  -> src/tools/{inspect,query,diff,transact}.ts handlers
+  -> src/query/* services
+  -> src/model-store.ts cached imported model
   -> occt-wasm + lightweight STEP text parsers
 ```
 
@@ -30,21 +30,20 @@ The store keeps a small in-memory LRU cache and skips eviction of models activel
 
 ## Tool Strategy
 
-The server is optimized for engineering drill-down:
+The server exposes 4 tools: a top-level inspector, a declarative entity query, a file-vs-file diff, and a multi-step pipeline executor. The declarative query subsumes the v0.1 primitives (face/edge search, entity lookup, PMI query, ray test, distance, coaxial grouping) — those became `{entities, filter, group_by, measure, aggregate}` calls rather than separate tools.
 
-1. `inspect_step_file` returns cheap file-level facts and defers expensive details.
-2. `find_step_faces` and `find_step_edges` summarize, group, filter, sort, and page entities.
-3. `get_step_entities` performs direct exact lookup for known IDs.
-4. `query_step_pmi` parses lightweight STEP PMI text entities.
-5. `compare_step_files` compares whole-model metrics and metadata only.
+1. `inspect_step` returns cheap file-level facts and defers expensive details. Use first.
+2. `query_step` filters, sorts, groups, measures, and aggregates entities. This is the workhorse. Examples: coaxial cylinders = `{entities: "faces", filter: {surface_type: "cylinder"}, group_by: ["axis"]}`; wall thickness = `measure: [{op: "ray_test_grid", ...}]` over candidate faces.
+3. `diff_step` compares whole-model metrics, topology, and XDE metadata between two files.
+4. `transact_step` runs a sequence of typed pipeline ops (query, for_each, filter_results, select, walk_assembly) for workflows that need iteration across result sets.
 
-Full-model adjacency is not part of default inspection. Local adjacency is computed on demand for returned face/edge pages.
+Full-model adjacency is not part of default inspection. Local adjacency is computed on demand for returned face/edge pages via BRepGraph O(1) lookups.
 
 ## Backend Boundaries
 
 - `occt-wasm` handles STEP import, topology traversal, geometry measurements, and local adjacency helpers.
 - Lightweight STEP parsers handle metadata and PMI hints.
-- Tool handlers adapt public MCP schemas into internal query shapes.
+- Tool handlers pass validated public query params directly to query services.
 - Query services return factual JSON; the LLM interprets engineering meaning.
 
 ## Non-Goals
@@ -61,4 +60,4 @@ Possible future extensions should remain behind the same tool/service boundary:
 
 - Lazy/columnar face and edge extraction for faster first broad queries.
 - Optional explicit topology graph tool if full adjacency workflows become necessary.
-- Native OCCT/XDE sidecar for deeper assembly names, colors, PMI, or large-model performance.
+- OCCT XDE reader path (`STEPCAFControl_Reader` + `XCAFDoc_*Tool`) for assembly names, colors, GD&T-to-face links, and validation properties.

@@ -13,7 +13,7 @@ import { extractPmiEntities } from './pmi/parser.js';
 import { LightweightStepSemanticProvider } from './pmi/semantic-provider.js';
 import { getOcctKernel } from './kernel/kernel.js';
 import { mapOcctError, readStepText } from './kernel/import.js';
-import { getDimensions, guessShapeClass, toBoundingBox } from './kernel/measure.js';
+import { getDimensions, toBoundingBox } from './kernel/measure.js';
 import { getEdgeStatistics } from './kernel/topology.js';
 import {
   buildBodyMap,
@@ -46,14 +46,13 @@ class LoadedStepModel {
   readonly cacheKey: string;
   lastAccess = Date.now();
   activeUsers = 0;
+  private onIdle?: () => void;
 
   private stepTextPromise?: Promise<string>;
   private shapePromise?: Promise<ShapeContext>;
-  private bodyMap?: { faceBody: number[]; edgeBody: number[] };
+  private bodyMapPromise?: Promise<{ faceBody: number[]; edgeBody: number[] }>;
   private faceEntities?: ExtractedFaceEntity[];
-  private faceEntitiesWithBody?: ExtractedFaceEntity[];
   private edgeEntities?: ExtractedEdgeEntity[];
-  private edgeEntitiesWithBody?: ExtractedEdgeEntity[];
   private brepPromise?: Promise<BRepModel>;
   private semanticPromise?: Promise<SemanticModel>;
   private pmiPromise?: Promise<{ pmi_entities: PmiEntity[] }>;
@@ -64,42 +63,43 @@ class LoadedStepModel {
     this.cacheKey = `${fileKey.resolvedPath}:${fileKey.size}:${fileKey.mtimeMs}`;
   }
 
+  setOnIdle(cb: () => void): void {
+    this.onIdle = cb;
+  }
+
   async getShapeContext(action = 'STEP import'): Promise<ShapeContext> {
     this.lastAccess = Date.now();
     this.shapePromise ??= this.importShape(action);
     return this.shapePromise;
   }
 
-  async getFaceEntities(includeBodyId: boolean): Promise<ExtractedFaceEntity[]> {
+  async getFaceEntities(): Promise<ExtractedFaceEntity[]> {
     this.lastAccess = Date.now();
-    if (includeBodyId) {
-      this.faceEntitiesWithBody ??= extractFaceEntities(
-        ...(await this.shapeAndBodyMap('query_step_faces'))
-      );
-      return this.faceEntitiesWithBody;
-    }
-
     if (!this.faceEntities) {
       const { kernel, shape } = await this.getShapeContext('query_step_faces');
-      this.faceEntities = extractFaceEntities(kernel, shape);
+      const bodyMap = await this.getBodyMap();
+      this.faceEntities = extractFaceEntities(kernel, shape, bodyMap);
     }
     return this.faceEntities;
   }
 
-  async getEdgeEntities(includeBodyId: boolean): Promise<ExtractedEdgeEntity[]> {
+  async getEdgeEntities(): Promise<ExtractedEdgeEntity[]> {
     this.lastAccess = Date.now();
-    if (includeBodyId) {
-      this.edgeEntitiesWithBody ??= extractEdgeEntities(
-        ...(await this.shapeAndBodyMap('query_step_edges'))
-      );
-      return this.edgeEntitiesWithBody;
-    }
-
     if (!this.edgeEntities) {
       const { kernel, shape } = await this.getShapeContext('query_step_edges');
-      this.edgeEntities = extractEdgeEntities(kernel, shape);
+      const bodyMap = await this.getBodyMap();
+      this.edgeEntities = extractEdgeEntities(kernel, shape, bodyMap);
     }
     return this.edgeEntities;
+  }
+
+  private async getBodyMap(): Promise<{ faceBody: number[]; edgeBody: number[] }> {
+    if (!this.bodyMapPromise) {
+      this.bodyMapPromise = this.getShapeContext('BRepGraph body map').then(
+        ({ kernel, shape }) => buildBodyMap(kernel, shape),
+      );
+    }
+    return this.bodyMapPromise;
   }
 
   async getBRepModel(): Promise<BRepModel> {
@@ -122,11 +122,14 @@ class LoadedStepModel {
     return this.pmiPromise;
   }
 
-  dispose(): void {
+  async dispose(): Promise<void> {
     if (!this.shapePromise) return;
-    void this.shapePromise
-      .then(({ kernel, shape }) => kernel.release(shape))
-      .catch(() => undefined);
+    try {
+      const { kernel, shape } = await this.shapePromise;
+      kernel.release(shape);
+    } catch {
+      // ignore
+    }
   }
 
   async use<T>(run: (model: LoadedStepModel) => Promise<T>): Promise<T> {
@@ -136,6 +139,7 @@ class LoadedStepModel {
     } finally {
       this.activeUsers--;
       this.lastAccess = Date.now();
+      this.onIdle?.();
     }
   }
 
@@ -157,14 +161,6 @@ class LoadedStepModel {
     return this.stepTextPromise;
   }
 
-  private async shapeAndBodyMap(
-    action: string
-  ): Promise<[OcctKernel, ShapeHandle, { faceBody: number[]; edgeBody: number[] }]> {
-    const { kernel, shape } = await this.getShapeContext(action);
-    this.bodyMap ??= buildBodyMap(kernel, shape);
-    return [kernel, shape, this.bodyMap];
-  }
-
   private async buildBRepModel(): Promise<BRepModel> {
     const { kernel, shape } = await this.getShapeContext('STEP import');
     const boundingBox = toBoundingBox(kernel, shape);
@@ -174,6 +170,12 @@ class LoadedStepModel {
     const bodyShapes = solids.length ? solids : [shape];
     const bodies = bodyShapes.map((body, index): BRepBody => {
       const bodyBox = bodyShapes.length === 1 ? boundingBox : toBoundingBox(kernel, body);
+      let centerOfMass: { x: number; y: number; z: number } | undefined;
+      try {
+        centerOfMass = kernel.getCenterOfMass(body);
+      } catch {
+        // Center of mass may fail for non-manifold or wireframe shapes.
+      }
       return {
         id: makeId('body', index),
         index,
@@ -181,6 +183,7 @@ class LoadedStepModel {
         dimensions: getDimensions(bodyBox),
         volume: kernel.getVolume(body),
         surfaceArea: kernel.getSurfaceArea(body),
+        centerOfMass,
       };
     });
 
@@ -203,7 +206,7 @@ class LoadedStepModel {
       volume: kernel.getVolume(shape),
       surfaceArea: kernel.getSurfaceArea(shape),
       bodyCount: bodies.length,
-      shapeType: guessShapeClass(dimensions),
+
       faceCount: faces.length,
       edgeStatistics: getEdgeStatistics(kernel, shape),
       bodies,
@@ -231,21 +234,29 @@ class StepModelStore {
       return existing;
     }
 
-    existing?.dispose();
+    if (existing) {
+      await existing.dispose();
+    }
+
     const model = new LoadedStepModel(fileKey);
+    model.setOnIdle(() => {
+      this.evictIfNeeded().catch(() => undefined);
+    });
     this.models.set(fileKey.resolvedPath, model);
-    this.evictIfNeeded();
+    this.evictIfNeeded().catch(() => undefined);
     return model;
   }
 
-  private evictIfNeeded(): void {
-    if (this.models.size <= this.maxModels) return;
-    const oldest = [...this.models.entries()]
-      .filter(([, model]) => model.activeUsers === 0)
-      .sort((a, b) => a[1].lastAccess - b[1].lastAccess)[0];
-    if (!oldest) return;
-    oldest[1].dispose();
-    this.models.delete(oldest[0]);
+  private async evictIfNeeded(): Promise<void> {
+    while (this.models.size > this.maxModels) {
+      const oldest = [...this.models.entries()]
+        .filter(([, model]) => model.activeUsers === 0)
+        .sort((a, b) => a[1].lastAccess - b[1].lastAccess)[0];
+      if (!oldest) return;
+      const [key, model] = oldest;
+      this.models.delete(key);
+      await model.dispose();
+    }
   }
 }
 
@@ -257,7 +268,7 @@ export async function getStepModel(filePath: string): Promise<LoadedStepModel> {
 
 export async function withStepModel<T>(
   filePath: string,
-  run: (model: LoadedStepModel) => Promise<T>
+  run: (model: LoadedStepModel) => Promise<T>,
 ): Promise<T> {
   const model = await store.get(filePath);
   return model.use(run);
