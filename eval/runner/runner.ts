@@ -24,15 +24,18 @@ import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { EVAL_MODELS, type EvalModel } from './model-registry.js';
 import { QUESTIONS, type EvalQuestion } from './questions.js';
 
-/* Load OPENROUTER_API_KEY from eval/.env */
-{
+/* Load OPENROUTER_API_KEY from eval/.env if not already in process.env.
+ * Skipped silently when the file is missing (CI sets the key via secrets). */
+if (!process.env.OPENROUTER_API_KEY) {
   const envPath = new URL('../../eval/.env', import.meta.url);
-  const envContent = fs.readFileSync(envPath, 'utf8');
-  for (const line of envContent.split('\n')) {
-    const trimmed = line.trim();
-    if (trimmed.startsWith('OPENROUTER_API_KEY=')) {
-      const value = trimmed.slice('OPENROUTER_API_KEY='.length).replace(/^["']|["']$/g, '');
-      if (!process.env.OPENROUTER_API_KEY) process.env.OPENROUTER_API_KEY = value;
+  if (fs.existsSync(envPath)) {
+    const envContent = fs.readFileSync(envPath, 'utf8');
+    for (const line of envContent.split('\n')) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('OPENROUTER_API_KEY=')) {
+        const value = trimmed.slice('OPENROUTER_API_KEY='.length).replace(/^["']|["']$/g, '');
+        process.env.OPENROUTER_API_KEY = value;
+      }
     }
   }
 }
@@ -58,7 +61,11 @@ export interface UsageEntry {
   inputTokens: number | undefined;
   outputTokens: number | undefined;
   totalTokens: number | undefined;
-  inputTokenDetails?: { noCacheTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number };
+  inputTokenDetails?: {
+    noCacheTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+  };
   outputTokenDetails?: { textTokens?: number; reasoningTokens?: number };
   /** OpenRouter cost & provider-specific extras come through raw */
   raw?: Record<string, unknown>;
@@ -71,7 +78,11 @@ export interface StepSummaryEntry {
   finishReason: string;
   stepTimeMs: number;
   responseTimeMs: number;
-  usage: { inputTokens: number | undefined; outputTokens: number | undefined; totalTokens: number | undefined };
+  usage: {
+    inputTokens: number | undefined;
+    outputTokens: number | undefined;
+    totalTokens: number | undefined;
+  };
 }
 
 export interface RunResult {
@@ -123,7 +134,7 @@ export async function runOne(
 
   let result;
   try {
-      result = await generateText({
+    result = await generateText({
       model: languageModel,
       tools,
       stopWhen: isStepCount(8),
@@ -160,10 +171,13 @@ export async function runOne(
   const steps: StepSummaryEntry[] = (result.steps ?? []).map((s) => ({
     stepNumber: s.stepNumber,
     text: s.text ?? '',
-    toolCalls: (s.toolCalls ?? []).map((tc) => ({ name: tc.toolName, args: JSON.stringify(tc.input) })),
+    toolCalls: (s.toolCalls ?? []).map((tc) => ({
+      name: tc.toolName,
+      args: JSON.stringify(tc.input),
+    })),
     finishReason: s.finishReason ?? '',
-    stepTimeMs: (s.performance as Record<string, unknown>)?.stepTimeMs as number ?? 0,
-    responseTimeMs: (s.performance as Record<string, unknown>)?.responseTimeMs as number ?? 0,
+    stepTimeMs: ((s.performance as Record<string, unknown>)?.stepTimeMs as number) ?? 0,
+    responseTimeMs: ((s.performance as Record<string, unknown>)?.responseTimeMs as number) ?? 0,
     usage: {
       inputTokens: s.usage?.inputTokens,
       outputTokens: s.usage?.outputTokens,
@@ -256,7 +270,11 @@ function compare(extracted: number | boolean | string | null, question: EvalQues
     const tol = question.expected.tolerance ?? 0.01;
     const diff = Math.abs((extracted as number) - (question.expected.value as number));
     if (diff < tol) return true;
-    const denom = Math.max(Math.abs(extracted as number), Math.abs(question.expected.value as number), 1e-9);
+    const denom = Math.max(
+      Math.abs(extracted as number),
+      Math.abs(question.expected.value as number),
+      1e-9,
+    );
     return diff / denom < 0.01;
   }
   return extracted === question.expected.value;
@@ -266,13 +284,21 @@ export function formatReport(bulk: BulkResult): string {
   const lines: string[] = ['', 'CAD MCP LLM Eval Results', '===========================', ''];
   lines.push('Per-model:');
   for (const [label, s] of Object.entries(bulk.perModel).sort()) {
-    lines.push(`  ${label.padEnd(28)} ${s.pass}/${s.total}  (${((s.pass / s.total) * 100).toFixed(1)}%)`);
+    lines.push(
+      `  ${label.padEnd(28)} ${s.pass}/${s.total}  (${((s.pass / s.total) * 100).toFixed(1)}%)`,
+    );
   }
   lines.push('', 'Per-question:');
   for (const [qid, s] of Object.entries(bulk.perQuestion).sort()) {
-    lines.push(`  ${qid.padEnd(40)} ${s.pass}/${s.total}  (${((s.pass / s.total) * 100).toFixed(1)}%)`);
+    lines.push(
+      `  ${qid.padEnd(40)} ${s.pass}/${s.total}  (${((s.pass / s.total) * 100).toFixed(1)}%)`,
+    );
   }
-  lines.push('', `Overall: ${bulk.overall.pass}/${bulk.overall.total}  (${(bulk.overall.pct * 100).toFixed(1)}%)`, '');
+  lines.push(
+    '',
+    `Overall: ${bulk.overall.pass}/${bulk.overall.total}  (${(bulk.overall.pct * 100).toFixed(1)}%)`,
+    '',
+  );
   return lines.join('\n');
 }
 
@@ -328,7 +354,8 @@ function mergeRawWithOpenRouterCost(
   providerMetadata: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
   const orMeta = (providerMetadata as Record<string, unknown>)?.openrouter as
-    Record<string, unknown> | undefined;
+    | Record<string, unknown>
+    | undefined;
   const orUsage = orMeta?.usage as
     | { cost?: number; costDetails?: Record<string, unknown> }
     | undefined;

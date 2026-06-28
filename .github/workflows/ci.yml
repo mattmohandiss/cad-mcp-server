@@ -3,7 +3,8 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [dev, main]
+    tags: ['v*']
 
 permissions:
   contents: read
@@ -36,5 +37,19 @@ jobs:
         with:
           tool: just
 
-      - name: Run just check
-        run: just check
+      - name: Lint + unit tests
+        run: just lint && npm test
+
+      - name: Build WASM (kernel tests)
+        if: |
+          github.ref == 'refs/heads/main' ||
+          startsWith(github.ref, 'refs/tags/v') ||
+          (github.event_name == 'pull_request' && github.base_ref == 'main')
+        run: just build-wasm
+
+      - name: Run tests with WASM
+        if: |
+          github.ref == 'refs/heads/main' ||
+          startsWith(github.ref, 'refs/tags/v') ||
+          (github.event_name == 'pull_request' && github.base_ref == 'main')
+        run: npm test

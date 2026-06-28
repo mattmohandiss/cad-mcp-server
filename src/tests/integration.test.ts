@@ -7,6 +7,7 @@ import {
   handleQueryStepPmi,
 } from '../tools/step-tools.js';
 import { NIST_FILE } from './fixtures.js';
+import { isWasmAvailable } from './wasm-guard.js';
 
 interface ToolSuccess {
   ok: true;
@@ -34,7 +35,7 @@ function expectFailure(value: unknown): ToolFailure {
   return response as ToolFailure;
 }
 
-describe('CAD MCP integration smoke tests', { timeout: 15_000 }, () => {
+describe.runIf(isWasmAvailable())('CAD MCP integration smoke tests', { timeout: 15_000 }, () => {
   it('returns structured tool errors for missing and invalid STEP files', async () => {
     const missing = expectFailure(await handleInspectStepFile('/nonexistent/file.step'));
     expect(missing.error.type).toBe('file_not_found');

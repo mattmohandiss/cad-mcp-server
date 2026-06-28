@@ -14,6 +14,35 @@ dev:
 # Build the optimized distribution tarball for npm/manual install
 build: _build-wasm-builder _build-wasm-release _build-server _pack
 
+# Build the OCCT WASM kernel and copy artifacts into occt/dist + occt/ts/dist.
+# Used by CI to enable kernel-touching tests on main. Requires Docker or podman.
+build-wasm:
+	if command -v podman &>/dev/null; then \
+	  cd occt && podman build -t occt-wasm-builder -f Dockerfile.builder .; \
+	else \
+	  cd occt && docker build -t occt-wasm-builder -f Dockerfile.builder .; \
+	fi
+	if command -v podman &>/dev/null; then \
+	  cd occt && podman build --build-arg ENABLE_WASM_OPT=0 -t occt-wasm .; \
+	  cid=$$(podman create occt-wasm); \
+	  mkdir -p occt/dist occt/ts/dist; \
+	  podman cp $$cid:/workspace/dist/. occt/dist/; \
+	  podman cp $$cid:/workspace/ts/dist/. occt/ts/dist/; \
+	  podman rm $$cid; \
+	else \
+	  cd occt && docker build --build-arg ENABLE_WASM_OPT=0 -t occt-wasm .; \
+	  cid=$$(docker create occt-wasm); \
+	  mkdir -p occt/dist occt/ts/dist; \
+	  docker cp $$cid:/workspace/dist/. occt/dist/; \
+	  docker cp $$cid:/workspace/ts/dist/. occt/ts/dist/; \
+	  docker rm $$cid; \
+	fi
+
+# Run the LLM eval suite against all models × questions. Requires
+# OPENROUTER_API_KEY in env or eval/.env. Builds the server first.
+eval: _build-server
+	npx tsx eval/runner/index.ts
+
 # Run the integration test suite
 test:
 	npm test

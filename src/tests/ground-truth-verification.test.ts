@@ -16,6 +16,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { withStepModel } from '../model-store.js';
+import { isWasmAvailable } from './wasm-guard.js';
 
 const SAMPLES_DIR = path.join(process.cwd(), 'samples', 'eval-generated');
 
@@ -43,7 +44,7 @@ function approxEqual(a: number, b: number, tol: number): boolean {
   return relDiff < PERCENT_TOLERANCE;
 }
 
-describe('ground truth verification (kernel vs meta.json)', () => {
+describe.runIf(isWasmAvailable())('ground truth verification (kernel vs meta.json)', () => {
   for (const filename of [
     'box.step',
     'box_with_3_holes.step',
@@ -56,7 +57,10 @@ describe('ground truth verification (kernel vs meta.json)', () => {
       const meta = await loadMeta(filename);
       const filePath = path.join(SAMPLES_DIR, filename);
       const inspection = await withStepModel(filePath, async (model) => {
-        const [brep, semantic] = await Promise.all([model.getBRepModel(), model.getSemanticModel()]);
+        const [brep, semantic] = await Promise.all([
+          model.getBRepModel(),
+          model.getSemanticModel(),
+        ]);
         const { kernel, shape } = await model.getShapeContext('ground_truth_verify');
         const obb = kernel.getOrientedBoundingBox(shape);
         const freeEdgeCount = kernel.freeEdgeCount(shape);
@@ -64,7 +68,16 @@ describe('ground truth verification (kernel vs meta.json)', () => {
         const faces = kernel.getSubShapes(shape, 'face');
         const edges = kernel.getSubShapes(shape, 'edge');
         const faceSurfaces = faces.map((f) => kernel.surfaceType(f));
-        return { brep, semantic, faceCount: faces.length, edgeCount: edges.length, faceSurfaces, obb, freeEdgeCount, isValid };
+        return {
+          brep,
+          semantic,
+          faceCount: faces.length,
+          edgeCount: edges.length,
+          faceSurfaces,
+          obb,
+          freeEdgeCount,
+          isValid,
+        };
       });
 
       const answers = meta.expected_answers;
@@ -81,10 +94,18 @@ describe('ground truth verification (kernel vs meta.json)', () => {
         expect(planeCount).toBeGreaterThanOrEqual(Number(answers.planar_faces));
       }
       if ('volume_mm3' in answers) {
-        expect(approxEqual(inspection.brep.volume, answers.volume_mm3 as number, NUMERIC_TOLERANCE)).toBe(true);
+        expect(
+          approxEqual(inspection.brep.volume, answers.volume_mm3 as number, NUMERIC_TOLERANCE),
+        ).toBe(true);
       }
       if ('surface_area_mm2' in answers) {
-        expect(approxEqual(inspection.brep.surfaceArea, answers.surface_area_mm2 as number, NUMERIC_TOLERANCE)).toBe(true);
+        expect(
+          approxEqual(
+            inspection.brep.surfaceArea,
+            answers.surface_area_mm2 as number,
+            NUMERIC_TOLERANCE,
+          ),
+        ).toBe(true);
       }
       // Bounding-box sanity check.
       expect(inspection.brep.dimensions.width).toBeGreaterThan(0);

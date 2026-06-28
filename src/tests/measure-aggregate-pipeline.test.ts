@@ -1,14 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { parseAggregateSpec, dispatchAggregate, aggregateToStatistics } from '../query/aggregate.js';
+import {
+  parseAggregateSpec,
+  dispatchAggregate,
+  aggregateToStatistics,
+} from '../query/aggregate.js';
 import { evaluateExpression } from '../query/pipeline.js';
 import { NIST_FILE } from './fixtures.js';
 import { executeQuery } from '../query/engine.js';
 import { executePipeline } from '../query/pipeline.js';
+import { isWasmAvailable } from './wasm-guard.js';
 
 describe('aggregate dispatch', () => {
   it('parses well-formed aggregate specs', () => {
     expect(parseAggregateSpec('count')).toEqual({ op: 'count', field: undefined });
-    expect(parseAggregateSpec('count:hit_distance')).toEqual({ op: 'count', field: 'hit_distance' });
+    expect(parseAggregateSpec('count:hit_distance')).toEqual({
+      op: 'count',
+      field: 'hit_distance',
+    });
     expect(parseAggregateSpec('min:area')).toEqual({ op: 'min', field: 'area' });
     expect(parseAggregateSpec('max:radius')).toEqual({ op: 'max', field: 'radius' });
     expect(parseAggregateSpec('avg:hit_distance')).toEqual({ op: 'avg', field: 'hit_distance' });
@@ -42,11 +50,12 @@ describe('aggregate dispatch', () => {
     /* The engine flattens ray_test_grid.hit_distance and ray_test[*].distance
      * into a top-level hit_distance field on each entity. The aggregate walks
      * this flat field. */
-    const records = [
-      { hit_distance: [1, 2, 3] },
-      { hit_distance: [4, 5] },
-    ];
-    const out = dispatchAggregate(records, ['count:hit_distance', 'min:hit_distance', 'max:hit_distance']);
+    const records = [{ hit_distance: [1, 2, 3] }, { hit_distance: [4, 5] }];
+    const out = dispatchAggregate(records, [
+      'count:hit_distance',
+      'min:hit_distance',
+      'max:hit_distance',
+    ]);
     const map = aggregateToStatistics(out);
     expect(map['count:hit_distance']).toBe(5);
     expect(map['min:hit_distance']).toBe(1);
@@ -103,7 +112,7 @@ describe('filter expression evaluator', () => {
   });
 });
 
-describe('measure dispatch — wired ops against real STEP file', () => {
+describe.runIf(isWasmAvailable())('measure dispatch — wired ops against real STEP file', () => {
   it('runs ray_test and attaches hits per face', async () => {
     const data = await executeQuery({
       file_path: NIST_FILE,
@@ -155,7 +164,7 @@ describe('measure dispatch — wired ops against real STEP file', () => {
   });
 });
 
-describe('measure + aggregate — end-to-end', () => {
+describe.runIf(isWasmAvailable())('measure + aggregate — end-to-end', () => {
   it('computes min/max/avg/count over ray_test_grid hit distances', async () => {
     const data = await executeQuery({
       file_path: NIST_FILE,
@@ -173,7 +182,7 @@ describe('measure + aggregate — end-to-end', () => {
   });
 });
 
-describe('pipeline: for_each', () => {
+describe.runIf(isWasmAvailable())('pipeline: for_each', () => {
   it('iterates the input list and returns per-item results', async () => {
     const result = await executePipeline({
       file_path: NIST_FILE,
@@ -221,7 +230,7 @@ describe('pipeline: for_each', () => {
   });
 });
 
-describe('pipeline: filter_results', () => {
+describe.runIf(isWasmAvailable())('pipeline: filter_results', () => {
   it('keeps items matching a field op value expression', async () => {
     const result = await executePipeline({
       file_path: NIST_FILE,
