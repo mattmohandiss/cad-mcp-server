@@ -6,6 +6,11 @@ on:
     branches: [dev, main]
     tags: ['v*']
 
+# Auto-cancel superseded runs for the same ref (PR or branch).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
