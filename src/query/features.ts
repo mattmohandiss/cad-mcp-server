@@ -1,4 +1,4 @@
-import type { OcctKernel, ShapeHandle, Vec3 } from 'occt-wasm';
+import type { Vec3 } from 'occt-wasm';
 import type { ExtractedFaceEntity } from '../kernel/query-entities.js';
 import { withStepModel } from '../model-store.js';
 import { normalizeVector } from '../utils/vectors.js';

@@ -155,7 +155,7 @@ describe('groupEntities', () => {
   });
 
   it('generates group IDs like group:0, group:1', () => {
-    const groups = groupEntities(entities, ['surface'], (e, d) => e.surface as never, 5);
+    const groups = groupEntities(entities, ['surface'], (e) => e.surface as never, 5);
     expect(groups[0].id).toMatch(/^group:\d+$/);
   });
 });
