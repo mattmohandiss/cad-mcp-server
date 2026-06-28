@@ -40,3 +40,7 @@ occt/dist/
 occt/ts/dist/
 occt/build/
 occt/*.tgz
+
+# LLM eval
+eval/generate/.venv/
+tests/eval-logs/
