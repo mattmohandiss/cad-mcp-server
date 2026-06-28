@@ -16,7 +16,6 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { withStepModel } from '../model-store.js';
-import { handleInspectStepFile } from '../tools/step-tools.js';
 
 const SAMPLES_DIR = path.join(process.cwd(), 'samples', 'eval-generated');
 
@@ -75,11 +74,11 @@ describe('ground truth verification (kernel vs meta.json)', () => {
       }
       if ('cylindrical_face_groups' in answers) {
         const cylCount = inspection.faceSurfaces.filter((s) => s === 'cylinder').length;
-        expect(cylCount).toBeGreaterThanOrEqual(answers.cylindrical_face_groups);
+        expect(cylCount).toBeGreaterThanOrEqual(Number(answers.cylindrical_face_groups));
       }
       if ('planar_faces' in answers) {
         const planeCount = inspection.faceSurfaces.filter((s) => s === 'plane').length;
-        expect(planeCount).toBeGreaterThanOrEqual(answers.planar_faces);
+        expect(planeCount).toBeGreaterThanOrEqual(Number(answers.planar_faces));
       }
       if ('volume_mm3' in answers) {
         expect(approxEqual(inspection.brep.volume, answers.volume_mm3 as number, NUMERIC_TOLERANCE)).toBe(true);

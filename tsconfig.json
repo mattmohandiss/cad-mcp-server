@@ -5,7 +5,6 @@
     "lib": ["ESNext"],
     "types": ["node"],
     "outDir": "./dist",
-    "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -20,6 +19,6 @@
     "strictFunctionTypes": true,
     "strictPropertyInitialization": true
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*", "eval/runner/**/*", "eval/generate/**/*", "tests/eval-logs/**/*"],
+  "exclude": ["node_modules", "dist", "eval/generate/.venv", "eval/runner/.venv", "occt"]
 }
