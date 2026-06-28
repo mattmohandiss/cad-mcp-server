@@ -354,11 +354,9 @@ function mergeRawWithOpenRouterCost(
   providerMetadata: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
   const orMeta = (providerMetadata as Record<string, unknown>)?.openrouter as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   const orUsage = orMeta?.usage as
-    | { cost?: number; costDetails?: Record<string, unknown> }
-    | undefined;
+    { cost?: number; costDetails?: Record<string, unknown> } | undefined;
 
   if (!orUsage) return raw;
 

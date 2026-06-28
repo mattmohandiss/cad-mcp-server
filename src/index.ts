@@ -19,8 +19,7 @@ const server = new McpServer({
 });
 
 type ToolResponse<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: { type: string; message: string } };
+  { ok: true; data: T } | { ok: false; error: { type: string; message: string } };
 
 function isToolResult(value: unknown): value is ToolResponse<unknown> {
   return (
@@ -56,8 +55,7 @@ export function jsonToolResult(result: unknown) {
 }
 
 type StepToolResult =
-  | ReturnType<typeof jsonToolResult>
-  | Promise<ReturnType<typeof jsonToolResult>>;
+  ReturnType<typeof jsonToolResult> | Promise<ReturnType<typeof jsonToolResult>>;
 type RegisterTool = (
   name: string,
   config: {
