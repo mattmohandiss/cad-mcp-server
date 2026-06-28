@@ -2,156 +2,125 @@
 
 Empirical data on whether the 4-tool surface (`inspect_step`,
 `query_step`, `diff_step`, `transact_step`) actually works in practice
-with real LLMs. Generates test STEP files with known design intent
-(ground truth), asks real LLMs the same questions via OpenRouter, and
-compares the answers.
+with real LLMs. Generates test STEP files with known ground truth,
+asks real LLMs questions via OpenRouter, and compares answers.
 
 ## Layout
 
 ```
 eval/
-  README.md                  this file
-  generate/                  Python: cadquery STEP file generator
-    generate.py
-    requirements.txt
-    .venv/                    created by setup, NOT committed
-  ground-truth/              TypeScript: verifier that kernel matches
-    verify.test.ts             meta.json (also lives in src/tests/)
-  runner/                    TypeScript: multi-model eval runner
-    runner.ts                 (planned)
-    questions.ts              (planned)
-    openrouter.ts             (planned)
-    model-registry.ts         (planned)
-samples/
-  eval-generated/            committed test STEP files + meta.json
-    box.step, box.meta.json
-    box_with_3_holes.step, ...
-    box_with_blind_hole.step, ...
-    stepped_cylinder.step, ...
-    bracket_v1.step, bracket_v1.meta.json
-    bracket_v2.step, bracket_v2.meta.json
+  runner/
+    runner.ts             Multi-model eval runner (MCP subprocess + AI SDK)
+    questions.ts          5 questions with ground truth + extractors
+    model-registry.ts     3 models via OpenRouter
+    index.ts              CLI entry with --model / --question filters
+generate/
+  generate.py             CadQuery STEP file generator (6 files)
+samples/eval-generated/   6 committed STEP files + meta.json ground truth
 src/tests/
-  ground-truth-verification.test.ts   verifies the kernel matches meta.json
-  llm-eval.test.ts            (planned) vitest wrapper for the runner
-tests/eval-logs/              captured conversations per run (gitignored)
+  ground-truth-verification.test.ts   Kernel matches meta.json
+  llm-eval.test.ts                    Vitest wrapper for live eval
+  llm-eval-replay.test.ts             Replay from logs (no API cost)
+  eval-runner-smoke.test.ts           Plumbing smoke test (no API key needed)
+tests/eval-logs/                      Per-run JSON logs (gitignored)
 ```
 
-## One-time setup
+## Cost
 
-The dev shell has Python 3 with pip. CadQuery needs native system
-libraries (libGL, libstdc++, libfontconfig, libX11, etc.); the flake's
-`python` wrapper script sets `LD_LIBRARY_PATH` to find them.
+Full eval (3 models × 5 questions = 15 calls): **~$0.30–0.50**
+
+Breakdown:
+- Claude Sonnet 4.5: ~$0.25 (the expensive one)
+- GPT-4o-mini: ~$0.02
+- Gemini 2.5 Flash: ~$0.03
+
+## When to run evals
+
+### Skip it — unit tests cover you
+| Change | Run |
+|---|---|
+| OCCT kernel or WASM | `just test` (ground-truth-verification) |
+| Query engine internals | `just test` (query-engine, measure-aggregate-pipeline) |
+| Tool schemas (types only) | `just test` (schema, four-tool-surface) |
+| Extractor logic | Replay test (free, no API calls) |
+
+### Run evals selectively
+| Change | Minimum viable eval |
+|---|---|
+| Schema descriptions / system prompt | `-m gpt -q box_volume -q cyl_face_count` (~$0.01) |
+| Query engine filter/aggregate | `-m gpt` (cheapest model, ~$0.02) |
+| Adding a new measure op | `-m gpt -m sonnet` (cheap + gold standard) |
+| Tool surface redesign | Full run once, then replay thereafter |
+
+### Run the full suite
+- Before a PR that changes the tool surface
+- After any provider/API SDK upgrade
+- To regenerate the baseline after schema improvements
+
+## Workflow
+
+```
+1. Make changes
+2. just test              # Fast feedback (121 tests, no API calls)
+3. npx tsx eval/runner/index.ts -m gpt -q box_volume
+                          # Quick sanity check (~$0.003)
+4. npx tsx eval/runner/index.ts -m sonnet
+                          # Gold standard (~$0.25)
+5. npx tsx eval/runner/index.ts
+                          # Full suite before PR (~$0.30-0.50)
+```
+
+Between steps 3-5, iterate on extractors for free:
+
+```
+npx vitest run src/tests/llm-eval-replay.test.ts
+```
+
+## CLI
 
 ```sh
-# Confirm the dev shell is active
-direnv allow
+# Quick: cheapest model, one question
+npx tsx eval/runner/index.ts -m gpt -q box_volume
 
-# Verify cadquery loads
-python -c "import cadquery; print(cadquery.__version__)"
-# (should print "2.8.0" or similar)
+# Mid: two models, relevant questions
+npx tsx eval/runner/index.ts -m gpt -m gemini -q cyl_face_count -q box_volume
 
-# Create the venv and install cadquery
-python -m venv eval/generate/.venv
-eval/generate/.venv/bin/pip install -r eval/generate/requirements.txt
-
-# NixOS only: replace the venv's bin/python with a wrapper that
-# sets LD_LIBRARY_PATH so cadquery-ocp can find its native deps.
-# (The bare nixpkgs python is statically linked, so the venv's
-# bin/python doesn't inherit the wrapper's env vars.)
-# See flake.nix -> pythonWrapper for the list of libraries needed.
+# Full: all models × all questions
+npx tsx eval/runner/index.ts
 ```
 
-## Generating the test STEP files
+Model shortcuts: `sonnet`, `claude`, `gpt`, `gpt4o`, `gemini`, `flash`
 
-```sh
-eval/generate/.venv/bin/python eval/generate/generate.py
-```
+## How the runner works
 
-This writes 6 STEP files + their `meta.json` to
-`samples/eval-generated/`. The files are committed so the eval is
-reproducible without re-running the generator.
+For each (question, model):
+1. Start the real MCP server as a subprocess (`StdioClientTransport`)
+2. Get the 4 tools via `mcpClient.tools()`
+3. `generateText({ model, tools, stopWhen: isStepCount(8) })`
+4. AI SDK handles the loop: LLM calls tools → SDK executes via MCP → results fed back → repeat
+5. Extract answer from LLM's final text, score against ground truth
 
-The script is idempotent: same input => same output, so re-running
-won't change the committed files unless the generators are edited.
+This tests the **exact same code path** as Claude Desktop or any real MCP
+client — not in-process handler calls.
 
-## Verifying the kernel matches ground truth
+## Per-run log format
 
-```sh
-npx vitest run src/tests/ground-truth-verification.test.ts
-```
+Each (question, model) pair writes a JSON log to `tests/eval-logs/`:
+- `text` — LLM's final answer
+- `finishReason` — `stop`, `tool-calls`
+- `usage` — token counts per step + aggregated
+- `steps` — per-step breakdown with `stepTimeMs`, `responseTimeMs`, per-step usage
+- `toolCalls` — what the LLM invoked
+- `toolResults` — what the MCP server returned (tool outputs)
+- `warnings` — provider warnings
 
-This loads each generated STEP file through the OCCT-wasm kernel and
-asserts that the kernel's measurements match the expected answers in
-the `meta.json`. If this fails, either the generator is wrong or the
-kernel binding is wrong. (Both have happened during development.)
+Replay re-extracts from these logs at zero cost.
 
-## Running the LLM eval
+## Current baseline (2026-06-28)
 
-```sh
-# Set the API key (any OpenRouter key)
-export OPENROUTER_API_KEY=sk-or-...
-
-# Run the eval
-npx vitest run src/tests/llm-eval.test.ts
-```
-
-The test reads the 5 questions × 3 models matrix, runs each through
-the OpenRouter API, captures the conversation, and scores against the
-ground truth. Results land in `tests/eval-logs/`.
-
-If `OPENROUTER_API_KEY` is not set, the LLM eval tests skip (they use
-`describe.skipIf`). A separate smoke test
-(`src/tests/eval-runner-smoke.test.ts`) verifies the runner's plumbing
-without making API calls.
-
-### How the runner works
-
-For each question × model:
-1. Send the question to the LLM with the 4 tool definitions
-2. Loop: LLM responds, may call tools, runner executes them against
-   the in-process `handle*` functions (reuses the same logic as the
-   real MCP server), feeds results back
-3. Continue until the LLM responds without a tool call (max 8 turns)
-4. Extract the answer from the structured tool response (not from the
-   LLM's prose — more robust)
-5. Score against the ground truth
-
-No real MCP server is started. The runner directly invokes
-`handleInspectStep`, `handleQueryStep`, `handleDiffStep`,
-`handleTransactStep` from `src/tools/`. Faster, deterministic, and
-avoids spawning a stdio subprocess per question.
-
-### How answers are extracted
-
-Each question has an `extract` function that walks the captured tool
-calls and pulls a number/bool/string from the structured response.
-For example, the "smallest hole diameter" question filters
-`response.entities` for cylindrical faces, reads their `radius`
-fields, and returns `min(radii) * 2`. This is more robust than
-parsing the LLM's prose because the tool response is deterministic
-and well-typed.
-
-### Scoring
-
-Per question, three booleans:
-- **toolSelected** — did the LLM pick the right tool?
-- **schemaValid** — were the LLM's tool inputs schema-valid?
-- **contentCorrect** — did the extracted answer match the ground truth?
-
-For numbers, we apply a tolerance (question-specific) and also accept
-within 1% relative error. Booleans and strings are exact-match.
-
-## What this gives us
-
-Per-model pass rate table:
-```
-Model                    Pass  Tool ✓  Schema ✓  Content ✓
-Claude Sonnet             9/10   100%      100%      90%
-GPT-4o-mini               8/10   100%       90%      80%
-Gemini 2.0 Flash          7/10    90%       80%      80%
-─────────────────────────────────────────────────────────
-Overall                  24/30   97%      90%      83%
-```
-
-A multi-model signal tells us whether the surface is portable across
-provider tool-use conventions, or only tuned to one.
+| Model | Pass Rate |
+|---|---|
+| Claude Sonnet 4.5 | 5/5 (100%) |
+| GPT-4o-mini | 3/5 (60%) |
+| Gemini 2.5 Flash | 3/5 (60%) |
+| **Overall** | **11/15 (73%)** |

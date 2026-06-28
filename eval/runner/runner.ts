@@ -20,7 +20,7 @@ import * as path from 'node:path';
 import { createMCPClient } from '@ai-sdk/mcp';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { generateText, isStepCount } from 'ai';
-import { createOpenAI } from '@ai-sdk/openai';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { EVAL_MODELS, type EvalModel } from './model-registry.js';
 import { QUESTIONS, type EvalQuestion } from './questions.js';
 
@@ -39,8 +39,7 @@ import { QUESTIONS, type EvalQuestion } from './questions.js';
 
 const SERVER_PATH = new URL('../../dist/index.js', import.meta.url).pathname;
 
-const openrouter = createOpenAI({
-  baseURL: 'https://openrouter.ai/api/v1',
+const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
@@ -155,7 +154,7 @@ export async function runOne(
         totalTokens: result.usage.totalTokens,
         inputTokenDetails: result.usage.inputTokenDetails,
         outputTokenDetails: result.usage.outputTokenDetails,
-        raw: result.usage.raw as Record<string, unknown> | undefined,
+        raw: mergeRawWithOpenRouterCost(result.usage.raw, result.providerMetadata),
       }
     : null;
   const steps: StepSummaryEntry[] = (result.steps ?? []).map((s) => ({
@@ -318,6 +317,28 @@ function writeLog(
 function truncate(s: string, maxLen: number): string {
   if (s.length <= maxLen) return s;
   return s.slice(0, maxLen) + `\n... [truncated, total ${s.length} chars]`;
+}
+
+/**
+ * Merge OpenRouter's usage.cost from providerMetadata into the raw usage blob.
+ * The OpenRouter provider puts cost info at result.providerMetadata?.openrouter?.usage.
+ */
+function mergeRawWithOpenRouterCost(
+  raw: Record<string, unknown> | undefined,
+  providerMetadata: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  const orMeta = (providerMetadata as Record<string, unknown>)?.openrouter as
+    Record<string, unknown> | undefined;
+  const orUsage = orMeta?.usage as
+    | { cost?: number; costDetails?: Record<string, unknown> }
+    | undefined;
+
+  if (!orUsage) return raw;
+
+  const merged = { ...(raw ?? {}) };
+  if (orUsage.cost !== undefined) merged.cost = orUsage.cost;
+  if (orUsage.costDetails) merged.costDetails = orUsage.costDetails;
+  return merged;
 }
 
 const SYSTEM_PROMPT = `You are an AI assistant with access to 4 tools for inspecting STEP CAD files:
