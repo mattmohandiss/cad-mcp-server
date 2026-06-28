@@ -53,6 +53,11 @@ lint: _validate-facade _lint-ts _lint-rs
 # Run all local checks
 check: lint test
 
+# Run the full CI pipeline locally: lint + unit tests, build the WASM
+# kernel, then re-run tests with kernel tests active. Use this before
+# opening a release PR to verify the full suite passes.
+ci: check build-wasm test
+
 # Format all TypeScript source + config files
 fmt:
 	npx prettier --write "src/**/*.ts" "eval/**/*.ts" occt/ts/src/ occt/ts/eslint.config.js eslint.config.js tsconfig.json vitest.config.ts

@@ -63,6 +63,48 @@ docs/                  Project documentation
 - Generated C++ files in `occt/facade/generated/` are build artifacts — do not commit.
 - WASM outputs (`occt/dist/`, `occt/ts/dist/`, `*.wasm`) are build artifacts — do not commit.
 
+## Workflow
+
+Two branches: `main` (production, protected) and `dev` (integration). No feature branches for solo work.
+
+**Day-to-day:**
+
+```bash
+git checkout dev
+# edit
+just check          # or rely on the pre-push hook to do it
+git add -p          # review the diff
+git commit -m "..."
+git push            # pre-push hook runs `just check` automatically
+```
+
+**Release:**
+
+```bash
+git checkout dev
+# bump version in package.json, update CHANGELOG.md
+just eval                          # ~15min, real API calls, costs ~$2
+git commit -m "release: v0.x.y" && git push
+gh pr create --base main --head dev
+# CI runs full suite on the release PR (lint + WASM + kernel tests)
+# once green, merge (no force-push, status check required — ruleset enforces)
+git checkout main && git pull
+git tag v0.x.y && git push --tags   # triggers publish.yml
+```
+
+**Pre-release verification (mirrors what CI does):**
+
+```bash
+just ci            # lint + tests + WASM build + tests with kernel
+```
+
+**The four checks layered from cheap → expensive:**
+
+1. **pre-commit** (lint-staged): prettier + eslint on staged files (~1s)
+2. **pre-push** (husky): `just check` — full lint + vitest (~30s, no Docker)
+3. **PR CI** on `dev`: `just lint && npm test` (~30s, no WASM build)
+4. **main CI** (push to main or release PR): full suite incl. WASM build + kernel tests (~3min warm)
+
 ## npm Distribution
 
 The npm package (`cad-mcp-server`) should stay minimal. Include only:
