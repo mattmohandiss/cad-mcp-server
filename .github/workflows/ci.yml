@@ -12,6 +12,11 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    services:
+      registry:
+        image: registry:3
+        ports:
+          - 5000:5000
     steps:
       - uses: actions/checkout@v6
 
@@ -19,6 +24,10 @@ jobs:
         with:
           node-version: '24'
           cache: 'npm'
+
+      - uses: docker/setup-buildx-action@v4
+        with:
+          driver-opts: network=host
 
       - name: Install root dependencies
         run: npm ci
@@ -40,12 +49,52 @@ jobs:
       - name: Lint + unit tests
         run: just lint && npm test
 
-      - name: Build WASM (kernel tests)
+      # Build WASM and run kernel tests on release-gating runs only:
+      # push to main, push of v* tag, or PR targeting main.
+      # First run on a fresh PR is cold (~5min) — subsequent runs reuse
+      # Docker layer cache from this repo's GHA cache (scopes below).
+      - name: Build OCCT builder image (cached)
         if: |
           github.ref == 'refs/heads/main' ||
           startsWith(github.ref, 'refs/tags/v') ||
           (github.event_name == 'pull_request' && github.base_ref == 'main')
-        run: just build-wasm
+        uses: docker/build-push-action@v7
+        with:
+          context: occt
+          file: occt/Dockerfile.builder
+          tags: localhost:5000/occt-wasm-builder
+          push: true
+          cache-from: type=gha,scope=occt-builder
+          cache-to: type=gha,mode=max,scope=occt-builder
+
+      - name: Build WASM (cached)
+        if: |
+          github.ref == 'refs/heads/main' ||
+          startsWith(github.ref, 'refs/tags/v') ||
+          (github.event_name == 'pull_request' && github.base_ref == 'main')
+        uses: docker/build-push-action@v7
+        with:
+          context: occt
+          file: occt/Dockerfile
+          build-args: ENABLE_WASM_OPT=0
+          tags: occt-wasm
+          load: true
+          cache-from: type=gha,scope=occt-wasm
+          cache-to: type=gha,mode=max,scope=occt-wasm
+          build-contexts: |
+            occt-wasm-builder=docker-image://localhost:5000/occt-wasm-builder
+
+      - name: Extract WASM artifacts
+        if: |
+          github.ref == 'refs/heads/main' ||
+          startsWith(github.ref, 'refs/tags/v') ||
+          (github.event_name == 'pull_request' && github.base_ref == 'main')
+        run: |
+          cid=$(docker create occt-wasm)
+          mkdir -p occt/dist occt/ts/dist
+          docker cp "$cid":/workspace/dist/. occt/dist/
+          docker cp "$cid":/workspace/ts/dist/. occt/ts/dist/
+          docker rm "$cid"
 
       - name: Run tests with WASM
         if: |
