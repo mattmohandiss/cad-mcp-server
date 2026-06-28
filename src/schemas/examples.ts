@@ -47,12 +47,7 @@ const queryStepExamples: Example[] = [
     file_path: 'model.step',
     entities: 'faces',
     measure: [{ op: 'ray_test_grid', direction: [0, 0, 1], spacing_mm: 2.0 }],
-    aggregate: [
-      'min:hit_distance',
-      'max:hit_distance',
-      'avg:hit_distance',
-      'count:hit_distance',
-    ],
+    aggregate: ['min:hit_distance', 'max:hit_distance', 'avg:hit_distance', 'count:hit_distance'],
   },
 
   /* 5. Partial: filter + select (new Tier A: validity_status) */
@@ -76,9 +71,7 @@ const transactStepExamples: Example[] = [
   /* 1. Minimal: single query step */
   {
     file_path: 'model.step',
-    pipeline: [
-      { op: 'query', params: { entities: 'faces', filter: { surface_type: 'plane' } } },
-    ],
+    pipeline: [{ op: 'query', params: { entities: 'faces', filter: { surface_type: 'plane' } } }],
   },
 
   /* 2. Full: find blind holes (query + for_each + filter + select) */
@@ -96,8 +89,18 @@ const transactStepExamples: Example[] = [
       {
         op: 'for_each',
         do: [
-          { op: 'query', params: { measure: { op: 'ray_test_segment', origin: 'extent_max', direction: [0, 0, 1] } } },
-          { op: 'query', params: { measure: { op: 'ray_test_segment', origin: 'extent_min', direction: [0, 0, -1] } } },
+          {
+            op: 'query',
+            params: {
+              measure: { op: 'ray_test_segment', origin: 'extent_max', direction: [0, 0, 1] },
+            },
+          },
+          {
+            op: 'query',
+            params: {
+              measure: { op: 'ray_test_segment', origin: 'extent_min', direction: [0, 0, -1] },
+            },
+          },
         ],
       },
       { op: 'filter_results', where: 'pos_hits.empty OR neg_hits.empty' },
@@ -147,9 +150,7 @@ const transactStepExamples: Example[] = [
   },
 ];
 
-const inspectStepExamples: Example[] = [
-  { file_path: 'model.step' },
-];
+const inspectStepExamples: Example[] = [{ file_path: 'model.step' }];
 
 const diffStepExamples: Example[] = [
   {

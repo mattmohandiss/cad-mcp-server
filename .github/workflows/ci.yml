@@ -50,8 +50,8 @@ jobs:
         with:
           tool: just
 
-      - name: Lint + unit tests
-        run: just lint && npm test
+      - name: Check formatting, lint, and tests
+        run: just check
 
       # Build WASM and run kernel tests on release-gating runs only:
       # push to main, or PR targeting main.

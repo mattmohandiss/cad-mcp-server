@@ -54,9 +54,10 @@ extract_config_methods() {
 }
 
 # ── Extract method names from occt_kernel.h ──────────────────────────────
-# Matches "return_type method_name(...)" lines in the public section.
+# Matches "return_type method_name(...)" lines in the public section only.
 extract_header_methods() {
-  grep -oP '^\s+\S+\s+\K\w+(?=\()' "${ROOT}/occt/facade/include/occt_kernel.h" \
+  sed -n '/^  public:/,/^  private:/p' "${ROOT}/occt/facade/include/occt_kernel.h" \
+    | grep -oP '^\s+\S+\s+\K\w+(?=\()' \
     | grep -vx 'OcctKernel' \
     | sort -u
 }

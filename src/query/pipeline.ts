@@ -113,7 +113,9 @@ export async function executePipeline(input: PipelineInput): Promise<PipelineRes
       }
       case 'filter_results': {
         if (!Array.isArray(value)) {
-          throw pipelineError(`step ${i}: filter_results requires an array input from the previous step`);
+          throw pipelineError(
+            `step ${i}: filter_results requires an array input from the previous step`,
+          );
         }
         const expr = step.where ?? '';
         const items = value as Array<Record<string, unknown>>;
@@ -228,7 +230,9 @@ async function executeForEachItem(
           throw pipelineError(`sub-pipeline step ${i}: filter_results requires an array input`);
         }
         const expr = step.where ?? '';
-        value = (value as Array<Record<string, unknown>>).filter((it) => evaluateExpression(expr, it));
+        value = (value as Array<Record<string, unknown>>).filter((it) =>
+          evaluateExpression(expr, it),
+        );
         break;
       }
       case 'for_each':
@@ -289,7 +293,9 @@ export function evaluateExpression(expr: string, record: Record<string, unknown>
   }
 
   /* field op value */
-  const fieldMatch = /^([a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)*)\s*(==|!=|>=|<=|>|<)\s*(.+)$/i.exec(trimmed);
+  const fieldMatch = /^([a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)*)\s*(==|!=|>=|<=|>|<)\s*(.+)$/i.exec(
+    trimmed,
+  );
   if (fieldMatch) {
     const field = fieldMatch[1];
     const op = fieldMatch[2];
@@ -350,24 +356,36 @@ function compare(a: unknown, op: string, b: unknown): boolean {
   /* If both numeric, do numeric comparison. */
   if (typeof a === 'number' && typeof b === 'number') {
     switch (op) {
-      case '==': return a === b;
-      case '!=': return a !== b;
-      case '>': return a > b;
-      case '<': return a < b;
-      case '>=': return a >= b;
-      case '<=': return a <= b;
+      case '==':
+        return a === b;
+      case '!=':
+        return a !== b;
+      case '>':
+        return a > b;
+      case '<':
+        return a < b;
+      case '>=':
+        return a >= b;
+      case '<=':
+        return a <= b;
     }
   }
   /* Otherwise do stringified comparison. */
   const sa = String(a ?? '');
   const sb = String(b ?? '');
   switch (op) {
-    case '==': return sa === sb;
-    case '!=': return sa !== sb;
-    case '>': return sa > sb;
-    case '<': return sa < sb;
-    case '>=': return sa >= sb;
-    case '<=': return sa <= sb;
+    case '==':
+      return sa === sb;
+    case '!=':
+      return sa !== sb;
+    case '>':
+      return sa > sb;
+    case '<':
+      return sa < sb;
+    case '>=':
+      return sa >= sb;
+    case '<=':
+      return sa <= sb;
   }
   return false;
 }

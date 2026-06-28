@@ -66,20 +66,24 @@ function buildHelpDocument() {
       'CAD MCP Server exposes 4 read-only tools over a cached OCCT model. Tools return measured facts; the LLM interprets engineering meaning.',
     tools: {
       inspect_step: {
-        purpose: 'Compact first-pass overview of a STEP file: dimensions, body count, topology, validity, XDE summary.',
+        purpose:
+          'Compact first-pass overview of a STEP file: dimensions, body count, topology, validity, XDE summary.',
         input: { file_path: 'string (required)' },
         example: toolExamples.inspect_step[0],
       },
       query_step: {
-        purpose: 'Declarative query over faces, edges, bodies, vertices, pmi, color, layer, material, assembly_node.',
+        purpose:
+          'Declarative query over faces, edges, bodies, vertices, pmi, color, layer, material, assembly_node.',
         input: {
           file_path: 'string (required)',
           entities: 'enum (required): ' + ENTITIES.join(', '),
           entity_ids: 'string[] (optional, direct lookup)',
-          filter: 'object (optional, single bag with conditional semantics; see filter_fields_by_entity)',
+          filter:
+            'object (optional, single bag with conditional semantics; see filter_fields_by_entity)',
           group_by: 'enum[] (optional, up to 3): ' + GROUP_BY_DIMENSIONS.join(', '),
           measure: 'object[] (optional, up to 10): see measure_ops',
-          aggregate: 'string[] (optional, up to 20): format "<op>:<field>" — op in (count, min, max, avg, stddev, sum)',
+          aggregate:
+            'string[] (optional, up to 20): format "<op>:<field>" — op in (count, min, max, avg, stddev, sum)',
           select: 'string[] (optional, up to 30): field names to include',
           sort: '{by, direction} (optional)',
           limit: 'integer (default 100, max 1000)',
@@ -104,7 +108,8 @@ function buildHelpDocument() {
         },
       },
       diff_step: {
-        purpose: 'Compare two STEP files: dimension, volume, area, topology, body, PMI, color, material deltas.',
+        purpose:
+          'Compare two STEP files: dimension, volume, area, topology, body, PMI, color, material deltas.',
         input: {
           baseline_file_path: 'string (required)',
           comparison_file_path: 'string (required)',
@@ -112,7 +117,8 @@ function buildHelpDocument() {
         example: toolExamples.diff_step[0],
       },
       transact_step: {
-        purpose: 'Imperative pipeline for multi-step workflows needing iteration across result sets.',
+        purpose:
+          'Imperative pipeline for multi-step workflows needing iteration across result sets.',
         input: {
           file_path: 'string (required)',
           pipeline: 'array of {op, params, do, where, fields} (required, 1-50 steps)',
@@ -124,14 +130,18 @@ function buildHelpDocument() {
     },
     migration_from_9_tool_surface: {
       inspect_step_file: 'inspect_step (single call)',
-      find_step_faces: 'query_step({entities: "faces", filter: {...}, group_by: [...], select: [...]})',
-      find_step_edges: 'query_step({entities: "edges", filter: {...}, group_by: [...], select: [...]})',
+      find_step_faces:
+        'query_step({entities: "faces", filter: {...}, group_by: [...], select: [...]})',
+      find_step_edges:
+        'query_step({entities: "edges", filter: {...}, group_by: [...], select: [...]})',
       get_step_entities: 'query_step({entities: "<type>", entity_ids: ["face:5", ...]})',
       query_step_pmi: 'query_step({entities: "pmi", filter: {...}, select: [...]})',
       query_ray_intersect: 'query_step({entities: "faces", measure: [{op: "ray_test", ...}]})',
-      measure_distance: 'query_step({entities: "faces", measure: [{op: "distance", to: "face:N"}]})',
+      measure_distance:
+        'query_step({entities: "faces", measure: [{op: "distance", to: "face:N"}]})',
       compare_step_files: 'diff_step({baseline_file_path, comparison_file_path})',
-      find_coaxial_cylinders: 'query_step({entities: "faces", filter: {surface_type: "cylinder"}, group_by: ["axis"], select: [...]})',
+      find_coaxial_cylinders:
+        'query_step({entities: "faces", filter: {surface_type: "cylinder"}, group_by: ["axis"], select: [...]})',
     },
     caveats: [
       'In the initial cut, only `faces` and `edges` entity types are fully wired through the engine. Other entity types return a "not yet implemented" error with a clear migration message; they ship alongside the Tier A kernel methods.',
@@ -146,11 +156,43 @@ function filterFieldsByEntity() {
    * type. The grouping is a documentation aid for the LLM; the engine
    * itself uses the single-bag filter and ignores irrelevant fields. */
   const groups: Record<string, string[]> = {
-    faces: ['surface_type', 'area_min', 'area_max', 'normal', 'radius_min', 'radius_max', 'body_ids', 'validity_status', 'tolerance_max', 'canonical_form', 'linked_to_pmi'],
-    edges: ['curve_type', 'length_min', 'length_max', 'radius_min', 'radius_max', 'curvature_min', 'curvature_max', 'has_curve3d', 'body_ids', 'validity_status', 'tolerance_max', 'linked_to_pmi'],
+    faces: [
+      'surface_type',
+      'area_min',
+      'area_max',
+      'normal',
+      'radius_min',
+      'radius_max',
+      'body_ids',
+      'validity_status',
+      'tolerance_max',
+      'canonical_form',
+      'linked_to_pmi',
+    ],
+    edges: [
+      'curve_type',
+      'length_min',
+      'length_max',
+      'radius_min',
+      'radius_max',
+      'curvature_min',
+      'curvature_max',
+      'has_curve3d',
+      'body_ids',
+      'validity_status',
+      'tolerance_max',
+      'linked_to_pmi',
+    ],
     bodies: ['body_type', 'volume_min', 'volume_max', 'validity_status'],
     vertices: ['tolerance_max'],
-    pmi: ['pmi_type', 'tolerance_subtype', 'value_min', 'value_max', 'material_condition', 'linked_to'],
+    pmi: [
+      'pmi_type',
+      'tolerance_subtype',
+      'value_min',
+      'value_max',
+      'material_condition',
+      'linked_to',
+    ],
     color: ['color_type', 'rgb'],
     layer: ['layer_name'],
     material: ['material_name'],

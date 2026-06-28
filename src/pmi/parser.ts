@@ -244,10 +244,7 @@ export interface PmiAnnotationEntity {
 }
 
 export type PmiExtractedEntity =
-  | PmiToleranceEntity
-  | PmiDimensionEntity
-  | PmiDatumEntity
-  | PmiAnnotationEntity;
+  PmiToleranceEntity | PmiDimensionEntity | PmiDatumEntity | PmiAnnotationEntity;
 
 function categorizePmiEntity(
   entity: RawStepEntity,

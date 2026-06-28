@@ -12,13 +12,28 @@ import { queryHelpResourceHandler, QUERY_HELP_URI } from '../resources/query-hel
 
 describe('4-tool surface: schema contracts', () => {
   it('exposes the approved public schemas', () => {
-    expect(Object.keys(toolSchemas).sort()).toEqual(['diff_step', 'inspect_step', 'query_step', 'transact_step']);
+    expect(Object.keys(toolSchemas).sort()).toEqual([
+      'diff_step',
+      'inspect_step',
+      'query_step',
+      'transact_step',
+    ]);
   });
 
   it('declares 9 entity types for query_step', () => {
     expect(ENTITIES).toHaveLength(9);
     expect(new Set(ENTITIES)).toEqual(
-      new Set(['assembly_node', 'bodies', 'color', 'edges', 'faces', 'layer', 'material', 'pmi', 'vertices']),
+      new Set([
+        'assembly_node',
+        'bodies',
+        'color',
+        'edges',
+        'faces',
+        'layer',
+        'material',
+        'pmi',
+        'vertices',
+      ]),
     );
   });
 
@@ -41,9 +56,9 @@ describe('4-tool surface: schema contracts', () => {
     expect(schema.safeParse({ file_path: 'model.step' }).success).toBe(false);
     expect(schema.safeParse({ file_path: 'model.step', entities: 'faces' }).success).toBe(true);
     expect(schema.safeParse({ file_path: 'model.step', entities: 'face' }).success).toBe(false);
-    expect(schema.safeParse({ file_path: 'model.step', entities: 'faces', unknown_field: 1 }).success).toBe(
-      false,
-    );
+    expect(
+      schema.safeParse({ file_path: 'model.step', entities: 'faces', unknown_field: 1 }).success,
+    ).toBe(false);
   });
 
   it('query_step filter is a single bag; entity-specific filter fields parse cleanly', () => {
@@ -140,7 +155,11 @@ describe('4-tool surface: input_examples coverage', () => {
   it('query_step has 6 examples covering minimal/partial/full styles', () => {
     expect(toolExamples.query_step).toHaveLength(6);
     /* minimal: just required fields */
-    expect(Object.keys(toolExamples.query_step[0]).sort()).toEqual(['entities', 'entity_ids', 'file_path']);
+    expect(Object.keys(toolExamples.query_step[0]).sort()).toEqual([
+      'entities',
+      'entity_ids',
+      'file_path',
+    ]);
     /* full: filter + sort + limit + select */
     const full = toolExamples.query_step[1] as Record<string, unknown>;
     expect(full.filter).toBeDefined();
