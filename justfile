@@ -95,8 +95,8 @@ _validate-facade:
 # Internal: lint and type-check TypeScript packages
 _lint-ts:
 	npm run lint
-	cd occt/ts && npx tsc --noEmit
 	cd occt/ts && npx eslint src/
+	cd occt/ts && npx tsc
 	npx tsc --noEmit
 
 # Internal: lint Rust codegen package
