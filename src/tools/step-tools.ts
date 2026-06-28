@@ -163,7 +163,9 @@ const findStepFacesSchema = {
   sort: faceSortSchema,
   return_type: resultModeSchema,
   pull_direction: direction3Schema
-    .describe('Pull/draw direction [x, y, z]. When set, draft_angle_deg is computed per face as 90° − angle(normal, pull_direction). Negative values indicate undercut.')
+    .describe(
+      'Pull/draw direction [x, y, z]. When set, draft_angle_deg is computed per face as 90° − angle(normal, pull_direction). Negative values indicate undercut.',
+    )
     .optional(),
   limit: limitSchema,
   offset: offsetSchema,
@@ -373,19 +375,15 @@ export const stepToolSchemas = {
     grid_spacing_mm: z
       .number()
       .positive()
-      .describe('When set, fires a grid of rays perpendicular to direction across the bounding box extent. Returns all hits. Omit for single-ray mode.')
+      .describe(
+        'When set, fires a grid of rays perpendicular to direction across the bounding box extent. Returns all hits. Omit for single-ray mode.',
+      )
       .optional(),
   },
   measureDistance: {
     ...filePathInput,
-    entity_a: z
-      .string()
-      .min(1)
-      .describe('First entity ID (e.g., "face:5", "body:0", "edge:3").'),
-    entity_b: z
-      .string()
-      .min(1)
-      .describe('Second entity ID.'),
+    entity_a: z.string().min(1).describe('First entity ID (e.g., "face:5", "body:0", "edge:3").'),
+    entity_b: z.string().min(1).describe('Second entity ID.'),
   },
   findCoaxialCylinders: {
     ...filePathInput,
@@ -394,11 +392,7 @@ export const stepToolSchemas = {
       .nonnegative()
       .describe('Minimum diameter in mm. Filters cylindrical features by diameter.')
       .optional(),
-    max_diameter_mm: z
-      .number()
-      .nonnegative()
-      .describe('Maximum diameter in mm.')
-      .optional(),
+    max_diameter_mm: z.number().nonnegative().describe('Maximum diameter in mm.').optional(),
     axis_tolerance_deg: z
       .number()
       .nonnegative()
@@ -512,19 +506,35 @@ export async function handleInspectStepFile(filePath: string) {
 
       // Principal properties (may fail for wireframe/non-manifold shapes).
       let principal: number[] | undefined;
-      try { principal = kernel.getPrincipalProperties(shape); } catch { /* ignore */ }
+      try {
+        principal = kernel.getPrincipalProperties(shape);
+      } catch {
+        /* ignore */
+      }
 
       // Oriented bounding box (may fail same as above).
       let obb: number[] | undefined;
-      try { obb = kernel.getOrientedBoundingBox(shape); } catch { /* ignore */ }
+      try {
+        obb = kernel.getOrientedBoundingBox(shape);
+      } catch {
+        /* ignore */
+      }
 
       // Shell watertight analysis.
       let freeEdgeCount = -1;
-      try { freeEdgeCount = kernel.freeEdgeCount(shape); } catch { /* ignore */ }
+      try {
+        freeEdgeCount = kernel.freeEdgeCount(shape);
+      } catch {
+        /* ignore */
+      }
 
       // Shape contents inventory.
       let contents: number[] | undefined;
-      try { contents = kernel.shapeContents(shape); } catch { /* ignore */ }
+      try {
+        contents = kernel.shapeContents(shape);
+      } catch {
+        /* ignore */
+      }
 
       return {
         schema_version: CAD_RESPONSE_SCHEMA_VERSION,
@@ -575,24 +585,25 @@ export async function handleInspectStepFile(filePath: string) {
             edge_count: brep.edgeStatistics?.count,
           },
         },
-        quality: freeEdgeCount >= 0
-          ? {
-              free_edge_count: freeEdgeCount,
-              is_watertight: freeEdgeCount === 0,
-              shape_contents: contents
-                ? {
-                    faces: contents[0],
-                    edges: contents[1],
-                    free_faces: contents[2],
-                    free_wires: contents[3],
-                    free_edges: contents[4],
-                    c0_surfaces: contents[5],
-                    bspline_surfaces: contents[6],
-                    offset_surfaces: contents[7],
-                  }
-                : undefined,
-            }
-          : undefined,
+        quality:
+          freeEdgeCount >= 0
+            ? {
+                free_edge_count: freeEdgeCount,
+                is_watertight: freeEdgeCount === 0,
+                shape_contents: contents
+                  ? {
+                      faces: contents[0],
+                      edges: contents[1],
+                      free_faces: contents[2],
+                      free_wires: contents[3],
+                      free_edges: contents[4],
+                      c0_surfaces: contents[5],
+                      bspline_surfaces: contents[6],
+                      offset_surfaces: contents[7],
+                    }
+                  : undefined,
+              }
+            : undefined,
         pmi: {
           has_pmi: semantic.pmi?.hasGdt || semantic.pmi?.hasDimensions || false,
           has_gdt: semantic.pmi?.hasGdt || false,
@@ -719,9 +730,7 @@ export async function handleFindCoaxialCylinders(
   filePath: string,
   query: Record<string, unknown> | undefined,
 ) {
-  return wrapTool(async () =>
-    findCoaxialCylinders(filePath, (query ?? {}) as never),
-  );
+  return wrapTool(async () => findCoaxialCylinders(filePath, (query ?? {}) as never));
 }
 
 export async function handleMeasureDistance(
@@ -735,8 +744,12 @@ export async function handleMeasureDistance(
       const b = String(q.entity_b ?? '');
       const { kernel, shape } = await model.getShapeContext('measure_distance');
 
-      const entityType = a.startsWith('face:') || b.startsWith('face:')
-        ? 'face' : a.startsWith('edge:') || b.startsWith('edge:') ? 'edge' : 'solid';
+      const entityType =
+        a.startsWith('face:') || b.startsWith('face:')
+          ? 'face'
+          : a.startsWith('edge:') || b.startsWith('edge:')
+            ? 'edge'
+            : 'solid';
       const subShapes = kernel.getSubShapes(shape, entityType as never);
 
       const idxA = parseInt(a.split(':')[1], 10);
@@ -771,19 +784,24 @@ export async function handleQueryRayIntersect(
       // Grid mode.
       const spacing = q.grid_spacing_mm as number | undefined;
       if (spacing && spacing > 0) {
-        const hits: Array<{ face_id: string; distance: number; point: [number, number, number] }> = [];
+        const hits: Array<{ face_id: string; distance: number; point: [number, number, number] }> =
+          [];
         const bbox = kernel.getBoundingBox(shape, false);
         let totalRays = 0;
         const MAX_RAYS = 10000;
 
         // Pick two perpendicular axes in the plane orthogonal to dir.
         const absDir = [Math.abs(dir.x), Math.abs(dir.y), Math.abs(dir.z)];
-        let uAxis = absDir[0] < absDir[1] && absDir[0] < absDir[2]
-          ? { x: 1, y: 0, z: 0 } : { x: 0, y: 1, z: 0 };
+        let uAxis =
+          absDir[0] < absDir[1] && absDir[0] < absDir[2]
+            ? { x: 1, y: 0, z: 0 }
+            : { x: 0, y: 1, z: 0 };
         const udot = uAxis.x * dir.x + uAxis.y * dir.y + uAxis.z * dir.z;
         uAxis = { x: uAxis.x - udot * dir.x, y: uAxis.y - udot * dir.y, z: uAxis.z - udot * dir.z };
         const uLen = Math.sqrt(uAxis.x * uAxis.x + uAxis.y * uAxis.y + uAxis.z * uAxis.z);
-        if (uLen > 1e-9) { uAxis = { x: uAxis.x / uLen, y: uAxis.y / uLen, z: uAxis.z / uLen }; }
+        if (uLen > 1e-9) {
+          uAxis = { x: uAxis.x / uLen, y: uAxis.y / uLen, z: uAxis.z / uLen };
+        }
         const vAxis = {
           x: dir.y * uAxis.z - dir.z * uAxis.y,
           y: dir.z * uAxis.x - dir.x * uAxis.z,
@@ -791,17 +809,26 @@ export async function handleQueryRayIntersect(
         };
 
         const corners = [
-          { x: bbox.xmin, y: bbox.ymin, z: bbox.zmin }, { x: bbox.xmax, y: bbox.ymin, z: bbox.zmin },
-          { x: bbox.xmin, y: bbox.ymax, z: bbox.zmin }, { x: bbox.xmin, y: bbox.ymin, z: bbox.zmax },
-          { x: bbox.xmax, y: bbox.ymax, z: bbox.zmin }, { x: bbox.xmax, y: bbox.ymin, z: bbox.zmax },
-          { x: bbox.xmin, y: bbox.ymax, z: bbox.zmax }, { x: bbox.xmax, y: bbox.ymax, z: bbox.zmax },
+          { x: bbox.xmin, y: bbox.ymin, z: bbox.zmin },
+          { x: bbox.xmax, y: bbox.ymin, z: bbox.zmin },
+          { x: bbox.xmin, y: bbox.ymax, z: bbox.zmin },
+          { x: bbox.xmin, y: bbox.ymin, z: bbox.zmax },
+          { x: bbox.xmax, y: bbox.ymax, z: bbox.zmin },
+          { x: bbox.xmax, y: bbox.ymin, z: bbox.zmax },
+          { x: bbox.xmin, y: bbox.ymax, z: bbox.zmax },
+          { x: bbox.xmax, y: bbox.ymax, z: bbox.zmax },
         ];
-        let uMin = Infinity, uMax = -Infinity, vMin = Infinity, vMax = -Infinity;
+        let uMin = Infinity,
+          uMax = -Infinity,
+          vMin = Infinity,
+          vMax = -Infinity;
         for (const c of corners) {
           const ud = c.x * uAxis.x + c.y * uAxis.y + c.z * uAxis.z;
           const vd = c.x * vAxis.x + c.y * vAxis.y + c.z * vAxis.z;
-          if (ud < uMin) uMin = ud; if (ud > uMax) uMax = ud;
-          if (vd < vMin) vMin = vd; if (vd > vMax) vMax = vd;
+          if (ud < uMin) uMin = ud;
+          if (ud > uMax) uMax = ud;
+          if (vd < vMin) vMin = vd;
+          if (vd > vMax) vMax = vd;
         }
 
         const cols = Math.max(1, Math.ceil((uMax - uMin) / spacing));
@@ -836,12 +863,7 @@ export async function handleQueryRayIntersect(
 
       // Single-ray mode.
       const origin = (q.origin as number[]) ?? [0, 0, 0];
-      const hits = queryRay(
-        kernel,
-        shape,
-        { x: origin[0], y: origin[1], z: origin[2] },
-        dir,
-      );
+      const hits = queryRay(kernel, shape, { x: origin[0], y: origin[1], z: origin[2] }, dir);
       return createQueryResponse(
         String(q.file_path ?? ''),
         { origin: origin, direction: dirArr },

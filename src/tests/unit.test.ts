@@ -144,12 +144,7 @@ describe('groupEntities', () => {
 
   it('respects sample limit', () => {
     const many = Array.from({ length: 50 }, (_, i) => ({ id: `e:${i}`, type: 'x' }));
-    const groups = groupEntities(
-      many,
-      ['type'],
-      () => 'x',
-      3,
-    );
+    const groups = groupEntities(many, ['type'], () => 'x', 3);
     expect(groups[0].sample_entity_ids.length).toBe(3);
     expect(groups[0].sample_is_complete).toBe(false);
   });
@@ -373,7 +368,13 @@ describe('edge filters', () => {
 describe('edge sorting', () => {
   const edges = [
     makeEdge({ id: 'edge:0', length: 10, curve_type: 'line', bbox_center: [0, 0, 0] }),
-    makeEdge({ id: 'edge:1', length: 100, curve_type: 'circle', bbox_center: [50, 0, 0], radius: 5 }),
+    makeEdge({
+      id: 'edge:1',
+      length: 100,
+      curve_type: 'circle',
+      bbox_center: [50, 0, 0],
+      radius: 5,
+    }),
     makeEdge({ id: 'edge:2', length: 50, curve_type: 'bspline', bbox_center: [10, 0, 0] }),
   ];
 
@@ -395,7 +396,12 @@ describe('edge sorting', () => {
 });
 
 describe('edge projection', () => {
-  const edge = makeEdge({ radius: 5, start_vertex: 'vertex:0', end_vertex: 'vertex:1', convexity: 'convex' });
+  const edge = makeEdge({
+    radius: 5,
+    start_vertex: 'vertex:0',
+    end_vertex: 'vertex:1',
+    convexity: 'convex',
+  });
 
   it('default fields', () => {
     const result = projectEdge(edge, undefined);

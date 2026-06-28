@@ -167,7 +167,11 @@ function runMeasure(
     case 'curvature_at_param':
     case 'continuity':
     case 'principal_directions':
-      return { staged: true, op: spec.op, message: `${spec.op} requires Tier A kernel methods; ships in a subsequent release.` };
+      return {
+        staged: true,
+        op: spec.op,
+        message: `${spec.op} requires Tier A kernel methods; ships in a subsequent release.`,
+      };
     default:
       return { error: `unknown measure op "${spec.op}"` };
   }
@@ -220,7 +224,11 @@ function runRayTestGrid(
   entityHandle: ShapeHandle,
   direction: Vec3,
   spacing: number,
-): { hits: Array<{ face_id: string; distance: number; point: [number, number, number] }>; total_rays: number; hit_distance: number[] } {
+): {
+  hits: Array<{ face_id: string; distance: number; point: [number, number, number] }>;
+  total_rays: number;
+  hit_distance: number[];
+} {
   /* The grid is laid out across the entity's bbox; each ray is fired
    * against the parent model. This is the canonical pattern for wall
    * thickness: start from the face surface, look for the model to
@@ -232,11 +240,14 @@ function runRayTestGrid(
 
   /* Pick two perpendicular axes in the plane orthogonal to direction. */
   const absDir = [Math.abs(direction.x), Math.abs(direction.y), Math.abs(direction.z)];
-  let uAxis: Vec3 = absDir[0] < absDir[1] && absDir[0] < absDir[2]
-    ? { x: 1, y: 0, z: 0 }
-    : { x: 0, y: 1, z: 0 };
+  let uAxis: Vec3 =
+    absDir[0] < absDir[1] && absDir[0] < absDir[2] ? { x: 1, y: 0, z: 0 } : { x: 0, y: 1, z: 0 };
   const udot = uAxis.x * direction.x + uAxis.y * direction.y + uAxis.z * direction.z;
-  uAxis = { x: uAxis.x - udot * direction.x, y: uAxis.y - udot * direction.y, z: uAxis.z - udot * direction.z };
+  uAxis = {
+    x: uAxis.x - udot * direction.x,
+    y: uAxis.y - udot * direction.y,
+    z: uAxis.z - udot * direction.z,
+  };
   const uLen = Math.sqrt(uAxis.x * uAxis.x + uAxis.y * uAxis.y + uAxis.z * uAxis.z);
   if (uLen > 1e-9) {
     uAxis = { x: uAxis.x / uLen, y: uAxis.y / uLen, z: uAxis.z / uLen };
@@ -248,12 +259,19 @@ function runRayTestGrid(
   };
 
   const corners = [
-    { x: bbox.xmin, y: bbox.ymin, z: bbox.zmin }, { x: bbox.xmax, y: bbox.ymin, z: bbox.zmin },
-    { x: bbox.xmin, y: bbox.ymax, z: bbox.zmin }, { x: bbox.xmin, y: bbox.ymin, z: bbox.zmax },
-    { x: bbox.xmax, y: bbox.ymax, z: bbox.zmin }, { x: bbox.xmax, y: bbox.ymin, z: bbox.zmax },
-    { x: bbox.xmin, y: bbox.ymax, z: bbox.zmax }, { x: bbox.xmax, y: bbox.ymax, z: bbox.zmax },
+    { x: bbox.xmin, y: bbox.ymin, z: bbox.zmin },
+    { x: bbox.xmax, y: bbox.ymin, z: bbox.zmin },
+    { x: bbox.xmin, y: bbox.ymax, z: bbox.zmin },
+    { x: bbox.xmin, y: bbox.ymin, z: bbox.zmax },
+    { x: bbox.xmax, y: bbox.ymax, z: bbox.zmin },
+    { x: bbox.xmax, y: bbox.ymin, z: bbox.zmax },
+    { x: bbox.xmin, y: bbox.ymax, z: bbox.zmax },
+    { x: bbox.xmax, y: bbox.ymax, z: bbox.zmax },
   ];
-  let uMin = Infinity, uMax = -Infinity, vMin = Infinity, vMax = -Infinity;
+  let uMin = Infinity,
+    uMax = -Infinity,
+    vMin = Infinity,
+    vMax = -Infinity;
   for (const c of corners) {
     const ud = c.x * uAxis.x + c.y * uAxis.y + c.z * uAxis.z;
     const vd = c.x * vAxis.x + c.y * vAxis.y + c.z * vAxis.z;

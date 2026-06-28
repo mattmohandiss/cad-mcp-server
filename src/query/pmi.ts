@@ -91,7 +91,9 @@ export async function queryStepPmi(filePath: string, input: QueryPmiInput) {
 
     if (resultMode === 'groups') {
       const groupBy = input.group_by ?? ['type'];
-      const withId = filtered.map((e) => ({ ...e, id: e.step_id })) as Array<PmiEntity & { id: string }>;
+      const withId = filtered.map((e) => ({ ...e, id: e.step_id })) as Array<
+        PmiEntity & { id: string }
+      >;
       groups = groupEntities<PmiEntity & { id: string }>(
         withId,
         groupBy,

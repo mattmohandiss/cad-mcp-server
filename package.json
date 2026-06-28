@@ -59,7 +59,7 @@
       "prettier --write"
     ],
     "*.sh": [
-      "prettier --write"
+      "bash -n"
     ]
   },
   "keywords": [

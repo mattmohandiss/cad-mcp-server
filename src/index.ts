@@ -6,22 +6,10 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { CAD_MCP_SERVER_VERSION } from './schema-version.js';
-import {
-  inspectStepInput,
-  handleInspectStep,
-} from './tools/inspect.js';
-import {
-  queryStepInput,
-  handleQueryStep,
-} from './tools/query.js';
-import {
-  diffStepInput,
-  handleDiffStep,
-} from './tools/diff.js';
-import {
-  transactStepInput,
-  handleTransactStep,
-} from './tools/transact.js';
+import { inspectStepInput, handleInspectStep } from './tools/inspect.js';
+import { queryStepInput, handleQueryStep } from './tools/query.js';
+import { diffStepInput, handleDiffStep } from './tools/diff.js';
+import { transactStepInput, handleTransactStep } from './tools/transact.js';
 import { queryHelpResourceHandler, QUERY_HELP_URI } from './resources/query-help.js';
 import { toolExamples } from './schemas/examples.js';
 
@@ -67,7 +55,9 @@ export function jsonToolResult(result: unknown) {
   };
 }
 
-type StepToolResult = ReturnType<typeof jsonToolResult> | Promise<ReturnType<typeof jsonToolResult>>;
+type StepToolResult =
+  | ReturnType<typeof jsonToolResult>
+  | Promise<ReturnType<typeof jsonToolResult>>;
 type RegisterTool = (
   name: string,
   config: {
@@ -104,7 +94,7 @@ registerTool(
   {
     title: 'Inspect STEP File',
     description:
-      'Use this FIRST when given a STEP file to inspect. Returns a compact summary: bounding box (AABB and OBB), watertight status, body/solid/face/edge/vertex counts, global properties (volume, surface area, center of mass, inertia, principal axes), per-subshape validity, tolerance statistics, and XDE metadata (assembly tree, PMI summary, color/layer/material presence). If the part is invalid, returns a structured list of which sub-shapes failed and why — the LLM gets actionable information, not a boolean. Don\'t use for entity-level searches; use query_step for that.',
+      "Use this FIRST when given a STEP file to inspect. Returns a compact summary: bounding box (AABB and OBB), watertight status, body/solid/face/edge/vertex counts, global properties (volume, surface area, center of mass, inertia, principal axes), per-subshape validity, tolerance statistics, and XDE metadata (assembly tree, PMI summary, color/layer/material presence). If the part is invalid, returns a structured list of which sub-shapes failed and why — the LLM gets actionable information, not a boolean. Don't use for entity-level searches; use query_step for that.",
     inputSchema: inspectStepInput.shape,
   },
   withErrorContext('inspect_step', async (args) => {

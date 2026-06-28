@@ -95,8 +95,8 @@ class LoadedStepModel {
 
   private async getBodyMap(): Promise<{ faceBody: number[]; edgeBody: number[] }> {
     if (!this.bodyMapPromise) {
-      this.bodyMapPromise = this.getShapeContext('BRepGraph body map').then(
-        ({ kernel, shape }) => buildBodyMap(kernel, shape),
+      this.bodyMapPromise = this.getShapeContext('BRepGraph body map').then(({ kernel, shape }) =>
+        buildBodyMap(kernel, shape),
       );
     }
     return this.bodyMapPromise;

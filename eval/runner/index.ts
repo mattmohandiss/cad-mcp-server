@@ -44,15 +44,15 @@ function parseArgs() {
     }
   }
 
-  const models = modelLabels.length > 0
-    ? EVAL_MODELS.filter((m) => modelLabels.includes(m.label))
-    : EVAL_MODELS;
-  const questions = questionIds.length > 0
-    ? QUESTIONS.filter((q) => questionIds.includes(q.id))
-    : QUESTIONS;
+  const models =
+    modelLabels.length > 0 ? EVAL_MODELS.filter((m) => modelLabels.includes(m.label)) : EVAL_MODELS;
+  const questions =
+    questionIds.length > 0 ? QUESTIONS.filter((q) => questionIds.includes(q.id)) : QUESTIONS;
 
   if (models.length === 0) {
-    throw new Error(`No models matched. Available: ${EVAL_MODELS.map((m) => `${m.label} (--model ${m.label.split(' ')[0].toLowerCase()})`).join(', ')}`);
+    throw new Error(
+      `No models matched. Available: ${EVAL_MODELS.map((m) => `${m.label} (--model ${m.label.split(' ')[0].toLowerCase()})`).join(', ')}`,
+    );
   }
   if (questions.length === 0) {
     throw new Error(`No questions matched. Available: ${QUESTIONS.map((q) => q.id).join(', ')}`);
@@ -65,7 +65,9 @@ async function main() {
   const { models, questions } = parseArgs();
 
   process.stdout.write(`Models (${models.length}):   ${models.map((m) => m.label).join(', ')}\n`);
-  process.stdout.write(`Questions (${questions.length}): ${questions.map((q) => q.id).join(', ')}\n\n`);
+  process.stdout.write(
+    `Questions (${questions.length}): ${questions.map((q) => q.id).join(', ')}\n\n`,
+  );
 
   const bulk = await runAll({ models, questions, logDir: 'tests/eval-logs' });
 

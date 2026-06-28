@@ -62,7 +62,9 @@ const SUPPORTED_ENTITIES: ReadonlySet<EntityType> = new Set(['faces', 'edges']);
  *   - `edges` -> queryStepEdges service
  *   - others -> throw with a clear migration message
  */
-export async function executeQuery(input: QueryInput): Promise<StepQueryResponse<Record<string, unknown>>> {
+export async function executeQuery(
+  input: QueryInput,
+): Promise<StepQueryResponse<Record<string, unknown>>> {
   if (!SUPPORTED_ENTITIES.has(input.entities)) {
     throw {
       type: 'not_implemented',
@@ -77,7 +79,11 @@ export async function executeQuery(input: QueryInput): Promise<StepQueryResponse
 
   /* Step 2: optionally run measure ops per entity and attach the results. */
   if (input.measure?.length) {
-    await applyMeasureToEntities(input.file_path, base.entities, input.measure as unknown as MeasureSpec[]);
+    await applyMeasureToEntities(
+      input.file_path,
+      base.entities,
+      input.measure as unknown as MeasureSpec[],
+    );
   }
 
   /* Step 3: optionally compute aggregate statistics over the (now-augmented) entities. */
@@ -94,7 +100,9 @@ export async function executeQuery(input: QueryInput): Promise<StepQueryResponse
 /*  Internal: entity service dispatch                                  */
 /* ------------------------------------------------------------------ */
 
-async function runEntityService(input: QueryInput): Promise<StepQueryResponse<Record<string, unknown>>> {
+async function runEntityService(
+  input: QueryInput,
+): Promise<StepQueryResponse<Record<string, unknown>>> {
   if (input.entities === 'faces') {
     return queryFacesService(input.file_path, {
       ...(input.entity_ids !== undefined ? { entity_ids: input.entity_ids } : {}),
@@ -216,5 +224,11 @@ function entityIndexFromId(id: string | undefined): number | undefined {
 /*  Type re-exports (for consumers)                                    */
 /* ------------------------------------------------------------------ */
 
-export type { StepQueryResponse, StepQueryUnits, StepQueryCoordinateSystem, StepQueryPagination, StepQueryGroup };
+export type {
+  StepQueryResponse,
+  StepQueryUnits,
+  StepQueryCoordinateSystem,
+  StepQueryPagination,
+  StepQueryGroup,
+};
 export { CAD_RESPONSE_SCHEMA_VERSION };

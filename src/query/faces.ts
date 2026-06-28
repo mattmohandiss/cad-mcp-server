@@ -69,7 +69,9 @@ export async function queryStepFaces(filePath: string, input: QueryFacesInput) {
       ...(closestDistances ? { closest_face_distance: closestDistances.get(face.id) } : {}),
     }));
 
-    const entities = augmentedFaces.map((face) => projectFace(face, input.fields, input.pull_direction));
+    const entities = augmentedFaces.map((face) =>
+      projectFace(face, input.fields, input.pull_direction),
+    );
     const pagination = createPagination(limit, offset, paginated.length, total_matched);
 
     return createQueryResponse(

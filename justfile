@@ -24,18 +24,18 @@ build-wasm:
 	fi
 	if command -v podman &>/dev/null; then \
 	  cd occt && podman build --build-arg ENABLE_WASM_OPT=0 -t occt-wasm .; \
-	  cid=$$(podman create occt-wasm); \
+	  cid=$(podman create occt-wasm); \
 	  mkdir -p occt/dist occt/ts/dist; \
-	  podman cp $$cid:/workspace/dist/. occt/dist/; \
-	  podman cp $$cid:/workspace/ts/dist/. occt/ts/dist/; \
-	  podman rm $$cid; \
+	  podman cp $cid:/workspace/dist/. occt/dist/; \
+	  podman cp $cid:/workspace/ts/dist/. occt/ts/dist/; \
+	  podman rm $cid; \
 	else \
 	  cd occt && docker build --build-arg ENABLE_WASM_OPT=0 -t occt-wasm .; \
-	  cid=$$(docker create occt-wasm); \
+	  cid=$(docker create occt-wasm); \
 	  mkdir -p occt/dist occt/ts/dist; \
-	  docker cp $$cid:/workspace/dist/. occt/dist/; \
-	  docker cp $$cid:/workspace/ts/dist/. occt/ts/dist/; \
-	  docker rm $$cid; \
+	  docker cp $cid:/workspace/dist/. occt/dist/; \
+	  docker cp $cid:/workspace/ts/dist/. occt/ts/dist/; \
+	  docker rm $cid; \
 	fi
 
 # Run the LLM eval suite against all models × questions. Requires
@@ -51,7 +51,7 @@ test:
 lint: _validate-facade _lint-ts _lint-rs
 
 # Run all local checks
-check: lint test
+check: fmt-check lint test
 
 # Run the full CI pipeline locally: lint + unit tests, build the WASM
 # kernel, then re-run tests with kernel tests active. Use this before
@@ -60,11 +60,11 @@ ci: check build-wasm test
 
 # Format all TypeScript source + config files
 fmt:
-	npx prettier --write "src/**/*.ts" "eval/**/*.ts" occt/ts/src/ occt/ts/eslint.config.js eslint.config.js tsconfig.json vitest.config.ts
+	npx prettier --write "src/**/*.ts" "eval/**/*.ts" occt/ts/src/ occt/ts/eslint.config.js eslint.config.js tsconfig.json vitest.config.ts package.json package-lock.json "*.md" "docs/**/*.md" ".github/**/*.yml"
 
 # Check formatting without writing
 fmt-check:
-	npx prettier --check "src/**/*.ts" "eval/**/*.ts" occt/ts/src/ occt/ts/eslint.config.js eslint.config.js tsconfig.json vitest.config.ts
+	npx prettier --check "src/**/*.ts" "eval/**/*.ts" occt/ts/src/ occt/ts/eslint.config.js eslint.config.js tsconfig.json vitest.config.ts package.json package-lock.json "*.md" "docs/**/*.md" ".github/**/*.yml"
 
 # Remove generated artifacts and installed dependencies
 clean:

@@ -26,7 +26,9 @@ export async function handleQueryStep(args: QueryStepArgs) {
       ...(args.entity_ids !== undefined ? { entity_ids: args.entity_ids } : {}),
       ...(args.filter !== undefined ? { filter: args.filter as Record<string, unknown> } : {}),
       ...(args.group_by !== undefined ? { group_by: args.group_by as string[] } : {}),
-      ...(args.measure !== undefined ? { measure: args.measure as Array<Record<string, unknown>> } : {}),
+      ...(args.measure !== undefined
+        ? { measure: args.measure as Array<Record<string, unknown>> }
+        : {}),
       ...(args.aggregate !== undefined ? { aggregate: args.aggregate as string[] } : {}),
       ...(args.select !== undefined ? { select: args.select as string[] } : {}),
       ...(args.sort !== undefined ? { sort: args.sort } : {}),

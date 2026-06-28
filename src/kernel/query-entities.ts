@@ -232,7 +232,8 @@ export function extractFaceEntities(
       const outerCount = wireData[pos++];
       if (outerCount > 0) {
         entity.outer_edges = [];
-        for (let o = 0; o < outerCount; o++) entity.outer_edges.push(makeId('edge', wireData[pos++]));
+        for (let o = 0; o < outerCount; o++)
+          entity.outer_edges.push(makeId('edge', wireData[pos++]));
       }
       const innerCount = wireData[pos++];
       if (innerCount > 0) {
