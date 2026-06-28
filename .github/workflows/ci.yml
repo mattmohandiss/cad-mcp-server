@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  lint:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -33,5 +33,5 @@ jobs:
         with:
           tool: just
 
-      - name: Run just lint
-        run: just lint
+      - name: Run just check
+        run: just check

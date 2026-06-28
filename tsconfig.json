@@ -19,6 +19,12 @@
     "strictFunctionTypes": true,
     "strictPropertyInitialization": true
   },
-  "include": ["src/**/*", "eval/runner/**/*", "eval/generate/**/*", "tests/eval-logs/**/*"],
+  "include": [
+    "src/**/*",
+    "eval/runner/**/*",
+    "eval/generate/**/*",
+    "tests/eval-logs/**/*",
+    "vitest.config.ts"
+  ],
   "exclude": ["node_modules", "dist", "eval/generate/.venv", "eval/runner/.venv", "occt"]
 }

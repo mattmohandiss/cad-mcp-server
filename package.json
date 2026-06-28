@@ -47,7 +47,20 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "fmt": "prettier --write src/",
-    "lint": "eslint \"src/**/*.ts\""
+    "lint": "eslint \"src/**/*.ts\"",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yaml,yml}": [
+      "prettier --write"
+    ],
+    "*.sh": [
+      "prettier --write"
+    ]
   },
   "keywords": [
     "mcp",
@@ -104,6 +117,8 @@
     "ai": "^7.0.4",
     "eslint": "^10.4.1",
     "globals": "^17.7.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.8",
     "prettier": "^3.8.4",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",

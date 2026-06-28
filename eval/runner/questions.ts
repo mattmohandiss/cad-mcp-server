@@ -31,15 +31,25 @@ export interface EvalQuestion {
   expected: ExpectedAnswer;
   /** Extract the answer from the LLM's final text response.
    * The second arg is the list of tool calls made during the conversation. */
-  extract: (text: string, toolCalls: Array<{ name: string; args: string }>) => number | boolean | string | null;
+  extract: (
+    text: string,
+    toolCalls: Array<{ name: string; args: string }>,
+  ) => number | boolean | string | null;
 }
 
 function parseNumber(text: string): number | null {
   if (!text) return null;
   // Strip markdown, units, commas
-  const cleaned = text.replace(/\*\*/g, '').replace(/\bmm\^?[23]?\b/gi, '').replace(/,/g, '');
+  const cleaned = text
+    .replace(/\*\*/g, '')
+    .replace(/\bmm\^?[23]?\b/gi, '')
+    .replace(/,/g, '');
   // Look for "answer is N", "= N", "is N" patterns, preferring the last one
-  const matches = [...cleaned.matchAll(/(?:answer|result|smallest|largest|=|is|diameter|radius|volume|count|difference)\s*:?\s*(-?\d+(?:\.\d+)?)/gi)];
+  const matches = [
+    ...cleaned.matchAll(
+      /(?:answer|result|smallest|largest|=|is|diameter|radius|volume|count|difference)\s*:?\s*(-?\d+(?:\.\d+)?)/gi,
+    ),
+  ];
   if (matches.length > 0) {
     const v = Number(matches[matches.length - 1][1]);
     if (Number.isFinite(v)) return v;
@@ -53,20 +63,12 @@ function parseNumber(text: string): number | null {
   return null;
 }
 
-function parseBoolean(text: string): boolean | null {
-  if (!text) return null;
-  const lower = text.toLowerCase().trim();
-  if (/^\s*(yes|true|watertight)\b/.test(lower) || /\b(yes|true|watertight)\s*$/.test(lower)) return true;
-  if (/^\s*(no|false|not watertight)\b/.test(lower) || /\b(no|false)\s*$/.test(lower)) return false;
-  return null;
-}
-
 export const QUESTIONS: EvalQuestion[] = [
   {
     id: 'cyl_face_count',
     prompt:
-      "Open the STEP file at samples/eval-generated/box_with_3_holes.step using query_step. " +
-      "How many cylindrical faces does it contain? Return just the number.",
+      'Open the STEP file at samples/eval-generated/box_with_3_holes.step using query_step. ' +
+      'How many cylindrical faces does it contain? Return just the number.',
     targetFile: 'box_with_3_holes.step',
     expected: { kind: 'number', value: 3, tolerance: 0 },
     extract: parseNumber,
@@ -74,8 +76,8 @@ export const QUESTIONS: EvalQuestion[] = [
   {
     id: 'smallest_hole_diameter',
     prompt:
-      "Open the STEP file at samples/eval-generated/box_with_3_holes.step. " +
-      "What is the smallest hole diameter in millimeters? Return just the number.",
+      'Open the STEP file at samples/eval-generated/box_with_3_holes.step. ' +
+      'What is the smallest hole diameter in millimeters? Return just the number.',
     targetFile: 'box_with_3_holes.step',
     expected: { kind: 'number', value: 5.0, tolerance: 0.5 },
     extract: parseNumber,
@@ -83,8 +85,8 @@ export const QUESTIONS: EvalQuestion[] = [
   {
     id: 'smallest_fillet_radius',
     prompt:
-      "Open the STEP file at samples/eval-generated/stepped_cylinder.step. " +
-      "What is the smallest fillet radius in millimeters? Return just the number.",
+      'Open the STEP file at samples/eval-generated/stepped_cylinder.step. ' +
+      'What is the smallest fillet radius in millimeters? Return just the number.',
     targetFile: 'stepped_cylinder.step',
     expected: { kind: 'number', value: 1.0, tolerance: 0.5 },
     extract: parseNumber,
@@ -92,9 +94,9 @@ export const QUESTIONS: EvalQuestion[] = [
   {
     id: 'diff_face_count_delta',
     prompt:
-      "Compare the two STEP files: samples/eval-generated/bracket_v1.step and " +
-      "samples/eval-generated/bracket_v2.step. Use the diff_step tool. " +
-      "What is the face count delta (comparison minus baseline)? Return just the number.",
+      'Compare the two STEP files: samples/eval-generated/bracket_v1.step and ' +
+      'samples/eval-generated/bracket_v2.step. Use the diff_step tool. ' +
+      'What is the face count delta (comparison minus baseline)? Return just the number.',
     targetFile: 'bracket_v1.step',
     expected: { kind: 'number', value: 1, tolerance: 0 },
     extract: parseNumber,
@@ -102,8 +104,8 @@ export const QUESTIONS: EvalQuestion[] = [
   {
     id: 'box_volume',
     prompt:
-      "Open the STEP file at samples/eval-generated/box.step. " +
-      "What is the volume of the part in cubic millimeters? Return just the number.",
+      'Open the STEP file at samples/eval-generated/box.step. ' +
+      'What is the volume of the part in cubic millimeters? Return just the number.',
     targetFile: 'box.step',
     expected: { kind: 'number', value: 30000, tolerance: 100 },
     extract: parseNumber,

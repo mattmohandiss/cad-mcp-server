@@ -9,7 +9,7 @@ export default [
   },
   js.configs.recommended,
   {
-    files: ['src/**/*.ts'],
+    files: ['src/**/*.ts', 'eval/runner/**/*.ts'],
     languageOptions: {
       parser: tsParser,
       globals: { ...globals.node },
