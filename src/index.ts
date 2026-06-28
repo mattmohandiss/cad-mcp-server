@@ -5,20 +5,25 @@ import { pathToFileURL } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import {
-  handleCompareStepFiles,
-  handleFindCoaxialCylinders,
-  handleFindStepEdges,
-  handleFindStepFaces,
-  handleGetStepEntities,
-  handleInspectStepFile,
-  handleMeasureDistance,
-  handleQueryRayIntersect,
-  handleQueryStepPmi,
-  stepToolOutputSchemas,
-  stepToolSchemas,
-} from './tools/step-tools.js';
 import { CAD_MCP_SERVER_VERSION } from './schema-version.js';
+import {
+  inspectStepInput,
+  handleInspectStep,
+} from './tools/inspect.js';
+import {
+  queryStepInput,
+  handleQueryStep,
+} from './tools/query.js';
+import {
+  diffStepInput,
+  handleDiffStep,
+} from './tools/diff.js';
+import {
+  transactStepInput,
+  handleTransactStep,
+} from './tools/transact.js';
+import { queryHelpResourceHandler, QUERY_HELP_URI } from './resources/query-help.js';
+import { toolExamples } from './schemas/examples.js';
 
 const server = new McpServer({
   name: 'cad-mcp-server',
@@ -62,9 +67,7 @@ export function jsonToolResult(result: unknown) {
   };
 }
 
-type StepToolResult =
-  | ReturnType<typeof jsonToolResult>
-  | Promise<ReturnType<typeof jsonToolResult>>;
+type StepToolResult = ReturnType<typeof jsonToolResult> | Promise<ReturnType<typeof jsonToolResult>>;
 type RegisterTool = (
   name: string,
   config: {
@@ -92,148 +95,106 @@ function withErrorContext(
   };
 }
 
+/* ------------------------------------------------------------------ */
+/*  Tool registrations — 4-tool surface                                */
+/* ------------------------------------------------------------------ */
+
 registerTool(
-  'inspect_step_file',
+  'inspect_step',
   {
     title: 'Inspect STEP File',
     description:
-      'Compact first-pass overview of a STEP file. Use this FIRST to identify the part, check validity, dimensions, body count, and topology counts. Expensive face area extremes and adjacency are deferred; follow up with find_step_faces, find_step_edges, or get_step_entities for detail. Do NOT use for entity-level searches. IMPORTANT: Omit all optional filter parameters you do not need — do not pass placeholder values (0, 999999, empty array). Example: {file_path:"model.step"}',
-    inputSchema: stepToolSchemas.inspectStepFile,
-    outputSchema: stepToolOutputSchemas.inspectStepFile,
+      'Use this FIRST when given a STEP file to inspect. Returns a compact summary: bounding box (AABB and OBB), watertight status, body/solid/face/edge/vertex counts, global properties (volume, surface area, center of mass, inertia, principal axes), per-subshape validity, tolerance statistics, and XDE metadata (assembly tree, PMI summary, color/layer/material presence). If the part is invalid, returns a structured list of which sub-shapes failed and why — the LLM gets actionable information, not a boolean. Don\'t use for entity-level searches; use query_step for that.',
+    inputSchema: inspectStepInput.shape,
   },
-  withErrorContext('inspect_step_file', async ({ file_path }) =>
-    jsonToolResult(await handleInspectStepFile(String(file_path))),
-  ),
-);
-
-registerTool(
-  'find_step_faces',
-  {
-    title: 'Find STEP Faces',
-    description:
-      'Search faces by surface type, area, spatial region, or proximity. Use when you need specific faces such as large faces, cylindrical faces, faces near a point, or grouped face statistics. Do NOT use for known face IDs; use get_step_entities. CRITICAL: Omit every optional parameter you do not need. Adding a filter narrows results. Do NOT pass placeholder values. Example small faces: {file_path:"model.step",area_max:1,sort:{by:"area"}}. Example cylinders: {file_path:"model.step",surface_types:["cylinder"],return_type:"groups",group_by:["surface_type"]}',
-    inputSchema: stepToolSchemas.findStepFaces,
-    outputSchema: stepToolOutputSchemas.findStepFaces,
-  },
-  withErrorContext('find_step_faces', async (args) => {
-    const query = args as Record<string, unknown>;
-    return jsonToolResult(await handleFindStepFaces(String(query.file_path), query as never));
+  withErrorContext('inspect_step', async (args) => {
+    const parsed = inspectStepInput.parse(args);
+    return jsonToolResult(await handleInspectStep(parsed));
   }),
 );
 
 registerTool(
-  'find_step_edges',
+  'query_step',
   {
-    title: 'Find STEP Edges',
+    title: 'Query STEP (declarative)',
     description:
-      'Search edges by curve type, length, circular radius, spatial region, or proximity. Use for tiny-edge investigation, long edges, circular edges, or grouped edge statistics. For tiny edges use length_max and sort:{by:"length"}. The "radius" filter restricts to circular/curved edges only; omit it unless specifically querying circular edges by radius. Do NOT use for known edge IDs; use get_step_entities. CRITICAL: Omit every optional parameter you do not need. Do NOT pass placeholder values. Example tiny edges: {file_path:"model.step",length_max:0.5,sort:{by:"length"},fields:["id","length","curve_type"]}',
-    inputSchema: stepToolSchemas.findStepEdges,
-    outputSchema: stepToolOutputSchemas.findStepEdges,
+      'Declarative query over a STEP file\'s geometric, topological, and XDE entities. Specify which entity type to query (faces, edges, bodies, vertices, pmi, color, layer, material, assembly_node), filter by properties, optionally group by a shared dimension (axis, normal, surface type, etc.), measure derived values per entity or per group (ray tests, distances, curvature, section, continuity), and aggregate statistics (count, min, max, avg) over the result set. Use group_by to cluster entities that share a property — the operation find_coaxial_cylinders used to do is now {entities: "faces", filter: {surface_type: "cylinder"}, group_by: ["axis"]}. The result is one call instead of the 5+ round-trips that primitive-only tools require, and intermediate state stays on the server (set return_intermediate: true for debugging). For multi-step workflows that need iteration across result sets ("for each hole, ray-test, then filter"), use transact_step instead.',
+    inputSchema: queryStepInput.shape,
   },
-  withErrorContext('find_step_edges', async (args) => {
-    const query = args as Record<string, unknown>;
-    return jsonToolResult(await handleFindStepEdges(String(query.file_path), query as never));
+  withErrorContext('query_step', async (args) => {
+    const parsed = queryStepInput.parse(args);
+    return jsonToolResult(await handleQueryStep(parsed));
   }),
 );
 
 registerTool(
-  'get_step_entities',
+  'diff_step',
   {
-    title: 'Get STEP Entities',
+    title: 'Diff STEP Files',
     description:
-      'Retrieve one or more known faces or edges by exact entity ID. IDs come from inspect_step_file, find_step_faces, or find_step_edges. Use ONLY when you already have specific IDs. Do NOT use for searching or filtering; use find_step_faces or find_step_edges. Example: {file_path:"model.step",entity_type:"face",entity_ids:["face:0"],fields:["id","area","normal"]}. IMPORTANT: Omit fields if you want the default projection.',
-    inputSchema: stepToolSchemas.getStepEntities,
-    outputSchema: stepToolOutputSchemas.getStepEntities,
+      'Compare two STEP files and return metric deltas, topology changes, body-level changes, and XDE-level changes (PMI, colors, materials, assembly). Use this to compare two revisions of a part when you need factual differences in dimensions, volume, area, topology counts, or exchange metadata. Does NOT track feature identity across revisions — a hole that moved is "hole removed + hole added," not "hole moved." Deltas are comparison_file_path minus baseline_file_path.',
+    inputSchema: diffStepInput.shape,
   },
-  withErrorContext('get_step_entities', async (args) => {
-    const query = args as Record<string, unknown>;
-    return jsonToolResult(await handleGetStepEntities(String(query.file_path), query as never));
+  withErrorContext('diff_step', async (args) => {
+    const parsed = diffStepInput.parse(args);
+    return jsonToolResult(await handleDiffStep(parsed));
   }),
 );
 
 registerTool(
-  'compare_step_files',
+  'transact_step',
   {
-    title: 'Compare STEP Files',
+    title: 'Transact STEP (pipeline)',
     description:
-      'Compare two STEP files and return whole-model metric deltas and metadata changes. Use for two revisions of a part when you need factual differences in dimensions, volume, area, topology counts, or exchange metadata. Does NOT track feature identity across revisions. Deltas are comparison_file_path minus baseline_file_path. Both parameters are required. Example: {baseline_file_path:"model_v1.step",comparison_file_path:"model_v2.step"}',
-    inputSchema: stepToolSchemas.compareStepFiles,
-    outputSchema: stepToolOutputSchemas.compareStepFiles,
+      'Run a multi-step workflow that needs iteration across result sets — for example, "for each hole, ray-test in +Z, then find ones where the ray didn\'t come out the other side." Each pipeline is a sequence of typed operations. The vocabulary is small: query (re-uses the query_step shape), for_each (apply a sub-pipeline to each item), filter_results (keep items where a condition holds), select (project to specific fields), and walk_assembly (XDE: traverse the assembly tree). Use this only when a single query_step call cannot express the workflow; for declarative queries, prefer query_step. Intermediate results are hidden by default; set return_intermediate: true to debug.',
+    inputSchema: transactStepInput.shape,
   },
-  withErrorContext('compare_step_files', async (args) => {
-    const { baseline_file_path, comparison_file_path } = args as Record<string, string>;
-    return jsonToolResult(
-      await handleCompareStepFiles(String(baseline_file_path), String(comparison_file_path)),
-    );
+  withErrorContext('transact_step', async (args) => {
+    const parsed = transactStepInput.parse(args);
+    return jsonToolResult(await handleTransactStep(parsed));
   }),
 );
 
-registerTool(
-  'query_step_pmi',
+/* ------------------------------------------------------------------ */
+/*  Resource registrations                                              */
+/* ------------------------------------------------------------------ */
+
+server.registerResource(
+  'query-help',
+  QUERY_HELP_URI,
   {
-    title: 'Query STEP PMI',
+    title: 'CAD MCP query help',
     description:
-      'Query Product Manufacturing Information (PMI): geometric tolerances, dimensions, datums, and annotations. Use return_type:"summary" first to check whether PMI exists. Not all STEP files contain PMI; AP203 files commonly do not. CRITICAL: Omit every optional parameter you do not need. Do NOT pass placeholder values. Example quick check: {file_path:"model.step",return_type:"summary"}',
-    inputSchema: stepToolSchemas.queryStepPmi,
-    outputSchema: stepToolOutputSchemas.queryStepPmi,
+      'Schema reference, measure op vocabulary, group_by dimensions, filter fields per entity type, and 6+4 input_examples for the query_step and transact_step tools. Fetched on demand by the LLM client to discover the surface.',
+    mimeType: 'application/json',
   },
-  withErrorContext('query_step_pmi', async (args) => {
-    const query = args as Record<string, unknown>;
-    return jsonToolResult(await handleQueryStepPmi(String(query.file_path), query as never));
-  }),
+  async () => {
+    const content = queryHelpResourceHandler();
+    return {
+      contents: [
+        {
+          uri: content.uri,
+          mimeType: content.mimeType,
+          text: content.text,
+        },
+      ],
+    };
+  },
 );
 
-registerTool(
-  'query_ray_intersect',
-  {
-    title: 'Query Ray Intersect',
-    description:
-      'Fire a single ray or a grid of rays into the model. Single-ray: provide origin + direction. Grid mode: set grid_spacing_mm to fire a grid of rays perpendicular to direction across the bounding box extent. Returns face ID, intersection point, and distance for each hit sorted by distance. Use single-ray for line-of-sight and accessibility. Use grid mode for wall thickness estimation (the LLM computes min/max/avg from the returned distances).',
-    inputSchema: stepToolSchemas.queryRayIntersect,
-    outputSchema: stepToolOutputSchemas.queryRayIntersect,
-  },
-  withErrorContext('query_ray_intersect', async (args) => {
-    const query = args as Record<string, unknown>;
-    return jsonToolResult(await handleQueryRayIntersect(String(query.file_path), query as never));
-  }),
-);
+/* ------------------------------------------------------------------ */
+/*  Input examples — also exposed via tool definitions                 */
+/* ------------------------------------------------------------------ */
 
-registerTool(
-  'measure_distance',
-  {
-    title: 'Measure Distance',
-    description:
-      'Measure the minimum distance between two entities (faces, edges, or bodies). Returns distance in mm. Use for clearance checks, interference detection, and fit verification.',
-    inputSchema: stepToolSchemas.measureDistance,
-    outputSchema: stepToolOutputSchemas.measureDistance,
-  },
-  withErrorContext('measure_distance', async (args) => {
-    const query = args as Record<string, unknown>;
-    return jsonToolResult(await handleMeasureDistance(String(query.file_path), query as never));
-  }),
-);
-
-registerTool(
-  'find_coaxial_cylinders',
-  {
-    title: 'Find Coaxial Cylinders',
-    description:
-      'Group cylindrical faces that share the same axis. Returns axis direction, axis location, diameter, extent along axis, and ray intersection hits in both axis directions for each group. No feature classification — the LLM interprets what the geometry represents (holes, bosses, shafts, counterbores).',
-    inputSchema: stepToolSchemas.findCoaxialCylinders,
-    outputSchema: stepToolOutputSchemas.findCoaxialCylinders,
-  },
-  withErrorContext('find_coaxial_cylinders', async (args) => {
-    const query = args as Record<string, unknown>;
-    return jsonToolResult(
-      await handleFindCoaxialCylinders(String(query.file_path), query as never),
-    );
-  }),
-);
+// Surface the input_examples via a tools/list extension. MCP doesn't
+// have a direct mechanism for examples; clients that want them should
+// fetch cad-mcp://query-help instead.
+void toolExamples; // referenced to keep the import side-effect explicit
 
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('CAD MCP Server started');
+  console.error('CAD MCP Server started (4-tool surface)');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
