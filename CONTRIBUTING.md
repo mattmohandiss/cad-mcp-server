@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js 22+
+- Node.js 24+
 - Docker (for WASM kernel builds)
 - [just](https://github.com/casey/just) command runner (optional, or use npm scripts directly)
 
@@ -67,12 +67,13 @@ This builds the OCCT WebAssembly kernel via Docker, compiles TypeScript, and pro
 Releases are automated through release-please and npm trusted publishing. Do not manually
 bump versions, edit changelog entries, or run `npm publish` for normal releases.
 
-1. Merge feature and fix PRs into `main`.
+1. Merge feature and fix PRs into `main` (CI runs full `just check` + WASM + dep-review).
 2. release-please opens or updates a release PR with the version bump and changelog.
-3. Review and merge the release PR when CI is green.
-4. The release workflow creates the GitHub Release, builds the optimized WASM package, runs tests, and publishes `cad-mcp-server` to npm with provenance.
+3. Release PR CI runs `just check` only — the original PR already validated the code.
+4. Review and merge the release PR.
+5. The release workflow creates the GitHub Release, builds optimized WASM, runs kernel tests, smoke-tests the packed CLI, publishes to npm, and publishes to the MCP Registry (with retry for npm propagation lag).
 
-The only manual gate is merging PRs. Dependabot and release-please PRs should behave like normal PRs and run CI automatically.
+The only manual gate is merging PRs. Dependabot PRs run full CI; release-please PRs run `just check` only.
 
 ## Code Style
 
