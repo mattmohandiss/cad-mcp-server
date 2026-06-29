@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/mattmohandiss/cad-mcp-server/compare/v0.3.1...v0.3.2) (2026-06-29)
+
+
+### Bug Fixes
+
+* include runtime package metadata ([#12](https://github.com/mattmohandiss/cad-mcp-server/issues/12)) ([c995940](https://github.com/mattmohandiss/cad-mcp-server/commit/c9959406e340aa8062642e78dee32d3192ae6905))
+
 ## [0.3.1](https://github.com/mattmohandiss/cad-mcp-server/compare/v0.3.0...v0.3.1) (2026-06-29)
 
 ### Bug Fixes

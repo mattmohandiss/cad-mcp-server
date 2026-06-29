@@ -1,6 +1,6 @@
 {
   "name": "cad-mcp-server",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "mcpName": "io.github.mattmohandiss/cad-mcp-server",
   "description": "MCP server for inspecting STEP CAD files -- extract faces, edges, mass properties, and PMI from 3D models via LLM tools, no CAD software needed.",
   "type": "module",
