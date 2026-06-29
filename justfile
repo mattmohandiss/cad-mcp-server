@@ -60,11 +60,11 @@ ci: check build-wasm test
 
 # Format all TypeScript source + config files
 fmt:
-	npx prettier --write "src/**/*.ts" "eval/**/*.ts" occt/ts/src/ occt/ts/eslint.config.js eslint.config.js tsconfig.json vitest.config.ts package.json package-lock.json "*.md" "docs/**/*.md" ".github/**/*.yml"
+	npx prettier --write "src/**/*.ts" "eval/**/*.ts" occt/ts/src/ occt/ts/eslint.config.js eslint.config.js tsconfig.json vitest.config.ts package.json package-lock.json release-please-config.json server.json "*.md" "docs/**/*.md" ".github/**/*.yml"
 
 # Check formatting without writing
 fmt-check:
-	npx prettier --check "src/**/*.ts" "eval/**/*.ts" occt/ts/src/ occt/ts/eslint.config.js eslint.config.js tsconfig.json vitest.config.ts package.json package-lock.json "*.md" "docs/**/*.md" ".github/**/*.yml"
+	npx prettier --check "src/**/*.ts" "eval/**/*.ts" occt/ts/src/ occt/ts/eslint.config.js eslint.config.js tsconfig.json vitest.config.ts package.json package-lock.json release-please-config.json server.json "*.md" "docs/**/*.md" ".github/**/*.yml"
 
 # Remove generated artifacts and installed dependencies
 clean:
