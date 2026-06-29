@@ -2,10 +2,9 @@
 
 ## [0.3.1](https://github.com/mattmohandiss/cad-mcp-server/compare/v0.3.0...v0.3.1) (2026-06-29)
 
-
 ### Bug Fixes
 
-* prepare npm and MCP registry publishing ([#10](https://github.com/mattmohandiss/cad-mcp-server/issues/10)) ([64bfaee](https://github.com/mattmohandiss/cad-mcp-server/commit/64bfaee03bea9e1d40d7305febe86bdf9defc613))
+- prepare npm and MCP registry publishing ([#10](https://github.com/mattmohandiss/cad-mcp-server/issues/10)) ([64bfaee](https://github.com/mattmohandiss/cad-mcp-server/commit/64bfaee03bea9e1d40d7305febe86bdf9defc613))
 
 ## [0.3.0](https://github.com/mattmohandiss/cad-mcp-server/compare/v0.2.0...v0.3.0) (2026-06-28)
 
