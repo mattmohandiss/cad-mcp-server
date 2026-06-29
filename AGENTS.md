@@ -72,31 +72,36 @@ package.json           npm package metadata
 
 ## Workflow
 
-Two branches: `main` (production, protected) and `dev` (integration). No feature branches for solo work.
+Single branch: `main` (protected). All changes land via PRs from feature branches.
+release-please handles version bumps and releases automatically.
 
-**Day-to-day:**
+**Making a change:**
 
 ```bash
-git checkout dev
+git checkout -b feat/my-change    # or fix/, chore/, docs/, etc.
 # edit
-just check          # or rely on the pre-push hook to do it
-git add -p          # review the diff
-git commit -m "feat: ..."   # or fix: / chore: / docs: / refactor: / etc.
-git push            # pre-push hook runs `just check` automatically
+just check            # runs automatically on push (pre-push hook)
+git add -p            # review the diff
+git commit -m "feat: description"   # conventional commit (feat:, fix:, etc.)
+git push -u origin feat/my-change
+gh pr create --base main
+# wait for CI (just check + WASM + dep-review)
+gh pr merge --squash
 ```
 
-**Release:**
+**Cutting a release:**
+
+After a PR with a `feat:` or `fix:` commit is merged, release-please opens a
+release PR ("chore(main): release X.Y.Z"). This PR bumps versions, updates the
+CHANGELOG, and syncs `server.json`.
+
+The release PR runs `just check` only — the original PR already validated the
+code with WASM and dependency-review.
 
 ```bash
-git checkout dev
-# feature work is already on dev; PR dev → main
-gh pr create --base main
-# wait for CI (just check — WASM already validated on original PR)
-# merge the PR
-# release-please bot opens a Release PR with version bump + CHANGELOG
-# review the Release PR (verifies version, checks the diff)
-# optionally: just eval (~$2, 15min) for confirmation
-gh pr merge <release-pr-number>  # auto-publishes to npm and MCP Registry
+# Review the version bump and changelog diff
+# Optionally: just eval (~$2, 15min) for confirmation
+gh pr merge <release-pr-number> --squash   # auto-publishes to npm and MCP Registry
 ```
 
 **What release-please does automatically:**
