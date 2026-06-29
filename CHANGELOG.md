@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/mattmohandiss/cad-mcp-server/compare/v0.3.2...v0.3.3) (2026-06-29)
+
+
+### Bug Fixes
+
+* tighten CI pipeline and fix stale config ([f8dad7f](https://github.com/mattmohandiss/cad-mcp-server/commit/f8dad7f6e71337f9b4ffc4d4145c58a4b2db63f0))
+
 ## [0.3.2](https://github.com/mattmohandiss/cad-mcp-server/compare/v0.3.1...v0.3.2) (2026-06-29)
 
 
