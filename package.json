@@ -16,7 +16,6 @@
     "dist",
     "!dist/**/*.map",
     "!dist/eval",
-    "!dist/package.json",
     "!dist/src/tests",
     "!dist/vitest.config.*",
     "node_modules/occt-wasm/dist",
