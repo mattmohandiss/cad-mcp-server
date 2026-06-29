@@ -2,10 +2,9 @@ name: CI
 
 on:
   pull_request:
-  push:
     branches: [main]
 
-# Auto-cancel superseded runs for the same ref (PR or branch).
+# Auto-cancel superseded runs for the same PR.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -53,10 +52,10 @@ jobs:
       - name: Check formatting, lint, and tests
         run: just check
 
-      # Build WASM and run kernel tests on release-gating runs only:
-      # push to main, or PR targeting main.
+      # Build WASM and run kernel tests.  Skip on release-please PRs
+      # (metadata-only — the original PR already validated the code).
       - name: Build OCCT builder image (cached)
-        if: github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.base_ref == 'main')
+        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7
         with:
           context: occt
@@ -67,7 +66,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=occt-builder
 
       - name: Build WASM (cached)
-        if: github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.base_ref == 'main')
+        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
         uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7
         with:
           context: occt
@@ -81,7 +80,7 @@ jobs:
             occt-wasm-builder=docker-image://localhost:5000/occt-wasm-builder
 
       - name: Extract WASM artifacts
-        if: github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.base_ref == 'main')
+        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
         run: |
           cid=$(docker create occt-wasm)
           mkdir -p occt/dist occt/ts/dist
@@ -90,13 +89,13 @@ jobs:
           docker rm "$cid"
 
       - name: Run tests with WASM
-        if: github.ref == 'refs/heads/main' || (github.event_name == 'pull_request' && github.base_ref == 'main')
+        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
         run: npm test
 
   # Fails the PR if a new dep adds a critical-severity vulnerability.
   # Catches typosquatted packages, known-bad transitive deps, etc.
   dependency-review:
-    if: github.event_name == 'pull_request'
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0

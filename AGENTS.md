@@ -16,9 +16,9 @@ Local-first, read-only MCP server for STEP CAD inspection. Returns factual geome
 | `just setup`       | Install dependencies                                                |
 | `just dev`         | Build and run server locally                                        |
 | `just test`        | Run test suite (vitest) — kernel tests skip if WASM not built       |
-| `just lint`        | TypeScript typecheck, ESLint, Prettier                              |
+| `just lint`        | TypeScript + Rust lint, facade validation, Prettier                 |
 | `just fmt`         | Format source files with Prettier                                   |
-| `just check`       | Run lint + test (pre-commit hook runs this on push)                 |
+| `just check`       | Run lint + test (pre-push hook runs this automatically)             |
 | `just ci`          | Full local pipeline: lint + tests + WASM build + tests with kernel  |
 | `just build-wasm`  | Build OCCT WASM kernel (Docker) into occt/dist + occt/ts/dist       |
 | `just build`       | Build optimized WASM kernel + npm tarball                           |
@@ -48,13 +48,19 @@ src/                   MCP server source
   types/               TypeScript type definitions
   tests/               Vitest test suite
   index.ts             Server entry point
+samples/               STEP test fixtures
 occt/                  OCCT WebAssembly kernel source
   Dockerfile.builder   OCCT static library build
   Dockerfile           Stripped facade + TS package build
   codegen/             Rust code generator for C++ facade
   facade/              C++ OCCT binding layer
   ts/                  TypeScript wrapper for WASM module
+eval/                  LLM eval runner and prompts
+scripts/               Build and validation scripts
 docs/                  Project documentation
+justfile               Developer workflow recipes
+server.json            MCP Registry metadata
+package.json           npm package metadata
 ```
 
 ## Kernel Build Notes
@@ -85,20 +91,21 @@ git push            # pre-push hook runs `just check` automatically
 git checkout dev
 # feature work is already on dev; PR dev → main
 gh pr create --base main
-# wait for CI (lint + WASM + kernel tests) to pass
+# wait for CI (just check — WASM already validated on original PR)
 # merge the PR
 # release-please bot opens a Release PR with version bump + CHANGELOG
 # review the Release PR (verifies version, checks the diff)
 # optionally: just eval (~$2, 15min) for confirmation
-gh pr merge <release-pr-number>  # one click — auto-publishes to npm
+gh pr merge <release-pr-number>  # auto-publishes to npm and MCP Registry
 ```
 
 **What release-please does automatically:**
 
-- Bumps `version` in `package.json` based on commit types
+- Bumps `version` in `package.json` and `server.json` based on commit types
 - Updates `CHANGELOG.md` from commit messages
 - Tags the release on merge
-- Publishes to npm (with provenance via OIDC trusted publishing)
+- Publishes to npm (provenance auto-generated via OIDC trusted publishing)
+- Publishes to MCP Registry via `mcp-publisher` (retries on npm propagation lag)
 - Creates a GitHub Release
 
 **The version bump is automatic based on commit types:**
@@ -115,17 +122,19 @@ If you forget the conventional commit prefix, no Release PR is opened. Silent. U
 just ci            # lint + tests + WASM build + tests with kernel
 ```
 
-**The four checks layered from cheap → expensive:**
+**The five checks layered from cheap → expensive:**
 
 1. **pre-commit** (lint-staged): prettier + eslint on staged files (~1s)
 2. **pre-push** (husky): `just check` — full lint + vitest (~30s, no Docker)
-3. **PR CI** on `dev`/`main`: `just lint && npm test` + dep-review for vulnerabilities (~30s, no WASM build)
-4. **main CI** (push to main or release PR): full suite incl. WASM build + kernel tests (~3min warm)
-5. **release-please** on release PR merge: full WASM build + npm publish + GitHub release (~3min)
+3. **PR CI** (pull request to main): `just check` + dep-review + WASM build + kernel tests (~3min)
+4. **Release PR CI** (release-please PR): `just check` only (~30s)
+5. **release-please** (release PR merge): optimized WASM build + kernel tests + packed-CLI smoke test + npm publish + MCP Registry publish with retry (~6min)
 
 ## Trusted publishing
 
 npm publish uses OIDC trusted publishing — no `NPM_TOKEN` secret needed. The release-please workflow authenticates to npm via GitHub's OIDC. The npm-side trust config is in your npm package settings; the GitHub workflow file is `release-please.yml`.
+
+`RELEASE_PLEASE_TOKEN` is a classic PAT with `contents: write` and `pull_requests: write` scopes, stored as a repository secret. release-please uses it instead of the default `GITHUB_TOKEN` so that CI workflows run on release PRs (by design, `GITHUB_TOKEN`-triggered events don't spawn new workflow runs).
 
 ## Dependabot
 

@@ -9,7 +9,7 @@ setup:
 # Build and run the MCP server locally
 dev:
 	npm run build
-	node dist/index.js
+	node dist/src/index.js
 
 # Build the optimized distribution tarball for npm/manual install
 build: _build-wasm-builder _build-wasm-release _build-server _pack
@@ -60,11 +60,11 @@ ci: check build-wasm test
 
 # Format all TypeScript source + config files
 fmt:
-	npx prettier --write "src/**/*.ts" "eval/**/*.ts" occt/ts/src/ occt/ts/eslint.config.js eslint.config.js tsconfig.json vitest.config.ts package.json package-lock.json release-please-config.json server.json "*.md" "docs/**/*.md" ".github/**/*.yml"
+	npx prettier --write "src/**/*.ts" "eval/**/*.ts" eslint.config.js tsconfig.json vitest.config.ts package.json package-lock.json release-please-config.json server.json "*.md" "docs/**/*.md" ".github/**/*.yml"
 
 # Check formatting without writing
 fmt-check:
-	npx prettier --check "src/**/*.ts" "eval/**/*.ts" occt/ts/src/ occt/ts/eslint.config.js eslint.config.js tsconfig.json vitest.config.ts package.json package-lock.json release-please-config.json server.json "*.md" "docs/**/*.md" ".github/**/*.yml"
+	npx prettier --check "src/**/*.ts" "eval/**/*.ts" eslint.config.js tsconfig.json vitest.config.ts package.json package-lock.json release-please-config.json server.json "*.md" "docs/**/*.md" ".github/**/*.yml"
 
 # Remove generated artifacts and installed dependencies
 clean:
