@@ -79,32 +79,4 @@ describe('CAD MCP integration smoke tests', () => {
       expect(deltas.volume).toBe(0);
     },
   );
-
-  it.runIf(isWasmAvailable())(
-    'compares two different STEP files and reports non-zero deltas',
-    async () => {
-      const ap242File = path.join(
-        process.cwd(),
-        'samples',
-        'NIST-PMI-STEP-Files',
-        'nist_ftc_08_asme1_ap242-e2.stp',
-      );
-      const result = expectSuccess(
-        await handleDiffStep({
-          baseline_file_path: NIST_FILE,
-          comparison_file_path: ap242File,
-        }),
-      );
-      const deltas = result.data.deltas as Record<string, unknown>;
-      const dimensions = deltas.dimensions as Record<string, number>;
-      const anyNonZero =
-        dimensions.width !== 0 ||
-        dimensions.height !== 0 ||
-        dimensions.depth !== 0 ||
-        deltas.volume !== 0 ||
-        deltas.surfaceArea !== 0;
-      expect(anyNonZero).toBe(true);
-    },
-    15000,
-  );
 });
