@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.4](https://github.com/mattmohandiss/cad-mcp-server/compare/v0.4.3...v0.4.4) (2026-07-01)
+
+
+### Bug Fixes
+
+* remove broken extra-files from release-please, auto-sync server.json in workflow ([46bf675](https://github.com/mattmohandiss/cad-mcp-server/commit/46bf675eea3005289152840fd168ad43677a6938))
+
 ## [0.4.3](https://github.com/mattmohandiss/cad-mcp-server/compare/v0.4.2...v0.4.3) (2026-07-01)
 
 
