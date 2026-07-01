@@ -22,8 +22,12 @@ export function compareAnswer(extracted: unknown, expected: unknown, tolerance: 
   }
 
   if (typeof expected === 'number' && typeof extracted === 'number') {
-    if (tolerance === 0) return extracted === expected;
     const diff = Math.abs(extracted - expected);
+    if (tolerance === 0) {
+      // Always apply relative tolerance for float precision, even with tolerance:0.
+      // 6.000000000000001 vs 6 = match within 0.01%
+      return diff / Math.max(Math.abs(extracted), Math.abs(expected), 1e-9) < 0.01;
+    }
     return (
       diff <= tolerance || diff / Math.max(Math.abs(extracted), Math.abs(expected), 1e-9) < 0.01
     );

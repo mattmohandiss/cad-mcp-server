@@ -1,100 +1,136 @@
-import type { BulkResult, ScenarioResult } from './types.js';
 import { shortModelName } from './util.js';
+import type { BulkResult, ScenarioResult } from './types.js';
+
+export function formatRunLine(result: ScenarioResult): string {
+  const model = shortModelName(result.modelId).padEnd(25);
+  const icon = result.correct ? '✓' : '✗';
+  const score = String(result.compositeScore).padStart(3);
+  const scenario = result.scenarioId.padEnd(25);
+  const calls = `${result.trace.spans.length} calls`.padEnd(8);
+  const time = `${(result.durationMs / 1000).toFixed(1)}s`.padStart(6);
+
+  const tokens =
+    result.trace.totalTokens > 0
+      ? `${formatTokenCount(result.trace.totalTokens)}`.padStart(12)
+      : '—'.padStart(12);
+
+  const spanTypes = [
+    result.trace.spans.filter((s) => s.type === 'discovery').length || '',
+    result.trace.spans.filter((s) => s.type === 'measurement').length || '',
+    result.trace.spans.filter((s) => s.type === 'distraction').length || '',
+  ]
+    .map((c) => String(c).padStart(2))
+    .join('/');
+
+  return `${icon} ${score}  ${scenario} ${model} ${calls} ${time} ${tokens}  [D/M/W:${spanTypes}]  ${result.reason}`;
+}
 
 export function summarizeResults(results: ScenarioResult[], durationMs: number): BulkResult {
-  const perModel: BulkResult['perModel'] = {};
-  const perScenario: BulkResult['perScenario'] = {};
-  const modelMeta: BulkResult['_meta']['modelMeta'] = {};
-  let pass = 0;
+  const perModel: Record<string, { pass: number; total: number; avgComposite: number }> = {};
+  const perScenario: Record<string, { pass: number; total: number }> = {};
+  let totalPass = 0;
+  let totalRuns = 0;
+  let totalComposite = 0;
   let totalTokens = 0;
   let totalCost = 0;
+  const modelMeta: Record<string, { tokens: number; cost: number }> = {};
 
-  for (const result of results) {
-    if (result.correct) pass++;
+  for (const r of results) {
+    perModel[r.modelId] ??= { pass: 0, total: 0, avgComposite: 0 };
+    perModel[r.modelId].total++;
+    perModel[r.modelId].avgComposite += r.compositeScore;
+    if (r.correct) perModel[r.modelId].pass++;
+    totalPass += r.correct ? 1 : 0;
+    totalRuns++;
+    totalComposite += r.compositeScore;
 
-    const model = shortModelName(result.modelId);
-    perModel[model] ??= { pass: 0, total: 0 };
-    perModel[model].total++;
-    if (result.correct) perModel[model].pass++;
+    perScenario[r.scenarioId] ??= { pass: 0, total: 0 };
+    perScenario[r.scenarioId].total++;
+    if (r.correct) perScenario[r.scenarioId].pass++;
 
-    modelMeta[model] ??= { scoreSum: 0, tokens: 0, cost: 0 };
-    modelMeta[model].scoreSum += result.score;
-    modelMeta[model].tokens += result.usage?.totalTokens ?? 0;
-    modelMeta[model].cost += result.usage?.cost ?? 0;
+    totalTokens += r.trace.totalTokens;
+    totalCost += r.usage?.cost ?? 0;
 
-    perScenario[result.scenarioId] ??= { pass: 0, total: 0 };
-    perScenario[result.scenarioId].total++;
-    if (result.correct) perScenario[result.scenarioId].pass++;
+    const mn = shortModelName(r.modelId);
+    modelMeta[mn] ??= { tokens: 0, cost: 0 };
+    modelMeta[mn].tokens += r.trace.totalTokens;
+    modelMeta[mn].cost += r.usage?.cost ?? 0;
+  }
 
-    totalTokens += result.usage?.totalTokens ?? 0;
-    totalCost += result.usage?.cost ?? 0;
+  // Average the composite scores
+  for (const m of Object.keys(perModel)) {
+    if (perModel[m].total > 0) {
+      perModel[m].avgComposite = Math.round(perModel[m].avgComposite / perModel[m].total);
+    }
   }
 
   return {
     results,
     perModel,
     perScenario,
-    overall: { pass, total: results.length, pct: results.length ? pass / results.length : 0 },
-    _meta: { modelMeta, totalTokens, totalCost, durationMs },
+    overall: {
+      pass: totalPass,
+      total: totalRuns,
+      pct: totalRuns > 0 ? Math.round((totalPass / totalRuns) * 100) : 0,
+      avgComposite: totalRuns > 0 ? Math.round(totalComposite / totalRuns) : 0,
+    },
+    _meta: {
+      modelMeta,
+      totalTokens,
+      totalCost,
+      durationMs,
+    },
   };
 }
 
-export function formatRunLine(result: ScenarioResult): string {
-  const status = result.correct ? '✓' : '✗';
-  const duration = `${(result.durationMs / 1000).toFixed(1)}s`;
-  const tokens = result.usage
-    ? `${formatTokenCount(result.usage.inputTokens)}/${formatTokenCount(result.usage.outputTokens)}`
-    : '—';
-  const cost = result.usage?.cost != null ? `$${result.usage.cost.toFixed(6)}` : '';
-  const calls = result.toolCalls.length;
-  const callText =
-    calls === 0 && result.durationMs < 2_000 ? 'SKIP' : `${calls} call${calls !== 1 ? 's' : ''}`;
+export function formatReport(result: BulkResult): string {
+  const lines: string[] = [
+    '',
+    'CAD MCP Eval Results',
+    '===================',
+    '',
+    'Model              Pass Rate  Avg Comp  Tokens      Cost',
+    '---------------------------------------------------------',
+  ];
 
-  return `${status} ${String(result.score).padStart(3)}  ${result.scenarioId.padEnd(24)}  ${shortModelName(result.modelId).padEnd(24)}  ${callText.padEnd(8)} ${duration.padEnd(6)} ${tokens.padEnd(14)} ${cost.padEnd(14)} ${result.reason.slice(0, 80)}`;
-}
-
-export function formatReport(bulk: BulkResult): string {
-  const lines: string[] = ['', 'CAD MCP Eval Results', '===================', ''];
-  const { modelMeta, totalTokens, totalCost, durationMs } = bulk._meta;
-
-  lines.push('Model              Pass Rate  Avg Score  Tokens      Cost');
-  lines.push('---------------------------------------------------------');
-  for (const [label, stats] of Object.entries(bulk.perModel).sort()) {
-    const avg = stats.total > 0 ? modelMeta[label].scoreSum / stats.total : 0;
-    const pct = `${((stats.pass / stats.total) * 100).toFixed(1)}%`;
-    lines.push(
-      `${label.padEnd(20)} ${pct.padStart(6)}     ${avg.toFixed(1).padStart(4)}    ${formatTokenCount(modelMeta[label].tokens).padStart(10)} $${modelMeta[label].cost.toFixed(6).padStart(11)}`,
-    );
+  for (const [modelId, meta] of Object.entries(result.perModel)) {
+    const mn = shortModelName(modelId).padEnd(20);
+    const pct = `${((meta.pass / meta.total) * 100).toFixed(0)}%`.padStart(5);
+    const avg = String(meta.avgComposite).padStart(9);
+    const tokens = formatTokenCount(result._meta.modelMeta[mn]?.tokens ?? 0).padStart(10);
+    const cost = `$${formatCost(result._meta.modelMeta[mn]?.cost ?? 0)}`.padStart(8);
+    lines.push(`${mn}        ${pct}  ${avg}  ${tokens}  ${cost}`);
   }
 
   lines.push('---------------------------------------------------------');
-  const avgScore = bulk.results.length
-    ? bulk.results.reduce((sum, result) => sum + result.score, 0) / bulk.results.length
-    : 0;
-  const overallPct = `${(bulk.overall.pct * 100).toFixed(1)}%`;
   lines.push(
-    `${'Overall'.padEnd(20)} ${overallPct.padStart(6)}     ${avgScore.toFixed(1).padStart(4)}    ${formatTokenCount(totalTokens).padStart(10)} $${totalCost.toFixed(6)}`,
+    `Overall        ${String(result.overall.pct).padStart(3)}%     ${String(result.overall.avgComposite).padStart(9)}  ${formatTokenCount(result._meta.totalTokens).padStart(10)}  $${formatCost(result._meta.totalCost)}`,
   );
   lines.push('');
-
   lines.push('Scenario                          Pass Rate');
   lines.push('---------------------------------------------');
-  for (const [id, stats] of Object.entries(bulk.perScenario).sort()) {
-    lines.push(
-      `${id.padEnd(34)} ${stats.pass}/${stats.total}  (${((stats.pass / stats.total) * 100).toFixed(1)}%)`,
-    );
+
+  for (const [scenario, meta] of Object.entries(result.perScenario)) {
+    const label = scenario.padEnd(32);
+    const rate = `${meta.pass}/${meta.total}  (${((meta.pass / meta.total) * 100).toFixed(0)}%)`;
+    lines.push(`${label} ${rate}`);
   }
 
+  lines.push('');
   lines.push(
-    '',
-    `Duration: ${(durationMs / 1000).toFixed(1)}s    ${bulk.results.length} runs    $${totalCost.toFixed(6)}`,
-    '',
+    `Duration: ${(result._meta.durationMs / 1000).toFixed(1)}s    ${result.results.length} runs    $${formatCost(result._meta.totalCost)}`,
   );
+
   return lines.join('\n');
 }
 
-function formatTokenCount(value: number | undefined): string {
-  if (value == null) return '—';
-  if (value >= 1000) return `${(value / 1000).toFixed(1)}K`;
-  return String(value);
+function formatTokenCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+function formatCost(n: number): string {
+  if (n === 0) return '0.000000';
+  return n.toFixed(6);
 }
