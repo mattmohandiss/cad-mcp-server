@@ -51,7 +51,7 @@ test:
 lint: _validate-facade _lint-ts _lint-rs
 
 # Run all local checks
-check: fmt-check lint test validate-version
+check: fmt-check lint test
 
 # Ensure server.json versions match package.json
 validate-version:

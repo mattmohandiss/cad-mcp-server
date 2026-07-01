@@ -6,18 +6,6 @@
   "bump-patch-for-minor-pre-major": false,
   "pull-request-header": "Release v$version",
   "include-v-in-tag": true,
-  "extra-files": [
-    {
-      "type": "json",
-      "path": "server.json",
-      "jsonpath": "$.version"
-    },
-    {
-      "type": "json",
-      "path": "server.json",
-      "jsonpath": "$.packages[0].version"
-    }
-  ],
   "changelog-sections": [
     { "type": "feat", "section": "Features" },
     { "type": "feature", "section": "Features" },
