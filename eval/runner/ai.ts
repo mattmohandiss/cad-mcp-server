@@ -1,16 +1,7 @@
 import { createMCPClient, type MCPClient } from '@ai-sdk/mcp';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { GatewayGenerationInfo, GatewayProviderOptions } from '@ai-sdk/gateway';
-import {
-  generateText,
-  gateway,
-  isStepCount,
-  NoObjectGeneratedError,
-  NoOutputGeneratedError,
-  Output,
-  type GenerateTextResult,
-  type ToolSet,
-} from 'ai';
+import { generateText, gateway, isStepCount, NoOutputGeneratedError } from 'ai';
 import { resolveServerPath } from './config.js';
 import type {
   GatewayRunInfo,
@@ -23,7 +14,8 @@ import type {
 import { truncate } from './util.js';
 import { type z } from 'zod';
 
-type EvalGenerationResult = GenerateTextResult<ToolSet, never, ReturnType<typeof Output.object>>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type EvalGenerationResult = any;
 
 export interface ModelRunSuccess {
   ok: true;
@@ -74,13 +66,10 @@ export async function runModelWithMcp(
     const result = await generateText({
       model: gateway(modelId),
       tools,
-      prompt: scenario.prompt,
+      prompt:
+        scenario.prompt +
+        '\n\nRespond with ONLY a valid JSON object. No markdown fences, no preamble, no explanation.',
       stopWhen: isStepCount(scenario.max_steps),
-      output: Output.object({
-        name: 'CadEvalAnswer',
-        description: `Structured answer for CAD MCP eval scenario ${scenario.id}.`,
-        schema,
-      }),
       providerOptions: {
         gateway: {
           tags: ['cad-mcp-eval', `scenario:${scenario.id}`, `model:${modelId}`],
@@ -89,7 +78,7 @@ export async function runModelWithMcp(
       },
     });
 
-    return buildSuccessResult(scenario.prompt, result as EvalGenerationResult);
+    return buildSuccessResult(scenario.prompt, result as EvalGenerationResult, schema);
   } catch (error) {
     return buildFailureResult(scenario.prompt, error);
   } finally {
@@ -100,18 +89,44 @@ export async function runModelWithMcp(
 async function buildSuccessResult(
   prompt: string,
   result: EvalGenerationResult,
+  schema: z.ZodType,
 ): Promise<ModelRunResult> {
   const gatewayInfo = await getGatewayRunInfo(result.finalStep.providerMetadata);
   let output: Record<string, unknown>;
 
   try {
-    output = asRecord(result.output);
+    const text = result.text.trim();
+    // Strip markdown code fences if present
+    const clean = text.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+    try {
+      output = JSON.parse(clean);
+    } catch {
+      // Try to extract a JSON object from the text
+      const match = clean.match(/\{[\s\S]*\}/);
+      if (!match) throw new Error('No JSON object found in response');
+      output = JSON.parse(match[0]);
+    }
+    // Validate against the schema
+    schema.parse(output);
   } catch (error) {
-    if (!isNoOutputGeneratedError(error)) throw error;
+    if (isNoOutputGeneratedError(error)) {
+      return {
+        ok: false,
+        error: 'no structured output generated',
+        output: null,
+        text: result.text,
+        finishReason: result.finishReason,
+        toolCalls: collectToolCalls(result),
+        toolResults: collectToolResults(result),
+        usage: buildUsage(result.usage, gatewayInfo),
+        steps: collectSteps(result),
+        transcript: buildTranscript(prompt, result, null),
+      };
+    }
 
     return {
       ok: false,
-      error: 'no structured output generated',
+      error: `output parse error: ${error instanceof Error ? error.message : String(error)}`,
       output: null,
       text: result.text,
       finishReason: result.finishReason,
@@ -144,23 +159,7 @@ function isNoOutputGeneratedError(error: unknown): boolean {
   );
 }
 
-async function buildFailureResult(prompt: string, error: unknown): Promise<ModelRunFailure> {
-  if (NoObjectGeneratedError.isInstance(error)) {
-    const output = null;
-    return {
-      ok: false,
-      error: `structured output error: ${String(error.cause ?? error.message)}`,
-      output,
-      text: error.text ?? '',
-      finishReason: '',
-      toolCalls: [],
-      toolResults: [],
-      usage: error.usage ? buildUsage(error.usage, undefined) : null,
-      steps: [],
-      transcript: buildErrorTranscript(prompt, error.text ?? '', error.message),
-    };
-  }
-
+function buildFailureResult(prompt: string, error: unknown): ModelRunFailure {
   return {
     ok: false,
     error: error instanceof Error ? error.message : String(error),
@@ -180,25 +179,28 @@ async function buildFailureResult(prompt: string, error: unknown): Promise<Model
 }
 
 function collectToolCalls(result: EvalGenerationResult): ToolCallEntry[] {
-  return result.toolCalls.map((toolCall) => ({
+  return result.toolCalls.map((toolCall: { toolName: string; input: unknown }) => ({
     name: toolCall.toolName,
     args: JSON.stringify(toolCall.input),
   }));
 }
 
 function collectToolResults(result: EvalGenerationResult): ToolResultEntry[] {
-  return result.toolResults.map((toolResult) => ({
-    name: toolResult.toolName,
-    args: JSON.stringify(toolResult.input),
-    output: truncate(JSON.stringify(toolResult.output), 4_000),
-  }));
+  return result.toolResults.map(
+    (toolResult: { toolName: string; input: unknown; output: unknown }) => ({
+      name: toolResult.toolName,
+      args: JSON.stringify(toolResult.input),
+      output: truncate(JSON.stringify(toolResult.output), 4_000),
+    }),
+  );
 }
 
 function collectSteps(result: EvalGenerationResult): StepEntry[] {
-  return result.steps.map((step) => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return result.steps.map((step: any) => ({
     stepNumber: step.stepNumber,
     text: step.text,
-    toolCalls: step.toolCalls.map((toolCall) => ({
+    toolCalls: step.toolCalls.map((toolCall: { toolName: string; input: unknown }) => ({
       name: toolCall.toolName,
       args: JSON.stringify(toolCall.input),
     })),
@@ -247,12 +249,6 @@ function getGatewayGenerationId(providerMetadata: unknown): string | undefined {
 
   const generationId = (gatewayMetadata as Record<string, unknown>).generationId;
   return typeof generationId === 'string' ? generationId : undefined;
-}
-
-function asRecord(output: unknown): Record<string, unknown> {
-  return output && typeof output === 'object' && !Array.isArray(output)
-    ? (output as Record<string, unknown>)
-    : {};
 }
 
 function buildTranscript(
