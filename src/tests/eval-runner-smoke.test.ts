@@ -5,48 +5,53 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { EVAL_MODELS } from '../../eval/runner/model-registry.js';
-import { QUESTIONS } from '../../eval/runner/questions.js';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { loadScenarios, DEFAULT_MODELS } from '../../eval/runner/runner.js';
 
 describe('eval runner: plumbing smoke test', () => {
-  it('loads 3 models in the registry', () => {
-    expect(EVAL_MODELS).toHaveLength(3);
-    expect(EVAL_MODELS.map((m) => m.id)).toEqual([
-      'anthropic/claude-sonnet-4-5',
-      'gpt-4o-mini',
-      'google/gemini-2.5-flash',
-    ]);
+  it('has 3 default models', () => {
+    expect(DEFAULT_MODELS).toHaveLength(3);
+    expect(DEFAULT_MODELS).toContain('anthropic/claude-sonnet-4-5');
+    expect(DEFAULT_MODELS).toContain('openai/gpt-4o-mini');
+    expect(DEFAULT_MODELS).toContain('google/gemini-2.5-flash');
   });
 
-  it('loads 5 questions with valid structure', () => {
-    expect(QUESTIONS).toHaveLength(5);
-    for (const q of QUESTIONS) {
-      expect(q.id).toBeTruthy();
-      expect(q.prompt).toBeTruthy();
-      expect(q.targetFile).toMatch(/\.step$/);
-      expect(q.expected.kind).toMatch(/number|boolean|string/);
-      expect(typeof q.extract).toBe('function');
+  it('loads 10 scenarios with valid structure', () => {
+    const scenarios = loadScenarios();
+    expect(scenarios.length).toBe(10);
+    for (const s of scenarios) {
+      expect(s.id).toBeTruthy();
+      expect(s.field).toBeTruthy();
+      expect(s.prompt).toBeTruthy();
+      expect(typeof s.max_steps).toBe('number');
+      expect(s.max_steps).toBeGreaterThan(0);
     }
   });
 
-  it('every question references an existing STEP file and meta.json', async () => {
-    const { access } = await import('node:fs/promises');
-    for (const q of QUESTIONS) {
-      const stepPath = new URL(`../../samples/eval-generated/${q.targetFile}`, import.meta.url);
-      const metaPath = stepPath.pathname.replace(/\.step$/, '.meta.json');
-      await expect(access(stepPath.pathname)).resolves.toBeUndefined();
-      await expect(access(metaPath)).resolves.toBeUndefined();
+  it('every scenario has generate.py and scenario.md', () => {
+    const scenariosDir = path.join(process.cwd(), 'eval', 'scenarios');
+    const entries = fs.readdirSync(scenariosDir);
+    for (const entry of entries) {
+      const dir = path.join(scenariosDir, entry);
+      if (!fs.statSync(dir).isDirectory()) continue;
+      expect(fs.existsSync(path.join(dir, 'scenario.md'))).toBe(true);
+      expect(fs.existsSync(path.join(dir, 'generate.py'))).toBe(true);
     }
   });
 
-  it('runOne fails fast when OPENROUTER_API_KEY is missing', async () => {
+  it('runOne fails when AI_GATEWAY_API_KEY is missing', async () => {
     const { runOne } = await import('../../eval/runner/runner.js');
-    const saved = process.env.OPENROUTER_API_KEY;
-    delete process.env.OPENROUTER_API_KEY;
+    const scenarios = loadScenarios();
+    const saved = process.env.AI_GATEWAY_API_KEY;
+    const savedOidc = process.env.VERCEL_OIDC_TOKEN;
+    delete process.env.AI_GATEWAY_API_KEY;
+    delete process.env.VERCEL_OIDC_TOKEN;
     try {
-      await expect(runOne(EVAL_MODELS[0], QUESTIONS[0])).rejects.toThrow();
+      await expect(runOne(DEFAULT_MODELS[0], scenarios[0])).rejects.toThrow();
     } finally {
-      if (saved !== undefined) process.env.OPENROUTER_API_KEY = saved;
+      if (saved !== undefined) process.env.AI_GATEWAY_API_KEY = saved;
+      if (savedOidc !== undefined) process.env.VERCEL_OIDC_TOKEN = savedOidc;
     }
   }, 30_000);
 });

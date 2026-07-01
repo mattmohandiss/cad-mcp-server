@@ -22,7 +22,7 @@ Local-first, read-only MCP server for STEP CAD inspection. Returns factual geome
 | `just ci`          | Full local pipeline: lint + tests + WASM build + tests with kernel  |
 | `just build-wasm`  | Build OCCT WASM kernel (Docker) into occt/dist + occt/ts/dist       |
 | `just build`       | Build optimized WASM kernel + npm tarball                           |
-| `just eval`        | Run LLM eval against OpenRouter models (needs `OPENROUTER_API_KEY`) |
+| `just eval`        | Run LLM eval through Vercel AI Gateway (needs `AI_GATEWAY_API_KEY`) |
 | `just clean`       | Remove generated artifacts, deps, eval logs                         |
 | `just check-clean` | Verify no build artifacts remain (pre-PR check)                     |
 

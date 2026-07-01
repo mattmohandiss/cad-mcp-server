@@ -204,14 +204,27 @@ describe('face filters', () => {
   ];
 
   it('filters by surface type', () => {
-    const result = applyFaceFilters(faces, { surface_types: ['plane'] });
+    const result = applyFaceFilters(faces, { where: { surface_type: 'plane' } });
     expect(result.length).toBe(2);
     expect(result.every((f) => f.surface_type === 'plane')).toBe(true);
   });
 
   it('filters by area range', () => {
-    const result = applyFaceFilters(faces, { area_min: 20, area_max: 80 });
+    const result = applyFaceFilters(faces, { where: { area_min: 20, area_max: 80 } });
     expect(result.length).toBe(1);
+    expect(result[0].id).toBe('face:1');
+  });
+
+  it('filters cylindrical faces by radius', () => {
+    const result = applyFaceFilters(
+      [
+        makeFace({ id: 'face:0', surface_type: 'cylinder', radius: 2 }),
+        makeFace({ id: 'face:1', surface_type: 'cylinder', radius: 5 }),
+        makeFace({ id: 'face:2', surface_type: 'plane' }),
+      ],
+      { where: { surface_type: 'cylinder', radius_min: 4 } },
+    );
+    expect(result).toHaveLength(1);
     expect(result[0].id).toBe('face:1');
   });
 
@@ -226,7 +239,7 @@ describe('face filters', () => {
       makeFace({ id: 'face:1', body_id: 'body:1' }),
       makeFace({ id: 'face:2', body_id: undefined }),
     ];
-    const result = applyFaceFilters(facesWithBody, { body_ids: ['body:0'] });
+    const result = applyFaceFilters(facesWithBody, { where: { body_ids: ['body:0'] } });
     expect(result.length).toBe(1);
     expect(result[0].body_id).toBe('body:0');
   });
@@ -237,7 +250,7 @@ describe('face filters', () => {
       makeFace({ id: 'face:1', normal: [1, 0, 0] }),
     ];
     const result = applyFaceFilters(facesWithNormals, {
-      normal: { parallel_to: [0, 0, 1], tolerance_degrees: 5 },
+      where: { normal: { parallel_to: [0, 0, 1], tolerance_degrees: 5 } },
     });
     expect(result.length).toBe(1);
     expect(result[0].id).toBe('face:0');
@@ -307,6 +320,12 @@ describe('face projection', () => {
     expect(result.bbox).toBeUndefined();
   });
 
+  it('projects radius and diameter for cylindrical faces', () => {
+    const result = projectFace(face, ['radius', 'diameter']);
+    expect(result.radius).toBe(5);
+    expect(result.diameter).toBe(10);
+  });
+
   it('draft_angle_deg computed when pull_direction provided', () => {
     const result = projectFace(face, ['draft_angle_deg'], [0, 0, 1]);
     expect(result.draft_angle_deg).toBeCloseTo(90, 0); // normal [0,0,1], pull [0,0,1] → 0° angle → 90° draft
@@ -343,18 +362,18 @@ describe('edge filters', () => {
   ];
 
   it('filters by curve type', () => {
-    const result = applyEdgeFilters(edges, { curve_types: ['circle'] });
+    const result = applyEdgeFilters(edges, { where: { curve_type: 'circle' } });
     expect(result.length).toBe(2);
   });
 
   it('filters by length range', () => {
-    const result = applyEdgeFilters(edges, { length_min: 30, length_max: 50 });
+    const result = applyEdgeFilters(edges, { where: { length_min: 30, length_max: 50 } });
     expect(result.length).toBe(1);
     expect(result[0].id).toBe('edge:1');
   });
 
   it('filters by radius', () => {
-    const result = applyEdgeFilters(edges, { radius: { min: 8 } });
+    const result = applyEdgeFilters(edges, { where: { radius_min: 8 } });
     expect(result.length).toBe(1);
     expect(result[0].id).toBe('edge:2');
   });
@@ -424,6 +443,11 @@ describe('edge projection', () => {
     expect(result.end_vertex).toBe('vertex:1');
     expect(result.convexity).toBe('convex');
     expect(result.radius).toBe(5);
+  });
+
+  it('projects diameter for circular edges', () => {
+    const result = projectEdge(edge, ['diameter']);
+    expect(result.diameter).toBe(10);
   });
 
   it('omits optional fields when not set', () => {

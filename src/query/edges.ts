@@ -12,15 +12,11 @@ import {
 } from './shared.js';
 
 export interface QueryEdgesInput {
-  curve_types?: string[];
-  length_min?: number;
-  length_max?: number;
-  radius?: { min?: number; max?: number };
-  body_ids?: string[];
+  where?: Record<string, unknown>;
   entity_ids?: string[];
-  fields?: string[];
+  select?: string[];
   group_by?: string[];
-  sort?: { by: string; direction?: 'asc' | 'desc' };
+  order_by?: { by: string; direction?: 'asc' | 'desc' };
   return_type?: 'summary' | 'entities' | 'groups';
   limit?: number;
   offset?: number;
@@ -32,8 +28,8 @@ export async function queryStepEdges(filePath: string, input: QueryEdgesInput) {
     const { kernel, shape } = await model.getShapeContext('query_step_edges');
 
     let filtered = applyEdgeFilters(allEdges, input);
-    if (input.sort) {
-      filtered = sortEdges(filtered, input.sort);
+    if (input.order_by) {
+      filtered = sortEdges(filtered, input.order_by);
     }
 
     const resultMode = input.return_type ?? 'entities';
@@ -48,14 +44,14 @@ export async function queryStepEdges(filePath: string, input: QueryEdgesInput) {
     const includeEntities = resultMode === 'entities';
     const paginated = includeEntities ? filtered.slice(offset, offset + limit) : [];
 
-    const edgeAdjacencies = buildEdgeToFaceAdjacencies(kernel, shape, paginated, input.fields);
+    const edgeAdjacencies = buildEdgeToFaceAdjacencies(kernel, shape, paginated, input.select);
 
     const augmentedEdges = paginated.map((edge) => ({
       ...edge,
       ...(edgeAdjacencies ? { adjacent_faces: edgeAdjacencies.get(edge.id) ?? [] } : {}),
     }));
 
-    const entities = augmentedEdges.map((edge) => projectEdge(edge, input.fields));
+    const entities = augmentedEdges.map((edge) => projectEdge(edge, input.select));
     const pagination = createPagination(limit, offset, paginated.length, total_matched);
 
     return createQueryResponse(
@@ -88,7 +84,7 @@ function buildEdgeToFaceAdjacencies(
   kernel: OcctKernel,
   shape: ShapeHandle,
   paginated: ExtractedEdgeEntity[],
-  fields: QueryEdgesInput['fields'],
+  fields: QueryEdgesInput['select'],
 ): Map<string, Array<{ face_id: string; surface_type: string }>> | undefined {
   if (!fields?.includes('adjacent_faces')) return undefined;
 
@@ -130,6 +126,8 @@ function groupEdges(
           return edge.curve_type;
         case 'length_range':
           return magnitudeBucketKey(edge.length);
+        case 'radius_range':
+          return edge.radius !== undefined ? edge.radius : null;
         case 'body_id':
           return edge.body_id ?? 'unknown';
         default:
@@ -148,36 +146,41 @@ export function applyEdgeFilters(
   input: QueryEdgesInput,
 ): ExtractedEdgeEntity[] {
   let result = edges;
+  const where = input.where ?? {};
 
   if (input.entity_ids && input.entity_ids.length > 0) {
     const idSet = new Set(input.entity_ids);
     result = result.filter((e) => idSet.has(e.id));
   }
 
-  if (input.body_ids && input.body_ids.length > 0) {
-    const bodySet = new Set(input.body_ids);
+  const bodyIds = Array.isArray(where.body_ids) ? where.body_ids : undefined;
+  if (bodyIds && bodyIds.length > 0) {
+    const bodySet = new Set(bodyIds);
     result = result.filter((e) => e.body_id !== undefined && bodySet.has(e.body_id));
   }
 
-  if (input.curve_types && input.curve_types.length > 0) {
-    const typeSet = new Set(input.curve_types);
-    result = result.filter((e) => typeSet.has(e.curve_type as never));
+  if (typeof where.curve_type === 'string') {
+    result = result.filter((e) => e.curve_type === where.curve_type);
   }
 
-  if (input.length_min !== undefined) {
-    result = result.filter((e) => e.length >= input.length_min!);
+  const lengthMin = where.length_min;
+  if (typeof lengthMin === 'number') {
+    result = result.filter((e) => e.length >= lengthMin);
   }
 
-  if (input.length_max !== undefined) {
-    result = result.filter((e) => e.length <= input.length_max!);
+  const lengthMax = where.length_max;
+  if (typeof lengthMax === 'number') {
+    result = result.filter((e) => e.length <= lengthMax);
   }
 
-  if (input.radius?.min !== undefined) {
-    result = result.filter((e) => e.radius !== undefined && e.radius >= input.radius!.min!);
+  const radiusMin = where.radius_min;
+  if (typeof radiusMin === 'number') {
+    result = result.filter((e) => e.radius !== undefined && e.radius >= radiusMin);
   }
 
-  if (input.radius?.max !== undefined) {
-    result = result.filter((e) => e.radius !== undefined && e.radius <= input.radius!.max!);
+  const radiusMax = where.radius_max;
+  if (typeof radiusMax === 'number') {
+    result = result.filter((e) => e.radius !== undefined && e.radius <= radiusMax);
   }
 
   return result;
@@ -185,7 +188,7 @@ export function applyEdgeFilters(
 
 export function sortEdges(
   edges: ExtractedEdgeEntity[],
-  sort: NonNullable<QueryEdgesInput['sort']>,
+  sort: NonNullable<QueryEdgesInput['order_by']>,
 ): ExtractedEdgeEntity[] {
   const sorted = [...edges];
   const direction = sort.direction === 'desc' ? -1 : 1;
@@ -220,7 +223,7 @@ export function sortEdges(
 
 export function projectEdge(
   edge: ExtractedEdgeEntity,
-  fields: QueryEdgesInput['fields'],
+  fields: QueryEdgesInput['select'],
 ): Record<string, unknown> {
   const selected = fields ?? ['id', 'curve_type', 'length', 'bbox', 'bbox_center', 'body_id'];
   const result: Record<string, unknown> = {};
@@ -247,6 +250,9 @@ export function projectEdge(
         break;
       case 'radius':
         if (edge.radius !== undefined) result.radius = edge.radius;
+        break;
+      case 'diameter':
+        if (edge.radius !== undefined) result.diameter = edge.radius * 2;
         break;
       case 'start_point':
         if (edge.start_point !== undefined) result.start_point = edge.start_point;

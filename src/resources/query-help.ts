@@ -2,39 +2,16 @@
  * `cad-mcp://query-help` resource.
  *
  * MCP Resources are application-controlled read-only data sources that the
- * LLM client loads into context for schema discovery. From the MCP docs:
- * "If you put your database schema as a tool, the model has to spend a turn
- *  calling it before it can write queries. If you put it as a resource, the
- *  model already knows the schema from the moment the server connects."
+ * LLM client loads into context for schema discovery.
  *
- * This resource returns a compact JSON document containing the schema
- * reference (field names + types), the measure op vocabulary, the
- * group_by dimensions, all filter fields grouped by entity type, the 6
- * query_step input_examples, and the 4 transact_step input_examples.
- * The LLM fetches it on demand when starting an unfamiliar task.
- *
- * Note: we deliberately do NOT include the full Zod schema objects in
- * the help document — they contain internal references and would not
- * JSON-serialize cleanly. Instead we surface the *shape*: field names,
- * types, and requiredness, drawn from a static table. The full schema
- * is registered with the MCP server as the tool's inputSchema.
+ * This resource returns a compact JSON document covering:
+ *   - Tool descriptions and purpose
+ *   - Supported query fields per entity type
+ *   - group_by dimensions, measure ops
+ *   - Usage examples
  */
 
-import {
-  ENTITIES,
-  GROUP_BY_DIMENSIONS,
-  MEASURE_OPS,
-  PIPELINE_OPS,
-  RETURN_TYPES,
-  SURFACE_TYPES,
-  CURVE_TYPES,
-  VALIDITY_STATUSES,
-  PMI_TYPES,
-  TOLERANCE_SUBTYPES,
-  MATERIAL_CONDITIONS,
-  BODY_TYPES,
-  COLOR_TYPES,
-} from '../schemas/tool-schemas.js';
+import { SURFACE_TYPES, CURVE_TYPES, MEASURE_OPS, RETURN_TYPES } from '../schemas/tool-schemas.js';
 import { toolExamples } from '../schemas/examples.js';
 
 export const QUERY_HELP_URI = 'cad-mcp://query-help';
@@ -54,149 +31,138 @@ export function queryHelpResourceHandler(): ResourceContent {
   };
 }
 
-/* ------------------------------------------------------------------ */
-/*  Build the help document                                            */
-/* ------------------------------------------------------------------ */
-
 function buildHelpDocument() {
   return {
-    version: '0.2.0',
-    surface: '4-tool',
+    version: '0.5.0',
+    surface: '5-tool (inspect → query → measure pattern)',
     description:
-      'CAD MCP Server exposes 4 read-only tools over a cached OCCT model. Tools return measured facts; the LLM interprets engineering meaning.',
+      'CAD MCP Server exposes 5 read-only tools for STEP geometry inspection. Workflow: (1) inspect_step for overview, (2) query_faces or query_edges to find entities, (3) measure_step for geometric measurements on discovered entities.',
+    rules: [
+      'Start with inspect_step for model overview.',
+      'Use query_faces to find faces (cylinders, planes, etc.) and query_edges to find edges (circles, lines).',
+      'Use measure_step with entity IDs from query_faces/query_edges for ray-tests, distance, etc.',
+      'entity_ids in measure_step must come from a prior query result — never invent them.',
+      'Omit optional fields entirely. Do not send empty arrays or zero bounds as placeholders.',
+      'Batch measurements: pass multiple entity_ids to measure_step in one call.',
+    ],
+    tables: {
+      faces: {
+        description: 'Faces of the B-rep model.',
+        where_fields: [
+          'surface_type',
+          'area_min',
+          'area_max',
+          'radius_min',
+          'radius_max',
+          'body_ids',
+        ],
+        select_fields: [
+          'id',
+          'surface_type',
+          'area',
+          'normal',
+          'radius',
+          'diameter',
+          'axis',
+          'extent_along_axis',
+          'bbox',
+          'bbox_center',
+          'body_id',
+        ],
+        group_by: ['axis', 'surface_type', 'area_range', 'radius_range', 'body_id'],
+      },
+      edges: {
+        description: 'Edges of the B-rep model.',
+        where_fields: [
+          'curve_type',
+          'length_min',
+          'length_max',
+          'radius_min',
+          'radius_max',
+          'body_ids',
+        ],
+        select_fields: [
+          'id',
+          'curve_type',
+          'length',
+          'radius',
+          'diameter',
+          'start_point',
+          'end_point',
+          'bbox',
+          'bbox_center',
+          'body_id',
+        ],
+        group_by: ['curve_type', 'length_range', 'radius_range', 'body_id'],
+      },
+    },
     tools: {
       inspect_step: {
         purpose:
-          'Compact first-pass overview of a STEP file: dimensions, body count, topology, validity, XDE summary.',
-        input: { file_path: 'string (required)' },
+          'Compact first-pass overview: dimensions, body count, topology, validity, PMI presence.',
         example: toolExamples.inspect_step[0],
       },
-      query_step: {
-        purpose:
-          'Declarative query over faces, edges, bodies, vertices, pmi, color, layer, material, assembly_node.',
-        input: {
+      query_faces: {
+        purpose: 'Find and filter faces. Returns IDs, surface types, areas, radii, axes, normals.',
+        shape: {
           file_path: 'string (required)',
-          entities: 'enum (required): ' + ENTITIES.join(', '),
-          entity_ids: 'string[] (optional, direct lookup)',
-          filter:
-            'object (optional, single bag with conditional semantics; see filter_fields_by_entity)',
-          group_by: 'enum[] (optional, up to 3): ' + GROUP_BY_DIMENSIONS.join(', '),
-          measure: 'object[] (optional, up to 10): see measure_ops',
-          aggregate:
-            'string[] (optional, up to 20): format "<op>:<field>" — op in (count, min, max, avg, stddev, sum)',
-          select: 'string[] (optional, up to 30): field names to include',
-          sort: '{by, direction} (optional)',
+          surface_type: `enum (optional): ${SURFACE_TYPES.join(', ')}`,
+          where_fields: 'see tables.faces.where_fields',
+          group_by:
+            'enum[] (optional): axis, normal_direction, surface_type, area_range, radius_range, body_id',
+          select: 'string[] (optional): see tables.faces.select_fields',
+          order_by: '{by, direction} (optional): by area, radius, surface_type, center_x/y/z',
+          aggregate: 'string[] (optional): "count", "min:area", "max:radius", "avg:diameter"',
           limit: 'integer (default 100, max 1000)',
           offset: 'integer (default 0)',
-          return_type: 'enum (default entities): ' + RETURN_TYPES.join(', '),
+          return_type: `enum (default entities): ${RETURN_TYPES.join(', ')}`,
         },
-        entities: ENTITIES,
-        group_by: GROUP_BY_DIMENSIONS,
-        measure_ops: MEASURE_OPS,
-        return_types: RETURN_TYPES,
-        examples: toolExamples.query_step,
-        filter_fields_by_entity: filterFieldsByEntity(),
-        enums: {
-          surface_type: SURFACE_TYPES,
-          curve_type: CURVE_TYPES,
-          validity_status: VALIDITY_STATUSES,
-          pmi_type: PMI_TYPES,
-          tolerance_subtype: TOLERANCE_SUBTYPES,
-          material_condition: MATERIAL_CONDITIONS,
-          body_type: BODY_TYPES,
-          color_type: COLOR_TYPES,
+        examples: toolExamples.query_faces,
+      },
+      query_edges: {
+        purpose: 'Find and filter edges. Returns IDs, curve types, lengths, radii.',
+        shape: {
+          file_path: 'string (required)',
+          curve_type: `enum (optional): ${CURVE_TYPES.join(', ')}`,
+          where_fields: 'see tables.edges.where_fields',
+          group_by: 'enum[] (optional): curve_type, length_range, radius_range, body_id',
+          select: 'string[] (optional): see tables.edges.select_fields',
+          order_by: '{by, direction} (optional): by length, radius, curve_type, center_x/y/z',
+          aggregate: 'string[] (optional): "count", "min:radius", "max:length"',
+          limit: 'integer (default 100, max 1000)',
+          offset: 'integer (默认 0)',
+          return_type: `enum (default entities): ${RETURN_TYPES.join(', ')}`,
         },
+        examples: toolExamples.query_edges,
+      },
+      measure_step: {
+        purpose:
+          'Batch geometric measurement on known entity IDs. Supports ray-tests, distance, section, curvature, point classification.',
+        shape: {
+          file_path: 'string (required)',
+          entity_ids: 'face:N[] | edge:N[] (required, from prior query)',
+          op: `enum (required): ${MEASURE_OPS.join(', ')}`,
+          direction: '[x,y,z] | "along_axis" | "along_axis_both" | "normal" (ray ops only)',
+          spacing_mm: 'number (ray_test_grid, default 2.0)',
+          tmax: 'number (ray_test_segment, max ray distance)',
+          to: 'entity ID or array (distance ops)',
+          plane_origin: '[x,y,z] (section_by_plane)',
+          plane_normal: '[x,y,z] (section_by_plane)',
+          param: 'number 0-1 (curvature_at_param)',
+          point: '[x,y,z] (classify_point, closest_point_on_face)',
+        },
+        examples: toolExamples.measure_step,
       },
       diff_step: {
-        purpose:
-          'Compare two STEP files: dimension, volume, area, topology, body, PMI, color, material deltas.',
-        input: {
-          baseline_file_path: 'string (required)',
-          comparison_file_path: 'string (required)',
-        },
+        purpose: 'Compare two STEP files: dimension, volume, area, topology deltas.',
         example: toolExamples.diff_step[0],
       },
-      transact_step: {
-        purpose:
-          'Imperative pipeline for multi-step workflows needing iteration across result sets.',
-        input: {
-          file_path: 'string (required)',
-          pipeline: 'array of {op, params, do, where, fields} (required, 1-50 steps)',
-          return_intermediate: 'boolean (default false)',
-        },
-        pipeline_ops: PIPELINE_OPS,
-        examples: toolExamples.transact_step,
-      },
     },
-    migration_from_9_tool_surface: {
-      inspect_step_file: 'inspect_step (single call)',
-      find_step_faces:
-        'query_step({entities: "faces", filter: {...}, group_by: [...], select: [...]})',
-      find_step_edges:
-        'query_step({entities: "edges", filter: {...}, group_by: [...], select: [...]})',
-      get_step_entities: 'query_step({entities: "<type>", entity_ids: ["face:5", ...]})',
-      query_step_pmi: 'query_step({entities: "pmi", filter: {...}, select: [...]})',
-      query_ray_intersect: 'query_step({entities: "faces", measure: [{op: "ray_test", ...}]})',
-      measure_distance:
-        'query_step({entities: "faces", measure: [{op: "distance", to: "face:N"}]})',
-      compare_step_files: 'diff_step({baseline_file_path, comparison_file_path})',
-      find_coaxial_cylinders:
-        'query_step({entities: "faces", filter: {surface_type: "cylinder"}, group_by: ["axis"], select: [...]})',
+    enums: {
+      surface_type: SURFACE_TYPES,
+      curve_type: CURVE_TYPES,
+      measure_ops: MEASURE_OPS,
+      return_types: RETURN_TYPES,
     },
-    caveats: [
-      'In the initial cut, only `faces` and `edges` entity types are fully wired through the engine. Other entity types return a "not yet implemented" error with a clear migration message; they ship alongside the Tier A kernel methods.',
-      'measure and aggregate dispatch is staged; the response returns the base query result with a `limitations` entry that explains the staging. The op vocabulary is fully described here so callers can compose queries against the staged surface.',
-      'transact_step supports `query` and `select`; `for_each`, `filter_results`, and `walk_assembly` parse but defer execution to a subsequent release.',
-    ],
   };
-}
-
-function filterFieldsByEntity() {
-  /* Walk the filter schema to identify which keys apply to which entity
-   * type. The grouping is a documentation aid for the LLM; the engine
-   * itself uses the single-bag filter and ignores irrelevant fields. */
-  const groups: Record<string, string[]> = {
-    faces: [
-      'surface_type',
-      'area_min',
-      'area_max',
-      'normal',
-      'radius_min',
-      'radius_max',
-      'body_ids',
-      'validity_status',
-      'tolerance_max',
-      'canonical_form',
-      'linked_to_pmi',
-    ],
-    edges: [
-      'curve_type',
-      'length_min',
-      'length_max',
-      'radius_min',
-      'radius_max',
-      'curvature_min',
-      'curvature_max',
-      'has_curve3d',
-      'body_ids',
-      'validity_status',
-      'tolerance_max',
-      'linked_to_pmi',
-    ],
-    bodies: ['body_type', 'volume_min', 'volume_max', 'validity_status'],
-    vertices: ['tolerance_max'],
-    pmi: [
-      'pmi_type',
-      'tolerance_subtype',
-      'value_min',
-      'value_max',
-      'material_condition',
-      'linked_to',
-    ],
-    color: ['color_type', 'rgb'],
-    layer: ['layer_name'],
-    material: ['material_name'],
-    assembly_node: ['node_name', 'is_instance', 'is_root'],
-  };
-  return groups;
 }

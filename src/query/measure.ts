@@ -13,7 +13,7 @@
  *   - classify_point           IN/ON/OUT of a face (UV-based)
  *   - closest_point_on_face    project 3D point to face, return UV
  *
- * Staged ops (require Tier A kernel methods; return a clear "staged" marker):
+ * Not yet implemented:
  *   - distance_extrema
  *   - section_by_plane
  *   - curvature_at_param
@@ -23,6 +23,7 @@
 
 import type { OcctKernel, ShapeHandle, Vec3 } from 'occt-wasm';
 import { resolveRayHits, queryRay } from '../kernel/ray-utils.js';
+import { parseEntityId } from '../utils/ids.js';
 
 export type MeasureOpName =
   | 'ray_test'
@@ -40,6 +41,7 @@ export type MeasureOpName =
 export interface MeasureSpec {
   op: MeasureOpName | string;
   direction?: number[];
+  direction_shortcut?: string;
   origin?: number[] | string;
   tmax?: number;
   spacing_mm?: number;
@@ -140,7 +142,7 @@ function runMeasure(
       /* 2D point-in-face via the existing classifyPointOnFace kernel call.
        * The face's UV bounds are queried first; the point's UV is then
        * classified. For 3D point-in-solid, use the containsPoint kernel
-       * call (used by the legacy measure_distance service). */
+       * call for 3D point-in-solid checks. */
       const uv = tryProjectToFaceUV(kernel, entityHandle, spec.point);
       if (!uv) {
         return { error: 'point does not project to face' };
@@ -161,7 +163,7 @@ function runMeasure(
       const pointOnSurface = kernel.pointOnSurface(entityHandle, uv[0], uv[1]);
       return { uv, point_on_surface: pointOnSurface };
     }
-    /* Tier A staged ops */
+    /* Not yet implemented ops */
     case 'distance_extrema':
     case 'section_by_plane':
     case 'curvature_at_param':
@@ -170,7 +172,7 @@ function runMeasure(
       return {
         staged: true,
         op: spec.op,
-        message: `${spec.op} requires Tier A kernel methods; ships in a subsequent release.`,
+        message: `${spec.op} is not implemented.`,
       };
     default:
       return { error: `unknown measure op "${spec.op}"` };
@@ -312,14 +314,11 @@ function resolveTargetShape(
   shape: ShapeHandle,
   entityId: string,
 ): ShapeHandle | undefined {
-  /* Parse "face:N", "edge:N", "vertex:N" into an index. */
-  const m = /^(face|edge|vertex):(\d+)$/.exec(entityId);
-  if (!m) return undefined;
-  const entityType = m[1] as 'face' | 'edge' | 'vertex';
-  const idx = Number(m[2]);
+  const parsed = parseEntityId(entityId);
+  if (!parsed || parsed.type === 'body') return undefined;
   try {
-    const subs = kernel.getSubShapes(shape, entityType);
-    return subs[idx];
+    const subs = kernel.getSubShapes(shape, parsed.type);
+    return subs[parsed.index];
   } catch {
     return undefined;
   }

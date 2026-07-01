@@ -16,15 +16,11 @@ import {
 } from './shared.js';
 
 export interface QueryFacesInput {
-  surface_types?: string[];
-  area_min?: number;
-  area_max?: number;
-  normal?: { parallel_to: number[]; tolerance_degrees?: number };
-  body_ids?: string[];
+  where?: Record<string, unknown>;
   entity_ids?: string[];
-  fields?: string[];
+  select?: string[];
   group_by?: string[];
-  sort?: { by: string; direction?: 'asc' | 'desc' };
+  order_by?: { by: string; direction?: 'asc' | 'desc' };
   return_type?: 'summary' | 'entities' | 'groups';
   pull_direction?: number[];
   limit?: number;
@@ -37,8 +33,8 @@ export async function queryStepFaces(filePath: string, input: QueryFacesInput) {
     const { kernel, shape } = await model.getShapeContext('query_step_faces');
 
     let filtered = applyFaceFilters(allFaces, input);
-    if (input.sort) {
-      filtered = sortFaces(filtered, input.sort);
+    if (input.order_by) {
+      filtered = sortFaces(filtered, input.order_by);
     }
 
     const resultMode = input.return_type ?? 'entities';
@@ -54,13 +50,13 @@ export async function queryStepFaces(filePath: string, input: QueryFacesInput) {
     const paginated = includeEntities ? filtered.slice(offset, offset + limit) : [];
 
     const faceShapes = kernel.getSubShapes(shape, 'face');
-    const adjacencies = buildFaceAdjacencies(kernel, shape, faceShapes, paginated, input.fields);
+    const adjacencies = buildFaceAdjacencies(kernel, shape, faceShapes, paginated, input.select);
     const closestDistances = buildClosestFaceDistances(
       kernel,
       faceShapes,
       paginated,
       allFaces,
-      input.fields,
+      input.select,
     );
 
     const augmentedFaces = paginated.map((face) => ({
@@ -70,7 +66,7 @@ export async function queryStepFaces(filePath: string, input: QueryFacesInput) {
     }));
 
     const entities = augmentedFaces.map((face) =>
-      projectFace(face, input.fields, input.pull_direction),
+      projectFace(face, input.select, input.pull_direction),
     );
     const pagination = createPagination(limit, offset, paginated.length, total_matched);
 
@@ -105,7 +101,7 @@ function buildFaceAdjacencies(
   shape: ShapeHandle,
   faceShapes: ShapeHandle[],
   paginated: ExtractedFaceEntity[],
-  fields: QueryFacesInput['fields'],
+  fields: QueryFacesInput['select'],
 ):
   | Map<
       string,
@@ -178,7 +174,7 @@ function buildClosestFaceDistances(
   faceShapes: ShapeHandle[],
   paginated: ExtractedFaceEntity[],
   allFaces: ExtractedFaceEntity[],
-  fields: QueryFacesInput['fields'],
+  fields: QueryFacesInput['select'],
 ): Map<string, { face_id: string; distance: number }> | undefined {
   if (!fields?.includes('closest_face_distance')) return undefined;
 
@@ -222,13 +218,15 @@ function groupFaces(
     dimensions,
     (face, dimension) => {
       switch (dimension) {
+        case 'axis':
+          return face.axis ? axisDirectionKey(face.axis.direction) : 'undefined';
         case 'surface_type':
           return face.surface_type;
         case 'normal_direction':
           return face.normal ? axisDirectionKey(face.normal) : 'undefined';
         case 'area_range':
           return magnitudeBucketKey(face.area);
-        case 'radius':
+        case 'radius_range':
           return face.radius !== undefined ? radiusBucketValue(face.radius) : null;
         case 'body_id':
           return face.body_id ?? 'unknown';
@@ -248,33 +246,47 @@ export function applyFaceFilters(
   input: QueryFacesInput,
 ): ExtractedFaceEntity[] {
   let result = faces;
+  const where = input.where ?? {};
 
   if (input.entity_ids && input.entity_ids.length > 0) {
     const idSet = new Set(input.entity_ids);
     result = result.filter((f) => idSet.has(f.id));
   }
 
-  if (input.body_ids && input.body_ids.length > 0) {
-    const bodySet = new Set(input.body_ids);
+  const bodyIds = Array.isArray(where.body_ids) ? where.body_ids : undefined;
+  if (bodyIds && bodyIds.length > 0) {
+    const bodySet = new Set(bodyIds);
     result = result.filter((f) => f.body_id !== undefined && bodySet.has(f.body_id));
   }
 
-  if (input.surface_types && input.surface_types.length > 0) {
-    const typeSet = new Set(input.surface_types);
-    result = result.filter((f) => typeSet.has(f.surface_type as never));
+  if (typeof where.surface_type === 'string') {
+    result = result.filter((f) => f.surface_type === where.surface_type);
   }
 
-  if (input.area_min !== undefined) {
-    result = result.filter((f) => f.area >= input.area_min!);
+  const areaMin = where.area_min;
+  if (typeof areaMin === 'number') {
+    result = result.filter((f) => f.area >= areaMin);
   }
 
-  if (input.area_max !== undefined) {
-    result = result.filter((f) => f.area <= input.area_max!);
+  const areaMax = where.area_max;
+  if (typeof areaMax === 'number') {
+    result = result.filter((f) => f.area <= areaMax);
   }
 
-  if (input.normal?.parallel_to) {
-    const targetNormal = normalizeVector(input.normal.parallel_to);
-    const tolerance = input.normal.tolerance_degrees ?? 10;
+  const radiusMin = where.radius_min;
+  if (typeof radiusMin === 'number') {
+    result = result.filter((f) => f.radius !== undefined && f.radius >= radiusMin);
+  }
+
+  const radiusMax = where.radius_max;
+  if (typeof radiusMax === 'number') {
+    result = result.filter((f) => f.radius !== undefined && f.radius <= radiusMax);
+  }
+
+  const normal = where.normal as { parallel_to?: number[]; tolerance_degrees?: number } | undefined;
+  if (normal?.parallel_to) {
+    const targetNormal = normalizeVector(normal.parallel_to);
+    const tolerance = normal.tolerance_degrees ?? 10;
     result = result.filter((f) => {
       if (!f.normal) return false;
       const faceNormal = normalizeVector(f.normal);
@@ -288,7 +300,7 @@ export function applyFaceFilters(
 
 export function sortFaces(
   faces: ExtractedFaceEntity[],
-  sort: NonNullable<QueryFacesInput['sort']>,
+  sort: NonNullable<QueryFacesInput['order_by']>,
 ): ExtractedFaceEntity[] {
   const sorted = [...faces];
   const direction = sort.direction === 'desc' ? -1 : 1;
@@ -301,6 +313,9 @@ export function sortFaces(
         break;
       case 'surface_type':
         cmp = a.surface_type.localeCompare(b.surface_type);
+        break;
+      case 'radius':
+        cmp = (a.radius ?? 0) - (b.radius ?? 0);
         break;
       case 'center_x':
         cmp = a.bbox_center[0] - b.bbox_center[0];
@@ -320,7 +335,7 @@ export function sortFaces(
 
 export function projectFace(
   face: ExtractedFaceEntity,
-  fields: QueryFacesInput['fields'],
+  fields: QueryFacesInput['select'],
   pullDirection?: number[],
 ): Record<string, unknown> {
   const selected = fields ?? ['id', 'surface_type', 'area', 'bbox', 'bbox_center', 'body_id'];
@@ -370,6 +385,12 @@ export function projectFace(
         if (face.radius !== undefined) {
           result.surface_parameters = { radius: face.radius };
         }
+        break;
+      case 'radius':
+        if (face.radius !== undefined) result.radius = face.radius;
+        break;
+      case 'diameter':
+        if (face.radius !== undefined) result.diameter = face.radius * 2;
         break;
       case 'axis':
         if (face.axis !== undefined) result.axis = face.axis;

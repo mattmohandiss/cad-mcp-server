@@ -1,9 +1,0 @@
-{
-  "file": "bracket_v1.step",
-  "design_intent": "50x50x10mm base plate with 3 through-holes (5mm diameter, 3 on v1, 0 extra on v2).",
-  "expected_answers": {
-    "cylindrical_face_groups": 3,
-    "holes_on_base": 3
-  },
-  "notes": "Use to test diff_step between v1 and v2. Expected diff: +1 cylindrical face group, +2 cylindrical face entries, +N edge entries (the extra hole contributes inner + outer edges)."
-}

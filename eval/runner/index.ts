@@ -1,85 +1,43 @@
-#!/usr/bin/env node
 /**
- * CLI: run the LLM eval against models × questions.
+ * eval/runner/index.ts — CLI entry for CAD MCP eval.
  *
- * Reads OPENROUTER_API_KEY from eval/.env automatically.
+ * Usage:
+ *   npx tsx eval/runner/index.ts                                  # default models × all scenarios
+ *   npx tsx eval/runner/index.ts -m anthropic/claude-sonnet-4-5   # one model
+ *   npx tsx eval/runner/index.ts -s basic_volume                  # one scenario
+ *   npx tsx eval/runner/index.ts -m openai/gpt-4o-mini -s box_volume
  *
- * Examples:
- *   npx tsx eval/runner/index.ts                          # all models × all questions
- *   npx tsx eval/runner/index.ts --model sonnet            # just Claude
- *   npx tsx eval/runner/index.ts --model gpt --model gemini # two models
- *   npx tsx eval/runner/index.ts --question box_volume     # just one question
- *   npx tsx eval/runner/index.ts -m sonnet -q box_volume   # one model × one question
+ * Model IDs are Vercel AI Gateway identifiers in creator/model format.
  */
 
-import { runAll, formatReport } from './runner.js';
-import { EVAL_MODELS } from './model-registry.js';
-import { QUESTIONS } from './questions.js';
+import { DEFAULT_LOG_DIR, DEFAULT_MODELS, loadEvalEnv } from './config.js';
+import { formatReport, runAll } from './runner.js';
 
-const SHORTCUTS: Record<string, string> = {
-  sonnet: 'Claude Sonnet 4.5',
-  claude: 'Claude Sonnet 4.5',
-  gpt: 'GPT-4o-mini',
-  gpt4o: 'GPT-4o-mini',
-  gemini: 'Gemini 2.5 Flash',
-  flash: 'Gemini 2.5 Flash',
-};
-
-function parseArgs() {
-  const args = process.argv.slice(2);
-  const modelLabels: string[] = [];
-  const questionIds: string[] = [];
-
+function resolveItems(args: string[], flags: string[]): string[] | undefined {
+  const out: string[] = [];
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--model' || args[i] === '-m') {
-      const val = args[++i];
-      if (!val) throw new Error('--model requires a value');
-      modelLabels.push(SHORTCUTS[val.toLowerCase()] ?? val);
-    } else if (args[i] === '--question' || args[i] === '-q') {
-      const val = args[++i];
-      if (!val) throw new Error('--question requires a value');
-      questionIds.push(val);
-    } else {
-      throw new Error(`Unknown flag: ${args[i]}. Use --model / -m and --question / -q`);
-    }
+    if (flags.includes(args[i]) && i + 1 < args.length) out.push(args[++i]);
   }
-
-  const models =
-    modelLabels.length > 0 ? EVAL_MODELS.filter((m) => modelLabels.includes(m.label)) : EVAL_MODELS;
-  const questions =
-    questionIds.length > 0 ? QUESTIONS.filter((q) => questionIds.includes(q.id)) : QUESTIONS;
-
-  if (models.length === 0) {
-    throw new Error(
-      `No models matched. Available: ${EVAL_MODELS.map((m) => `${m.label} (--model ${m.label.split(' ')[0].toLowerCase()})`).join(', ')}`,
-    );
-  }
-  if (questions.length === 0) {
-    throw new Error(`No questions matched. Available: ${QUESTIONS.map((q) => q.id).join(', ')}`);
-  }
-
-  return { models, questions };
+  return out.length > 0 ? out : undefined;
 }
 
 async function main() {
-  const { models, questions } = parseArgs();
+  loadEvalEnv();
 
-  process.stdout.write(`Models (${models.length}):   ${models.map((m) => m.label).join(', ')}\n`);
-  process.stdout.write(
-    `Questions (${questions.length}): ${questions.map((q) => q.id).join(', ')}\n\n`,
-  );
+  const args = process.argv.slice(2);
+  const models = resolveItems(args, ['-m', '--model']) ?? DEFAULT_MODELS;
+  const scenarioIds = resolveItems(args, ['-s', '--scenario']);
 
-  const bulk = await runAll({ models, questions, logDir: 'tests/eval-logs' });
+  console.log(`Models (${models.length}):   ${models.join(', ')}`);
+  if (scenarioIds) console.log(`Scenarios (${scenarioIds.length}): ${scenarioIds.join(', ')}`);
 
-  process.stdout.write(formatReport(bulk));
+  const bulk = await runAll({ models, scenarioIds, logDir: DEFAULT_LOG_DIR });
+  console.log(formatReport(bulk));
 
-  const fail = bulk.overall.total - bulk.overall.pass;
-  if (fail > 0) {
-    process.exit(1);
-  }
+  if (bulk.overall.pass < bulk.overall.total) process.exit(1);
 }
 
-main().catch((err) => {
-  process.stderr.write(`Eval failed: ${err}\n`);
+main().catch((e) => {
+  console.error('Fatal:', e);
   process.exit(1);
 });

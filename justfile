@@ -38,8 +38,8 @@ build-wasm:
 	  docker rm $cid; \
 	fi
 
-# Run the LLM eval suite against all models × questions. Requires
-# OPENROUTER_API_KEY in env or eval/.env. Builds the server first.
+# Run the LLM eval suite against all models × scenarios. Requires
+# AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN. Builds the server first.
 eval: _build-server
 	npx tsx eval/runner/index.ts
 

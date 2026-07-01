@@ -7,10 +7,19 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { CAD_MCP_SERVER_VERSION } from './schema-version.js';
 import { inspectStepInput, handleInspectStep } from './tools/inspect.js';
-import { queryStepInput, handleQueryStep } from './tools/query.js';
+import { queryFacesInput, handleQueryFaces } from './tools/query-faces.js';
+import { queryEdgesInput, handleQueryEdges } from './tools/query-edges.js';
+import { handleMeasureStep } from './tools/measure.js';
 import { diffStepInput, handleDiffStep } from './tools/diff.js';
-import { transactStepInput, handleTransactStep } from './tools/transact.js';
 import { queryHelpResourceHandler, QUERY_HELP_URI } from './resources/query-help.js';
+import {
+  inspectStepInputSchema,
+  queryFacesInputSchema,
+  queryEdgesInputSchema,
+  measureStepInputSchema,
+  diffStepInputSchema,
+} from './schemas/tool-schemas.js';
+import type { MeasureStepInput } from './schemas/tool-schemas.js';
 import { toolExamples } from './schemas/examples.js';
 
 const server = new McpServer({
@@ -61,8 +70,14 @@ type RegisterTool = (
   config: {
     title: string;
     description: string;
-    inputSchema: Record<string, z.ZodType>;
+    inputSchema: Record<string, z.ZodType> | z.ZodTypeAny;
     outputSchema?: Record<string, z.ZodType> | z.ZodTypeAny;
+    annotations?: {
+      readOnlyHint?: boolean;
+      destructiveHint?: boolean;
+      idempotentHint?: boolean;
+      openWorldHint?: boolean;
+    };
   },
   callback: (args: Record<string, unknown>) => StepToolResult,
 ) => unknown;
@@ -77,14 +92,39 @@ function withErrorContext(
     try {
       return await handler(args);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        const messages = error.issues.map((issue) => {
+          const path = issue.path.join('.');
+          const hint =
+            issue.code === 'too_small'
+              ? `. Omit this field entirely if you don't need to constrain it; do not pass an empty array [] or object.`
+              : '';
+          return `${path}: ${issue.message}${hint}`;
+        });
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `Invalid arguments for tool ${toolName}:\n${messages.join('\n')}`,
+            },
+          ],
+          isError: true,
+        };
+      }
       console.error(`Tool ${toolName} failed:`, error);
       throw error;
     }
   };
 }
 
+const READ_ONLY_ANNOTATIONS = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+};
+
 /* ------------------------------------------------------------------ */
-/*  Tool registrations — 4-tool surface                                */
+/*  inspect_step                                                       */
 /* ------------------------------------------------------------------ */
 
 registerTool(
@@ -92,8 +132,9 @@ registerTool(
   {
     title: 'Inspect STEP File',
     description:
-      "Use this FIRST when given a STEP file to inspect. Returns a compact summary: bounding box (AABB and OBB), watertight status, body/solid/face/edge/vertex counts, global properties (volume, surface area, center of mass, inertia, principal axes), per-subshape validity, tolerance statistics, and XDE metadata (assembly tree, PMI summary, color/layer/material presence). If the part is invalid, returns a structured list of which sub-shapes failed and why — the LLM gets actionable information, not a boolean. Don't use for entity-level searches; use query_step for that.",
-    inputSchema: inspectStepInput.shape,
+      "Use this FIRST when given a STEP file to inspect. Returns a compact summary: bounding box, watertight status, body/solid/face/edge/vertex counts, global properties (volume, surface area, center of mass, inertia, principal axes), per-subshape validity, tolerance statistics, and XDE metadata (assembly tree, PMI summary, color/layer/material presence). Don't use for entity-level searches; use query_faces or query_edges for that.",
+    inputSchema: inspectStepInputSchema,
+    annotations: READ_ONLY_ANNOTATIONS,
   },
   withErrorContext('inspect_step', async (args) => {
     const parsed = inspectStepInput.parse(args);
@@ -101,27 +142,75 @@ registerTool(
   }),
 );
 
+/* ------------------------------------------------------------------ */
+/*  query_faces                                                        */
+/* ------------------------------------------------------------------ */
+
 registerTool(
-  'query_step',
+  'query_faces',
   {
-    title: 'Query STEP (declarative)',
+    title: 'Query Faces',
     description:
-      'Declarative query over a STEP file\'s geometric, topological, and XDE entities. Specify which entity type to query (faces, edges, bodies, vertices, pmi, color, layer, material, assembly_node), filter by properties, optionally group by a shared dimension (axis, normal, surface type, etc.), measure derived values per entity or per group (ray tests, distances, curvature, section, continuity), and aggregate statistics (count, min, max, avg) over the result set. Use group_by to cluster entities that share a property — the operation find_coaxial_cylinders used to do is now {entities: "faces", filter: {surface_type: "cylinder"}, group_by: ["axis"]}. The result is one call instead of the 5+ round-trips that primitive-only tools require, and intermediate state stays on the server (set return_intermediate: true for debugging). For multi-step workflows that need iteration across result sets ("for each hole, ray-test, then filter"), use transact_step instead.',
-    inputSchema: queryStepInput.shape,
+      'Find and filter faces on a STEP model. Use this to discover cylindrical faces (holes, bosses), planar faces (mounting surfaces), or faces matching size criteria. Returns face IDs, surface types, areas, radii, diameters, axes, normals, bounding boxes, and more. Use the returned face IDs in measure_step for ray-tests, distance checks, and other geometric measurements.',
+    inputSchema: queryFacesInputSchema,
+    annotations: READ_ONLY_ANNOTATIONS,
   },
-  withErrorContext('query_step', async (args) => {
-    const parsed = queryStepInput.parse(args);
-    return jsonToolResult(await handleQueryStep(parsed));
+  withErrorContext('query_faces', async (args) => {
+    const parsed = queryFacesInput.parse(args);
+    return jsonToolResult(await handleQueryFaces(parsed));
   }),
 );
+
+/* ------------------------------------------------------------------ */
+/*  query_edges                                                        */
+/* ------------------------------------------------------------------ */
+
+registerTool(
+  'query_edges',
+  {
+    title: 'Query Edges',
+    description:
+      'Find and filter edges on a STEP model. Use this to discover circular edges (fillets, hole boundaries, rounds), straight edges (part boundaries), or edges matching size/curvature criteria. Returns edge IDs, curve types, lengths, radii, diameters, bounding boxes, and more. Use the returned edge IDs in measure_step for ray-tests, distance checks, and other geometric measurements.',
+    inputSchema: queryEdgesInputSchema,
+    annotations: READ_ONLY_ANNOTATIONS,
+  },
+  withErrorContext('query_edges', async (args) => {
+    const parsed = queryEdgesInput.parse(args);
+    return jsonToolResult(await handleQueryEdges(parsed));
+  }),
+);
+
+/* ------------------------------------------------------------------ */
+/*  measure_step                                                       */
+/* ------------------------------------------------------------------ */
+
+registerTool(
+  'measure_step',
+  {
+    title: 'Measure Geometry',
+    description:
+      'Run geometric measurements on one or more faces or edges. Use entity IDs returned by query_faces or query_edges. Supports batch measurement (measure many entities in one call). Operations: ray_test (single ray), ray_test_grid (grid of rays for wall thickness), ray_test_segment (bounded ray), distance (min distance to target), classify_point (IN/ON/OUT test), closest_point_on_face (project point), section_by_plane, curvature_at_param, continuity, principal_directions. Use direction shortcuts "along_axis", "along_axis_both", "normal" for faces (server resolves the actual direction per entity).',
+    inputSchema: measureStepInputSchema,
+    annotations: READ_ONLY_ANNOTATIONS,
+  },
+  withErrorContext('measure_step', async (args) => {
+    const parsed = measureStepInputSchema.parse(args) as MeasureStepInput;
+    return jsonToolResult(await handleMeasureStep(parsed));
+  }),
+);
+
+/* ------------------------------------------------------------------ */
+/*  diff_step                                                          */
+/* ------------------------------------------------------------------ */
 
 registerTool(
   'diff_step',
   {
     title: 'Diff STEP Files',
     description:
-      'Compare two STEP files and return metric deltas, topology changes, body-level changes, and XDE-level changes (PMI, colors, materials, assembly). Use this to compare two revisions of a part when you need factual differences in dimensions, volume, area, topology counts, or exchange metadata. Does NOT track feature identity across revisions — a hole that moved is "hole removed + hole added," not "hole moved." Deltas are comparison_file_path minus baseline_file_path.',
-    inputSchema: diffStepInput.shape,
+      'Compare two STEP files and return metric deltas, topology changes, body-level changes, and XDE-level changes (PMI, colors, materials, assembly). Use this to compare two revisions of a part. Does NOT track feature identity across revisions — a hole that moved is "hole removed + hole added," not "hole moved." Deltas are comparison minus baseline.',
+    inputSchema: diffStepInputSchema,
+    annotations: READ_ONLY_ANNOTATIONS,
   },
   withErrorContext('diff_step', async (args) => {
     const parsed = diffStepInput.parse(args);
@@ -129,22 +218,8 @@ registerTool(
   }),
 );
 
-registerTool(
-  'transact_step',
-  {
-    title: 'Transact STEP (pipeline)',
-    description:
-      'Run a multi-step workflow that needs iteration across result sets — for example, "for each hole, ray-test in +Z, then find ones where the ray didn\'t come out the other side." Each pipeline is a sequence of typed operations. The vocabulary is small: query (re-uses the query_step shape), for_each (apply a sub-pipeline to each item), filter_results (keep items where a condition holds), select (project to specific fields), and walk_assembly (XDE: traverse the assembly tree). Use this only when a single query_step call cannot express the workflow; for declarative queries, prefer query_step. Intermediate results are hidden by default; set return_intermediate: true to debug.',
-    inputSchema: transactStepInput.shape,
-  },
-  withErrorContext('transact_step', async (args) => {
-    const parsed = transactStepInput.parse(args);
-    return jsonToolResult(await handleTransactStep(parsed));
-  }),
-);
-
 /* ------------------------------------------------------------------ */
-/*  Resource registrations                                              */
+/*  query-help resource                                                */
 /* ------------------------------------------------------------------ */
 
 server.registerResource(
@@ -153,8 +228,12 @@ server.registerResource(
   {
     title: 'CAD MCP query help',
     description:
-      'Schema reference, measure op vocabulary, group_by dimensions, filter fields per entity type, and 6+4 input_examples for the query_step and transact_step tools. Fetched on demand by the LLM client to discover the surface.',
+      'Schema reference for query_faces, query_edges, and measure_step: supported surface types, curve types, where fields, select fields, group_by dimensions, measure ops, and examples. Fetched on demand by the LLM client.',
     mimeType: 'application/json',
+    annotations: {
+      audience: ['assistant'],
+      priority: 0.9,
+    },
   },
   async () => {
     const content = queryHelpResourceHandler();
@@ -170,19 +249,16 @@ server.registerResource(
   },
 );
 
-/* ------------------------------------------------------------------ */
-/*  Input examples — also exposed via tool definitions                 */
-/* ------------------------------------------------------------------ */
+void toolExamples;
 
-// Surface the input_examples via a tools/list extension. MCP doesn't
-// have a direct mechanism for examples; clients that want them should
-// fetch cad-mcp://query-help instead.
-void toolExamples; // referenced to keep the import side-effect explicit
+/* ------------------------------------------------------------------ */
+/*  Start                                                              */
+/* ------------------------------------------------------------------ */
 
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('CAD MCP Server started (4-tool surface)');
+  console.error('CAD MCP Server started (5-tool surface)');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {

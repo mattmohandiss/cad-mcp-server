@@ -1,152 +1,137 @@
 /**
- * input_examples for the 4-tool surface.
+ * input_examples for the 5-tool surface.
  *
- * Per Anthropic's tool-use guidance:
- *   - Use realistic data (real names, plausible values)
- *   - Show variety: minimal, partial, full specification patterns
- *   - Keep concise: 1-5 per tool
- *   - Focus on ambiguity (where correct usage isn't obvious from schema alone)
- *
- * query_step has 6 examples: 1 minimal + 5 full/partial
- * transact_step has 4 examples: 1 minimal + 3 full
+ * Per MCP tool-design guidance:
+ *   - Use realistic data
+ *   - Show variety: minimal to complex
+ *   - Keep sparse: only include fields relevant to the query
+ *   - Show the chain: inspect → query → measure pattern
  */
 
 import type { ToolName } from './tool-schemas.js';
 
 type Example = Record<string, unknown>;
 
-const queryStepExamples: Example[] = [
-  /* 1. Minimal: just required fields (entity lookup) */
+const queryFacesExamples: Example[] = [
+  /* 1. Find all cylinders */
   {
     file_path: 'model.step',
-    entities: 'faces',
-    entity_ids: ['face:5', 'face:6'],
+    surface_type: 'cylinder',
+    select: ['id', 'radius', 'diameter', 'axis', 'area'],
+    order_by: { by: 'radius', direction: 'asc' },
   },
 
-  /* 2. Full: filter + sort + limit + select (sort and select fields) */
+  /* 2. Find cylinders, group by axis direction */
   {
     file_path: 'model.step',
-    entities: 'faces',
-    filter: { surface_type: 'cylinder', radius_min: 0.1 },
-    sort: { by: 'radius', direction: 'asc' },
-    limit: 10,
-    select: ['id', 'axis', 'radius'],
-  },
-
-  /* 3. Full: group_by (the old find_coaxial_cylinders use case) */
-  {
-    file_path: 'model.step',
-    entities: 'faces',
-    filter: { surface_type: 'cylinder' },
+    surface_type: 'cylinder',
     group_by: ['axis'],
-    select: ['diameter', 'extent_along_axis', 'face_ids'],
+    select: ['id', 'radius', 'diameter', 'axis'],
+    return_type: 'groups',
   },
 
-  /* 4. Full: measure + aggregate (wall thickness distribution) */
+  /* 3. Count all planes and their total area */
   {
     file_path: 'model.step',
-    entities: 'faces',
-    measure: [{ op: 'ray_test_grid', direction: [0, 0, 1], spacing_mm: 2.0 }],
-    aggregate: ['min:hit_distance', 'max:hit_distance', 'avg:hit_distance', 'count:hit_distance'],
+    surface_type: 'plane',
+    group_by: ['surface_type'],
+    aggregate: ['count', 'sum:area'],
+    return_type: 'groups',
   },
 
-  /* 5. Partial: filter + select (new Tier A: validity_status) */
+  /* 4. Find holes within a diameter range (radius 2.5-10mm) */
   {
     file_path: 'model.step',
-    entities: 'edges',
-    filter: { validity_status: 'self_intersecting' },
-    select: ['id', 'length', 'validity_message'],
+    surface_type: 'cylinder',
+    radius_min: 2.5,
+    radius_max: 10,
+    select: ['id', 'radius', 'diameter', 'axis', 'extent_along_axis'],
+    order_by: { by: 'radius', direction: 'asc' },
   },
 
-  /* 6. Full: XDE PMI with linked_to filter */
+  /* 5. Find large faces (potential mounting surfaces) */
   {
     file_path: 'model.step',
-    entities: 'pmi',
-    filter: { linked_to: { surface_type: 'cylinder' }, tolerance_subtype: 'position' },
-    select: ['value', 'datum_refs', 'linked_to'],
+    area_min: 100,
+    select: ['id', 'surface_type', 'area', 'normal', 'bbox'],
+    order_by: { by: 'area', direction: 'desc' },
+    limit: 10,
   },
 ];
 
-const transactStepExamples: Example[] = [
-  /* 1. Minimal: single query step */
+const queryEdgesExamples: Example[] = [
+  /* 1. Find circular edges (fillets, holes) within a radius range */
   {
     file_path: 'model.step',
-    pipeline: [{ op: 'query', params: { entities: 'faces', filter: { surface_type: 'plane' } } }],
+    curve_type: 'circle',
+    radius_min: 1,
+    radius_max: 10,
+    select: ['id', 'radius', 'diameter', 'length', 'bbox'],
+    order_by: { by: 'radius', direction: 'asc' },
   },
 
-  /* 2. Full: find blind holes (query + for_each + filter + select) */
+  /* 2. Find all straight edges, grouped by length range */
   {
     file_path: 'model.step',
-    pipeline: [
-      {
-        op: 'query',
-        params: {
-          entities: 'faces',
-          filter: { surface_type: 'cylinder' },
-          group_by: ['axis'],
-        },
-      },
-      {
-        op: 'for_each',
-        do: [
-          {
-            op: 'query',
-            params: {
-              measure: { op: 'ray_test_segment', origin: 'extent_max', direction: [0, 0, 1] },
-            },
-          },
-          {
-            op: 'query',
-            params: {
-              measure: { op: 'ray_test_segment', origin: 'extent_min', direction: [0, 0, -1] },
-            },
-          },
-        ],
-      },
-      { op: 'filter_results', where: 'pos_hits.empty OR neg_hits.empty' },
-      { op: 'select', fields: ['axis', 'diameter', 'pos_hits.count', 'neg_hits.count'] },
-    ],
+    curve_type: 'line',
+    group_by: ['length_range'],
+    aggregate: ['count', 'min:length', 'max:length'],
+    return_type: 'groups',
   },
 
-  /* 3. Full: per-part bounding boxes in an assembly (XDE walk) */
-  {
-    file_path: 'assembly.step',
-    pipeline: [
-      {
-        op: 'walk_assembly',
-        params: {
-          per_node: [
-            {
-              op: 'query',
-              params: {
-                entities: 'bodies',
-                aggregate: ['min:volume', 'max:volume', 'count'],
-              },
-            },
-          ],
-        },
-      },
-    ],
-  },
-
-  /* 4. Full: features violating a clearance rule */
+  /* 3. Find smallest fillet (circular edge with smallest radius) */
   {
     file_path: 'model.step',
-    pipeline: [
-      {
-        op: 'query',
-        params: {
-          entities: 'faces',
-          filter: { surface_type: 'cylinder', radius_min: 5.0 },
-        },
-      },
-      {
-        op: 'for_each',
-        do: [{ op: 'query', params: { measure: { op: 'distance', to: 'face:0' } } }],
-      },
-      { op: 'filter_results', where: 'distance < 2.0' },
-      { op: 'select', fields: ['id', 'axis', 'radius', 'distance'] },
-    ],
+    curve_type: 'circle',
+    select: ['id', 'radius', 'diameter', 'bbox_center'],
+    order_by: { by: 'radius', direction: 'asc' },
+    limit: 1,
+  },
+
+  /* 4. Find long straight edges (potential outer boundaries) */
+  {
+    file_path: 'model.step',
+    curve_type: 'line',
+    length_min: 50,
+    select: ['id', 'length', 'start_point', 'end_point'],
+    order_by: { by: 'length', direction: 'desc' },
+  },
+];
+
+const measureStepExamples: Example[] = [
+  /* 1. Batch ray-test all cylindrical faces for wall thickness */
+  {
+    file_path: 'model.step',
+    entity_ids: ['face:6', 'face:7', 'face:8'],
+    op: 'ray_test_grid',
+    direction: 'along_axis_both',
+    spacing_mm: 2.0,
+  },
+
+  /* 2. Ray-test a specific face to check if a hole is blind */
+  {
+    file_path: 'model.step',
+    entity_ids: ['face:7'],
+    op: 'ray_test_segment',
+    direction: [0, 0, 1],
+    origin: 'extent_center',
+    tmax: 50,
+  },
+
+  /* 3. Check distance from holes to an edge (clearance check) */
+  {
+    file_path: 'model.step',
+    entity_ids: ['face:6', 'face:7'],
+    op: 'distance',
+    to: 'edge:0',
+  },
+
+  /* 4. Classify a point relative to a face (inside/outside test) */
+  {
+    file_path: 'model.step',
+    entity_ids: ['face:3'],
+    op: 'closest_point_on_face',
+    point: [10, 5, 0],
   },
 ];
 
@@ -160,8 +145,9 @@ const diffStepExamples: Example[] = [
 ];
 
 export const toolExamples: Record<ToolName, Example[]> = {
-  query_step: queryStepExamples,
-  transact_step: transactStepExamples,
   inspect_step: inspectStepExamples,
+  query_faces: queryFacesExamples,
+  query_edges: queryEdgesExamples,
+  measure_step: measureStepExamples,
   diff_step: diffStepExamples,
 };

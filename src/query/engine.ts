@@ -1,15 +1,8 @@
 /**
  * QueryEngine: the single internal entry point for declarative STEP queries.
  *
- * Replaces the 9-tool surface's per-tool query services with a unified dispatcher.
- * The four new tools (inspect_step, query_step, diff_step, transact_step) all
- * route through this engine.
- *
- * For now, queries on the `faces` and `edges` entity types are fully
- * supported via the existing services in src/query/. Other entity types
- * (bodies, vertices, pmi, color, layer, material, assembly_node) are
- * stubbed to throw "not yet implemented" — they'll be filled in as the
- * Tier A kernel methods ship.
+ * Routes queries for `faces` and `edges` entity types to their respective
+ * services. Unsupported entity types throw an error.
  */
 
 import { queryStepFaces as queryFacesService } from './faces.js';
@@ -18,6 +11,7 @@ import { withStepModel } from '../model-store.js';
 import { dispatchMeasure, type MeasureSpec } from './measure.js';
 import { dispatchAggregate, aggregateToStatistics } from './aggregate.js';
 import { CAD_RESPONSE_SCHEMA_VERSION } from '../schema-version.js';
+import { parseEntityId } from '../utils/ids.js';
 import type {
   StepQueryResponse,
   StepQueryUnits,
@@ -26,27 +20,18 @@ import type {
   StepQueryGroup,
 } from '../tools/step-tools.js';
 
-export type EntityType =
-  | 'faces'
-  | 'edges'
-  | 'bodies'
-  | 'vertices'
-  | 'pmi'
-  | 'color'
-  | 'layer'
-  | 'material'
-  | 'assembly_node';
+export type EntityType = 'faces' | 'edges';
 
 export interface QueryInput {
   file_path: string;
-  entities: EntityType;
+  from: EntityType;
   entity_ids?: string[];
-  filter?: Record<string, unknown>;
+  where?: Record<string, unknown>;
   group_by?: string[];
   measure?: Array<Record<string, unknown>>;
   aggregate?: string[];
   select?: string[];
-  sort?: { by: string; direction?: 'asc' | 'desc' };
+  order_by?: { by: string; direction?: 'asc' | 'desc' };
   limit?: number;
   offset?: number;
   return_type?: 'entities' | 'summary' | 'groups';
@@ -56,26 +41,23 @@ const SUPPORTED_ENTITIES: ReadonlySet<EntityType> = new Set(['faces', 'edges']);
 
 /**
  * Top-level entry: execute a declarative query against a STEP file.
- *
- * Routing:
- *   - `faces` -> queryStepFaces service
- *   - `edges` -> queryStepEdges service
- *   - others -> throw with a clear migration message
  */
 export async function executeQuery(
   input: QueryInput,
 ): Promise<StepQueryResponse<Record<string, unknown>>> {
-  if (!SUPPORTED_ENTITIES.has(input.entities)) {
+  if (!SUPPORTED_ENTITIES.has(input.from)) {
     throw {
       type: 'not_implemented',
-      message:
-        `query_step for entities="${input.entities}" is not yet implemented in the 4-tool surface. ` +
-        'It will arrive in a subsequent release as Tier A kernel methods and XDE ship.',
+      message: `query_step only supports from: "faces" and "edges". Got "${input.from}".`,
     };
   }
 
+  validateEntityIdsMatchQuery(input.from, input.entity_ids);
+  const warnings = buildIgnoredWhereWarnings(input.from, input.where);
+
   /* Step 1: filter / sort / paginate via the entity-specific service. */
   const base = await runEntityService(input);
+  base.warnings = [...base.warnings, ...warnings];
 
   /* Step 2: optionally run measure ops per entity and attach the results. */
   if (input.measure?.length) {
@@ -103,46 +85,10 @@ export async function executeQuery(
 async function runEntityService(
   input: QueryInput,
 ): Promise<StepQueryResponse<Record<string, unknown>>> {
-  if (input.entities === 'faces') {
-    return queryFacesService(input.file_path, {
-      ...(input.entity_ids !== undefined ? { entity_ids: input.entity_ids } : {}),
-      ...(input.select !== undefined ? { fields: input.select } : {}),
-      ...(input.group_by !== undefined ? { group_by: input.group_by as never } : {}),
-      ...(input.sort !== undefined ? { sort: input.sort as never } : {}),
-      return_type: input.return_type,
-      limit: input.limit,
-      offset: input.offset,
-      ...stripEntitySpecificFilters(input.filter),
-    } as never);
+  if (input.from === 'faces') {
+    return queryFacesService(input.file_path, input);
   }
-  return queryEdgesService(input.file_path, {
-    ...(input.entity_ids !== undefined ? { entity_ids: input.entity_ids } : {}),
-    ...(input.select !== undefined ? { fields: input.select } : {}),
-    ...(input.group_by !== undefined ? { group_by: input.group_by as never } : {}),
-    ...(input.sort !== undefined ? { sort: input.sort as never } : {}),
-    return_type: input.return_type,
-    limit: input.limit,
-    offset: input.offset,
-    ...stripEntitySpecificFilters(input.filter),
-  } as never);
-}
-
-function stripEntitySpecificFilters(filter?: Record<string, unknown>): Record<string, unknown> {
-  if (!filter) return {};
-  /* For the legacy face/edge services, rename `surface_type` -> `surface_types`
-   * (the legacy services expect arrays) and `curve_type` -> `curve_types`.
-   * Other fields pass through; the legacy services ignore what they don't
-   * recognize. */
-  const out: Record<string, unknown> = { ...filter };
-  if (typeof out.surface_type === 'string') {
-    out.surface_types = [out.surface_type];
-    delete out.surface_type;
-  }
-  if (typeof out.curve_type === 'string') {
-    out.curve_types = [out.curve_type];
-    delete out.curve_type;
-  }
-  return out;
+  return queryEdgesService(input.file_path, input);
 }
 
 /* ------------------------------------------------------------------ */
@@ -207,18 +153,69 @@ function flattenMeasureScalars(
 }
 
 function entityTypeFromId(id: string | undefined): 'face' | 'edge' | null {
-  if (!id) return null;
-  if (id.startsWith('face:')) return 'face';
-  if (id.startsWith('edge:')) return 'edge';
-  return null;
+  const parsed = parseEntityId(id);
+  return parsed?.type === 'face' || parsed?.type === 'edge' ? parsed.type : null;
 }
 
 function entityIndexFromId(id: string | undefined): number | undefined {
-  if (!id) return undefined;
-  const m = /^(?:face|edge):(\d+)$/.exec(id);
-  if (!m) return undefined;
-  return Number(m[1]);
+  return parseEntityId(id)?.index;
 }
+
+function validateEntityIdsMatchQuery(from: EntityType, entityIds: string[] | undefined): void {
+  if (!entityIds?.length) return;
+
+  const expectedType = from === 'faces' ? 'face' : 'edge';
+  const mismatched = entityIds.find((id) => parseEntityId(id)?.type !== expectedType);
+  if (!mismatched) return;
+
+  throw {
+    type: 'invalid_input',
+    message: `entity_ids for from: "${from}" must use ${expectedType}:N IDs. Got "${mismatched}".`,
+  };
+}
+
+function buildIgnoredWhereWarnings(
+  from: EntityType,
+  where: Record<string, unknown> | undefined,
+): Array<Record<string, unknown>> {
+  if (!where) return [];
+
+  const allowedFields = from === 'faces' ? FACE_WHERE_FIELDS : EDGE_WHERE_FIELDS;
+  return Object.keys(where)
+    .filter((field) => !allowedFields.has(field))
+    .map((field) => ({
+      type: 'ignored_filter',
+      field: `where.${field}`,
+      message: `Ignored where.${field}; it does not apply to ${from}.`,
+    }));
+}
+
+const SHARED_WHERE_FIELDS = new Set([
+  'radius_min',
+  'radius_max',
+  'body_ids',
+  'validity_status',
+  'tolerance_max',
+]);
+
+const FACE_WHERE_FIELDS = new Set([
+  ...SHARED_WHERE_FIELDS,
+  'surface_type',
+  'area_min',
+  'area_max',
+  'normal',
+  'canonical_form',
+]);
+
+const EDGE_WHERE_FIELDS = new Set([
+  ...SHARED_WHERE_FIELDS,
+  'curve_type',
+  'length_min',
+  'length_max',
+  'curvature_min',
+  'curvature_max',
+  'has_curve3d',
+]);
 
 /* ------------------------------------------------------------------ */
 /*  Type re-exports (for consumers)                                    */
