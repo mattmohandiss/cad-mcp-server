@@ -19,7 +19,7 @@ describe('eval runner: plumbing smoke test', () => {
 
   it('loads 10 scenarios with valid structure', () => {
     const scenarios = loadScenarios();
-    expect(scenarios.length).toBe(10);
+    expect(scenarios.length).toBe(16);
     for (const s of scenarios) {
       expect(s.id).toBeTruthy();
       expect(s.field).toBeTruthy();

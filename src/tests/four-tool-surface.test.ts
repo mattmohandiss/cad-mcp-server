@@ -13,8 +13,8 @@ describe('5-tool surface: schema contracts', () => {
     ]);
   });
 
-  it('declares 11 measure ops', () => {
-    expect(MEASURE_OPS).toHaveLength(11);
+  it('declares 7 measure ops', () => {
+    expect(MEASURE_OPS).toHaveLength(7);
   });
 
   it('inspect_step rejects unknown fields (strict mode)', () => {
