@@ -95,7 +95,34 @@ async function buildSuccessResult(
   let output: Record<string, unknown>;
 
   try {
-    const text = result.text.trim();
+    // result.text is finalStep.text — may be empty if model hit maxSteps
+    // during tool calling. Walk steps backwards to find any text output.
+    let text = result.text.trim();
+    if (!text) {
+      for (let i = result.steps.length - 1; i >= 0; i--) {
+        const stepText = result.steps[i]?.text?.trim();
+        if (stepText) {
+          text = stepText;
+          break;
+        }
+      }
+    }
+
+    if (!text) {
+      return {
+        ok: false,
+        error: 'no text output generated — model exhausted max steps without producing an answer',
+        output: null,
+        text: result.text,
+        finishReason: result.finishReason,
+        toolCalls: collectToolCalls(result),
+        toolResults: collectToolResults(result),
+        usage: buildUsage(result.usage, gatewayInfo),
+        steps: collectSteps(result),
+        transcript: buildTranscript(prompt, result, null),
+      };
+    }
+
     // Strip markdown code fences if present
     const clean = text.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
     try {
