@@ -190,9 +190,12 @@ const SCENARIO_TOOL_MAP: Record<string, { expected: string[]; distraction: strin
   blind_vs_through: { expected: ['query_faces', 'measure_step'], distraction: ['query_edges'] },
   thin_walls: { expected: ['query_faces', 'measure_step'], distraction: ['query_edges'] },
   clearance_hole_to_edge: { expected: ['query_faces', 'measure_step'], distraction: [] },
+  draft_check: { expected: ['query_faces', 'measure_step'], distraction: ['query_edges'] },
+  hole_classification: { expected: ['query_faces', 'measure_step'], distraction: ['query_edges'] },
+  hole_type: { expected: ['query_faces'], distraction: ['query_edges', 'measure_step'] },
 };
 
-const IRRELEVANT_FACE_TYPES = new Set(['other', 'bspline', 'cone', 'torus']);
+const IRRELEVANT_FACE_TYPES = new Set(['other', 'bspline', 'torus']);
 const IRRELEVANT_EDGE_TYPES = new Set(['ellipse', 'bspline', 'other']);
 
 function classifyStep(
