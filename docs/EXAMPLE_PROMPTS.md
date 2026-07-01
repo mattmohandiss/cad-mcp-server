@@ -1,71 +1,42 @@
 # Example Prompts
 
-These prompts are designed for mechanical engineers using CAD MCP Server through an AI assistant. They ask for engineering work products, not raw geometry dumps.
-
-The tool workflow: `inspect_step` for overview → `query_faces` / `query_edges` to find features → `measure_step` for measurements → `diff_step` for revisions.
+These are natural engineering questions you can ask your AI assistant when CAD MCP Server is connected. The assistant will use the right tools automatically — you just describe the problem.
 
 ## Design Review
 
-```text
-Review VortexParts.step like a mechanical lead before release. What are the top design or manufacturing risks I should resolve before sending this out?
-```
+> Review VortexParts.step like a mechanical lead before release. What are the top design or manufacturing risks I should resolve before sending this out?
 
-```text
-Find opportunities to reduce manufacturing cost without changing the product intent. Focus on geometry that increases machining time, inspection burden, or supplier risk.
-```
+> Find opportunities to reduce manufacturing cost without changing the product intent. Focus on geometry that increases machining time or supplier risk.
 
-## Manufacturing Planning
+## Injection Molding
 
-```text
-Assume I want to CNC machine these parts. Build a first-pass manufacturing plan: likely setups, drilling directions, tooling constraints, and the features that will drive cost.
-```
+> Check if this part can eject cleanly from a two-part +Z mold. Flag any face with negative draft or less than 1 degree. Check minimum wall thickness around all holes — must be above 1.5mm.
 
-```text
-Review this part for injection molding feasibility using a simple two-part mold assumption. Use measure_step with draft_angle to check draft angles, query_faces for wall thickness candidates, and measure_step with ray_test_grid for actual wall measurements. Where are the likely undercuts or side-action needs?
-```
+## CNC Machining
 
-```text
-Can these parts be printed on a 200×200×300mm printer? Tell me what fits, what needs splitting or reorientation, and what geometry may be fragile or hard to print.
-```
+> Build a first-pass CNC plan: likely setups, drilling directions, tooling constraints, and features that drive cost.
+
+## 3D Printing
+
+> Can these parts fit on a 200×200×300mm printer? What needs splitting or reorientation? Are there fragile features under 0.6mm?
+
+## Revision Comparison
+
+> Compare revision A and revision B. What changed, what risks does the change introduce, and what should be rechecked before tooling?
 
 ## Supplier Handoff
 
-```text
-Prepare an RFQ summary for a machine shop from VortexParts.step: part count, approximate size envelope, complexity drivers, tolerance/PMI availability, and questions the supplier will likely ask.
-```
+> Prepare an RFQ summary from VortexParts.step: part count, size envelope, complexity drivers, and questions the supplier will ask.
 
-```text
-Create a first-pass inspection plan from the STEP file. What should QC measure, which features are likely critical, and what information is missing from the model?
-```
+## Inspection Planning
 
-## Revision and Fit Checks
+> Create a first-pass inspection plan. What should QC measure? Which features are likely critical? What's missing from the model?
 
-```text
-Compare VortexParts_revA.step and VortexParts_revB.step as an ECO review. Use diff_step to identify what changed. What risks does the change introduce, and what should be rechecked?
-```
+## Good Responses
 
-```text
-Audit the model for bearing and shaft interfaces. Use query_faces to identify likely bores and bearing seats by surface_type and radius, then tell me what dimensions need verification before ordering hardware.
-```
+A good assistant response should:
 
-## Wall Thickness Analysis
-
-```text
-Check the wall thickness around every hole in this part. Use query_faces with surface_type cylinder to find all holes, then measure_step with op ray_test_grid and direction along_axis_both to measure the minimum wall around each hole. Flag any hole with less than 2mm wall thickness.
-```
-
-## Draft Angle Analysis
-
-```text
-Check if this part can eject cleanly from a two-part mold with +Z pull direction. Use query_faces with surface_type cylinder and surface_type plane to find all faces, then measure_step with op draft_angle and direction [0,0,1] on each face. Flag any face with negative draft (undercut) or less than 1 degree of draft.
-```
-
-## Good Assistant Behavior
-
-- Use `inspect_step` first for model overview, then `query_faces` or `query_edges` to find specific features.
-- Use `measure_step` for measurements — pass entity IDs from prior queries.
-- Batch measure: pass multiple entity IDs to `measure_step` in one call.
-- Separate measured facts, assumptions, and engineering recommendations.
-- Cite specific model evidence such as dimensions, radii, face IDs, or revision deltas.
-- Say when the STEP file lacks material, tolerance, process, or authoritative PMI information.
-- Do not invent feature-tree intent, material, fit class, tolerance values, or manufacturability certification.
+- Reference specific measurements from the model (dimensions, radii, face counts)
+- Separate measured facts from engineering judgment
+- Flag when the STEP file lacks material, tolerance, or process information
+- Never invent tolerances, materials, or manufacturing certifications

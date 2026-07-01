@@ -2,9 +2,8 @@
 
 [![npm version](https://img.shields.io/npm/v/cad-mcp-server?logo=npm)](https://npmjs.com/package/cad-mcp-server)
 [![npm downloads](https://img.shields.io/npm/dm/cad-mcp-server)](https://npmjs.com/package/cad-mcp-server)
-[![License](https://img.shields.io/npm/l/cad-mcp-server)](LICENSE)
 
-**Read-only CAD inspection for LLMs.** A WebAssembly Open CASCADE 8.0 kernel that lets AI assistants read, measure, and compare STEP files locally. Returns deterministic geometry facts — the LLM interprets engineering meaning.
+Give your AI assistant the ability to inspect, measure, and compare 3D CAD models. Drop in a STEP file, ask engineering questions, get measured answers. Runs entirely on your machine — no cloud, no CAD license, no setup.
 
 ## Quick Start
 
@@ -12,7 +11,7 @@
 npx -y cad-mcp-server
 ```
 
-Add to your MCP client config (Claude Desktop, OpenCode, Cursor, etc.):
+Add to your MCP client:
 
 ```json
 {
@@ -25,75 +24,44 @@ Add to your MCP client config (Claude Desktop, OpenCode, Cursor, etc.):
 }
 ```
 
-Point the AI at any STEP or STP file on your local filesystem.
+Point your AI at any STEP file and ask questions like:
 
-## MCP Tools (v0.4)
+> "Review this part before manufacturing. Check wall thickness, draft angles, and hole sizes. Flag anything that violates standard DFM rules."
 
-| Tool           | Purpose                                                                                                                                                                                                                                                                                   |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `inspect_step` | First-pass overview: volume, bounding box, topology, watertight status, principal axes, PMI summary. **Use this first.**                                                                                                                                                                  |
-| `query_faces`  | Find faces by type, area, radius, or body. Returns IDs, surface types, areas, radii, diameters, axes, normals, and adjacency data.                                                                                                                                                        |
-| `query_edges`  | Find edges by curve type, length, or radius. Returns IDs, curve types, lengths, radii, diameters, and bounding boxes.                                                                                                                                                                     |
-| `measure_step` | Run geometric measurements on faces or edges. Batch measurement (multiple entities in one call). Ops: ray_test, ray_test_grid (wall thickness), ray_test_segment, distance, draft_angle, closest_point_on_face, classify_point. Direction shortcuts: along_axis, along_axis_both, normal. |
-| `diff_step`    | Compare two STEP files: volume, surface area, dimensions, face/edge/body count deltas.                                                                                                                                                                                                    |
+## Why Engineers Use It
 
-**Design principle:** Deterministic geometry only. No interpretation, no heuristics. The server measures; the LLM decides.
+- **Zero setup.** One command. No CAD software, licenses, Docker, or cloud API.
+- **Runs locally.** Your STEP files never leave your machine.
+- **Deterministic answers.** Backed by the Open CASCADE kernel, not LLM guessing.
+- **Read-only.** Inspects geometry without modifying anything.
 
-## Use Cases
+## What It Can Do
 
-| Who                        | What they ask                                                                             |
-| -------------------------- | ----------------------------------------------------------------------------------------- |
-| Mechanical lead            | "Review this STEP file before release. What are the top manufacturing risks?"             |
-| Manufacturing engineer     | "Build a first-pass CNC plan: likely setups, drilling directions, cost-driving features." |
-| QC engineer                | "Create an inspection plan from the STEP file. What should we measure?"                   |
-| Procurement / sourcing     | "Prepare an RFQ summary: part count, envelope, complexity drivers."                       |
-| Design engineer (revision) | "Compare Rev A and Rev B as an ECO review. What changed?"                                 |
-| Hobbyist / maker           | "Can these parts fit on a 200×200×300mm printer?"                                         |
+| Tool           | Example question                                                   |
+| -------------- | ------------------------------------------------------------------ |
+| `inspect_step` | "What are the overall dimensions and volume?"                      |
+| `query_faces`  | "Find all cylindrical faces. Which ones are holes vs bosses?"      |
+| `query_edges`  | "What's the smallest fillet radius on this part?"                  |
+| `measure_step` | "Check wall thickness around every hole. Flag anything below 2mm." |
+| `diff_step`    | "What changed between revision A and revision B?"                  |
 
-See [docs/EXAMPLE_PROMPTS.md](docs/EXAMPLE_PROMPTS.md) for prompt patterns.
+The AI assistant interprets the measurements. You get engineering answers, not raw numbers.
 
-## How It Works
+## Example Prompts
 
-STEP files are parsed locally by a stripped Open CASCADE Technology (OCCT 8.0) kernel compiled to WebAssembly. No data leaves your machine. No Docker, no cloud API, no CAD license.
+- "Review this part for injection molding: check draft angles with +Z pull, measure minimum wall thickness, identify undercuts."
+- "Prepare a first-pass CNC plan: likely setups, drilling directions, features that drive cost."
+- "Compare these two revisions and flag what needs rechecking before tooling."
+- "Which holes are blind vs through? What's the depth of the blind hole?"
+- "Find the thinnest wall section on this part. Is it above the 1.5mm minimum?"
 
-## Why CAD MCP Server?
-
-- **Zero install.** One `npx` command. No CAD software, licenses, Docker, or cloud API.
-- **Read-only.** No geometry creation or modification. Inspect only.
-- **Local-first.** STEP files never leave your filesystem.
-- **WASM performance.** OCCT runs at near-native speed in a bundled WebAssembly kernel.
-- **LLM-native.** Structured JSON output with pagination, enums, and defaults. Descriptions written for LLM reasoning.
-- **OCCT-native.** Every computation uses OCCT built-in classes.
-- **Batch measurement.** Measure wall thickness across 20 faces in one call.
-
-## What It Is Not
-
-- Not a CAD editor — no geometry creation or modification.
-- Not a CAM system — no toolpath generation.
-- Not a manufacturability certifier — it provides evidence, not conclusions.
-- Not a feature-tree recovery tool — STEP is a boundary-representation format.
-
-Good AI answers separate measured facts, assumptions, and engineering recommendations.
+See [docs/EXAMPLE_PROMPTS.md](docs/EXAMPLE_PROMPTS.md) for more.
 
 ## Requirements
 
 - Node.js 22+
-- Local access to STEP/STP files
-
-No Docker, Open CASCADE install, or native CAD application required.
-
-## Distribution
-
-The npm package is minimal: compiled JS, bundled `occt-wasm` WASM kernel, and TypeScript declarations. No source maps, test files, or dev configuration.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, testing, and PR guidelines.
+- STEP files (export from SolidWorks, FreeCAD, Fusion 360, CATIA, or any CAD system)
 
 ## License
 
-MIT. The bundled `occt-wasm` backend uses Open CASCADE Technology (LGPL-2.1). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
-## Support
-
-If CAD MCP Server saves you time, consider [sponsoring](https://github.com/sponsors/mattmohandiss) development.
+MIT. The bundled OCCT kernel uses LGPL-2.1. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
