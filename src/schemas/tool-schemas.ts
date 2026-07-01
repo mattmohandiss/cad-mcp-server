@@ -435,12 +435,4 @@ export const toolSchemas = {
   diff_step: diffStepSchema,
 } as const;
 
-export const toolInputSchemas = {
-  inspect_step: inspectStepInputSchema,
-  query_faces: queryFacesInputSchema,
-  query_edges: queryEdgesInputSchema,
-  measure_step: measureStepInputSchema,
-  diff_step: diffStepInputSchema,
-} as const;
-
 export type ToolName = keyof typeof toolSchemas;

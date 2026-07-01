@@ -1,6 +1,6 @@
 import type { OcctKernel, ShapeHandle, Vec3 } from 'occt-wasm';
 
-export type EdgeVexity = 'convex' | 'concave' | 'smooth';
+type EdgeVexity = 'convex' | 'concave' | 'smooth';
 
 /**
  * Compute the dihedral angle and edge convexity between two faces along a

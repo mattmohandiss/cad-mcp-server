@@ -22,7 +22,7 @@ export const DEFAULT_QUERY_LIMITS = {
  * Hardcoded bucket widths for continuous-value grouping.
  * Single source of truth; the model does not control these.
  */
-export const GROUP_BUCKETS: {
+const GROUP_BUCKETS: {
   magnitude_bins: number[];
   radius_step: number;
   axis_snap_degrees: number;
@@ -176,14 +176,14 @@ export function createPagination(
   };
 }
 
-export const STEP_QUERY_UNITS: StepQueryUnits = {
+const STEP_QUERY_UNITS: StepQueryUnits = {
   length: 'mm',
   area: 'mm^2',
   volume: 'mm^3',
   angle: 'deg',
 };
 
-export const STEP_QUERY_COORDINATE_SYSTEM: StepQueryCoordinateSystem = {
+const STEP_QUERY_COORDINATE_SYSTEM: StepQueryCoordinateSystem = {
   origin: 'STEP model origin',
   axes: 'model coordinates',
   handedness: 'right',

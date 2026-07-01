@@ -25,7 +25,7 @@ import type { OcctKernel, ShapeHandle, Vec3 } from 'occt-wasm';
 import { resolveRayHits, queryRay } from '../kernel/ray-utils.js';
 import { parseEntityId } from '../utils/ids.js';
 
-export type MeasureOpName =
+type MeasureOpName =
   | 'ray_test'
   | 'ray_test_segment'
   | 'ray_test_grid'
@@ -82,7 +82,7 @@ export function dispatchMeasure(
  * item's geometry into the measure dispatch (e.g. resolve "extent_max"
  * against the current group's bbox).
  */
-export interface MeasureContext {
+interface MeasureContext {
   /* Optional: if the parent iteration has a current item with an extent,
    * these are used to resolve symbolic origins like "extent_max" / "extent_min". */
   current_extent_min?: [number, number, number];

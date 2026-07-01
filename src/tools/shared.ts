@@ -1,6 +1,6 @@
 import type { AnalysisError } from '../utils/errors.js';
 
-export type ToolResponse<T> = { ok: true; data: T } | { ok: false; error: AnalysisError };
+type ToolResponse<T> = { ok: true; data: T } | { ok: false; error: AnalysisError };
 
 export async function wrapTool<T>(run: () => Promise<T>): Promise<ToolResponse<T>> {
   try {
@@ -10,7 +10,7 @@ export async function wrapTool<T>(run: () => Promise<T>): Promise<ToolResponse<T
   }
 }
 
-export function normalizeError(error: unknown): AnalysisError {
+function normalizeError(error: unknown): AnalysisError {
   if (typeof error === 'object' && error !== null && 'type' in error && 'message' in error) {
     const candidate = error as AnalysisError;
     return { type: candidate.type, message: candidate.message };

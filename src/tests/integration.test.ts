@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { handleInspectStepFile } from '../tools/step-tools.js';
 import { handleDiffStep } from '../tools/diff.js';
-import { executeQuery } from '../query/engine.js';
+import { queryStepFaces } from '../query/faces.js';
 import { NIST_FILE } from './fixtures.js';
 import { isWasmAvailable } from './wasm-guard.js';
 
@@ -44,9 +44,7 @@ describe('CAD MCP integration smoke tests', () => {
   });
 
   it.runIf(isWasmAvailable())('returns empty results for out-of-range entity IDs', async () => {
-    const data = await executeQuery({
-      file_path: NIST_FILE,
-      from: 'faces',
+    const data = await queryStepFaces(NIST_FILE, {
       entity_ids: ['face:999'],
     });
     expect(data.entities).toHaveLength(0);

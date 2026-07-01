@@ -262,10 +262,6 @@ class StepModelStore {
 
 const store = new StepModelStore();
 
-export async function getStepModel(filePath: string): Promise<LoadedStepModel> {
-  return store.get(filePath);
-}
-
 export async function withStepModel<T>(
   filePath: string,
   run: (model: LoadedStepModel) => Promise<T>,

@@ -243,7 +243,7 @@ export interface PmiAnnotationEntity {
   referenced_step_ids: string[];
 }
 
-export type PmiExtractedEntity =
+type PmiExtractedEntity =
   PmiToleranceEntity | PmiDimensionEntity | PmiDatumEntity | PmiAnnotationEntity;
 
 function categorizePmiEntity(
@@ -479,7 +479,7 @@ function findEnumParam(params: StepParam[], index: number): string | null {
 /*  Query-level data structures                                        */
 /* ------------------------------------------------------------------ */
 
-export interface PmiQueryResult {
+interface PmiQueryResult {
   schema_version: typeof CAD_RESPONSE_SCHEMA_VERSION;
   file_path: string;
   pmi_entities: PmiExtractedEntity[];

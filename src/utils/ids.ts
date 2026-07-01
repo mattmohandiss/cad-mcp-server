@@ -21,7 +21,3 @@ export function parseEntityId(id: string | undefined): ParsedEntityId | null {
 
   return { type, index };
 }
-
-export function isEntityIdForType(id: string, expectedType: ParsedEntityId['type']): boolean {
-  return parseEntityId(id)?.type === expectedType;
-}
