@@ -33,10 +33,12 @@ function expectFailure(value: unknown): ToolFailure {
 }
 
 describe('CAD MCP integration smoke tests', () => {
-  it('returns structured tool errors for missing and invalid STEP files', async () => {
+  it('returns file_not_found for missing STEP files', async () => {
     const missing = expectFailure(await handleInspectStepFile('/tmp/does_not_exist.step'));
     expect(missing.error.type).toBe('file_not_found');
+  });
 
+  it.runIf(isWasmAvailable())('returns invalid_format for non-STEP files', async () => {
     const invalid = expectFailure(
       await handleInspectStepFile(path.join(process.cwd(), 'samples', 'dummy.step')),
     );
@@ -51,14 +53,17 @@ describe('CAD MCP integration smoke tests', () => {
     expect(data.pagination.total_matched).toBe(0);
   });
 
-  it('inspects a STEP file and returns size, structure, and metadata', async () => {
-    const result = expectSuccess(await handleInspectStepFile(NIST_FILE));
-    expect(result.data.schema_version).toBe('0.4');
-    const size = result.data.size as Record<string, unknown>;
-    expect(size.dimensions).toBeDefined();
-    expect((size.dimensions as Record<string, number>).width).toBeGreaterThan(0);
-    expect((result.data.structure as Record<string, unknown>).body_count).toBeGreaterThan(0);
-  });
+  it.runIf(isWasmAvailable())(
+    'inspects a STEP file and returns size, structure, and metadata',
+    async () => {
+      const result = expectSuccess(await handleInspectStepFile(NIST_FILE));
+      expect(result.data.schema_version).toBe('0.4');
+      const size = result.data.size as Record<string, unknown>;
+      expect(size.dimensions).toBeDefined();
+      expect((size.dimensions as Record<string, number>).width).toBeGreaterThan(0);
+      expect((result.data.structure as Record<string, unknown>).body_count).toBeGreaterThan(0);
+    },
+  );
 
   it.runIf(isWasmAvailable())(
     'compares a STEP file with itself — all deltas are zero',
