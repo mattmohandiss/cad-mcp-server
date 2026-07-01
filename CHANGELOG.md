@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.3](https://github.com/mattmohandiss/cad-mcp-server/compare/v0.4.2...v0.4.3) (2026-07-01)
+
+
+### Bug Fixes
+
+* sync server.json to ([d3df74c](https://github.com/mattmohandiss/cad-mcp-server/commit/d3df74c0dfb3e526c7b547fdf3b9c4eef094343d))
+
 ## [0.4.2](https://github.com/mattmohandiss/cad-mcp-server/compare/v0.4.1...v0.4.2) (2026-07-01)
 
 
