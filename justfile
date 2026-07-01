@@ -51,7 +51,11 @@ test:
 lint: _validate-facade _lint-ts _lint-rs
 
 # Run all local checks
-check: fmt-check lint test
+check: fmt-check lint test validate-version
+
+# Ensure server.json versions match package.json
+validate-version:
+	scripts/validate-version.sh
 
 # Run the full CI pipeline locally: lint + unit tests, build the WASM
 # kernel, then re-run tests with kernel tests active. Use this before
