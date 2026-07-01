@@ -9,12 +9,12 @@
     "id": "1277384942"
   },
   "websiteUrl": "https://github.com/mattmohandiss/cad-mcp-server#readme",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "cad-mcp-server",
-      "version": "0.3.2",
+      "version": "0.4.0",
       "transport": {
         "type": "stdio"
       }
