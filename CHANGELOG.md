@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.2](https://github.com/mattmohandiss/cad-mcp-server/compare/v0.4.1...v0.4.2) (2026-07-01)
+
+
+### Bug Fixes
+
+* add version sync validation between package.json and server.json ([e28d59f](https://github.com/mattmohandiss/cad-mcp-server/commit/e28d59f7a4a2b36b28a3e2ab5157828202ae3278))
+* sync server.json version to 0.4.0 for MCP Registry ([df9e726](https://github.com/mattmohandiss/cad-mcp-server/commit/df9e7264c2f3ce2c969dddafc56025f8f715711b))
+* sync server.json version to 0.4.1 ([88c967c](https://github.com/mattmohandiss/cad-mcp-server/commit/88c967c433b437f25037dd2a4c445317ab25c1ea))
+* trim server.json description to 100 char MCP Registry limit ([9cdb9dc](https://github.com/mattmohandiss/cad-mcp-server/commit/9cdb9dc2d4a3310843b572de3a6c1dfcd65388c6))
+
 ## [0.4.1](https://github.com/mattmohandiss/cad-mcp-server/compare/v0.4.0...v0.4.1) (2026-07-01)
 
 
