@@ -1,0 +1,5 @@
+{
+  "thinnest_hole_diameter": 15.0,
+  "min_wall_mm": 2.5,
+  "passes_2mm_spec": true
+}

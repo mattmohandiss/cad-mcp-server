@@ -335,150 +335,97 @@ export const queryEdgesSchema = z.object(queryEdgesInputSchema).strict();
 /*  measure_step                                                       */
 /* ------------------------------------------------------------------ */
 
-const measureBase = {
-  file_path: filePathSchema,
+export const measureStepInputSchema = z
+  .object({
+    file_path: filePathSchema,
 
-  entity_ids: z
-    .array(faceOrEdgeIdSchema)
-    .min(1)
-    .max(500)
-    .describe(
-      'Entity IDs to measure. Use IDs returned by query_faces or query_edges. You can pass multiple IDs to batch-measure in one call.',
-    ),
+    entity_ids: z
+      .array(faceOrEdgeIdSchema)
+      .min(1)
+      .max(500)
+      .describe(
+        'Entity IDs to measure. Use IDs returned by query_faces or query_edges. You can pass multiple IDs to batch-measure in one call.',
+      ),
 
-  tolerance: z
-    .number()
-    .nonnegative()
-    .default(0.01)
-    .optional()
-    .describe('Tolerance in mm. Default 0.01.'),
+    op: z
+      .enum(MEASURE_OPS)
+      .describe(
+        'Measurement operation. Choose based on what you need to measure. Only fill parameters relevant to your chosen op.',
+      ),
 
-  detail_level: z
-    .enum(['aggregate', 'summary', 'points'])
-    .default('aggregate')
-    .optional()
-    .describe(
-      '"aggregate" returns min/max/avg/median only. "summary" adds histograms. "points" returns full hit point coordinates. Use "aggregate" by default; request "points" only when you need exact locations.',
-    ),
-};
+    direction: directionOrShortcutSchema
+      .optional()
+      .describe(
+        'For ray_test, ray_test_grid, ray_test_segment: ray direction [x,y,z] or shortcut "along_axis"/"along_axis_both"/"normal".',
+      ),
 
-const rayTestOps = z.discriminatedUnion('op', [
-  z.object({
-    ...measureBase,
-    op: z.literal('ray_test'),
-    direction: directionOrShortcutSchema.describe(
-      'Ray direction vector [x,y,z], or shortcut: "along_axis" (along each entity\'s axis), "along_axis_both" (both directions), "normal" (each entity\'s normal).',
-    ),
-  }),
+    origin: originOrShortcutSchema
+      .optional()
+      .describe(
+        'For ray_test_segment: ray origin. A 3D point, or "extent_min"/"extent_center"/"extent_max" relative to each entity.',
+      ),
 
-  z.object({
-    ...measureBase,
-    op: z.literal('ray_test_segment'),
-    direction: directionOrShortcutSchema.describe(
-      'Ray direction. Shortcuts "along_axis", "along_axis_both", "normal" supported.',
-    ),
-    origin: originOrShortcutSchema.describe(
-      'Ray origin: a 3D point, or "extent_min"/"extent_center"/"extent_max" relative to each entity.',
-    ),
     tmax: z
       .number()
       .positive()
       .optional()
-      .describe('Maximum ray distance in mm. If a face is 20mm thick, set tmax just above 20.'),
-  }),
+      .describe('For ray_test_segment: maximum ray distance in mm.'),
 
-  z.object({
-    ...measureBase,
-    op: z.literal('ray_test_grid'),
-    direction: directionOrShortcutSchema.describe(
-      'Grid direction. Shortcuts "along_axis", "along_axis_both", "normal" supported.',
-    ),
     spacing_mm: z
       .number()
       .positive()
       .default(2.0)
       .optional()
-      .describe('Distance between grid rays in mm. Smaller = more samples, slower. Default 2.0.'),
-  }),
-]);
+      .describe('For ray_test_grid: distance between grid rays in mm. Default 2.0.'),
 
-const distanceOps = z.discriminatedUnion('op', [
-  z.object({
-    ...measureBase,
-    op: z.literal('distance'),
     to: z
       .union([faceOrEdgeIdSchema, z.array(faceOrEdgeIdSchema).min(1).max(100)])
+      .optional()
       .describe(
-        'Target entity ID(s) to compute distance to. Single ID: "face:5". Multiple: ["face:5", "edge:0"].',
+        'For distance, distance_extrema: target entity ID(s). Single: "face:5". Multiple: ["face:5", "edge:0"].',
       ),
-  }),
 
-  z.object({
-    ...measureBase,
-    op: z.literal('distance_extrema'),
-    to: z
-      .union([faceOrEdgeIdSchema, z.array(faceOrEdgeIdSchema).min(1).max(100)])
-      .describe('Target entity ID(s) for min/max distance computation.'),
-  }),
-]);
+    plane_origin: point3Schema
+      .optional()
+      .describe('For section_by_plane: a point on the cutting plane.'),
 
-const sectionOps = z.discriminatedUnion('op', [
-  z.object({
-    ...measureBase,
-    op: z.literal('section_by_plane'),
-    plane_origin: point3Schema.describe('A point on the cutting plane.'),
-    plane_normal: point3Schema.describe('Normal vector of the cutting plane.'),
-  }),
-]);
+    plane_normal: point3Schema
+      .optional()
+      .describe('For section_by_plane: normal vector of the cutting plane.'),
 
-const pointOps = z.discriminatedUnion('op', [
-  z.object({
-    ...measureBase,
-    op: z.literal('classify_point'),
-    point: point3Schema.describe('3D point to classify as IN, ON, or OUT relative to the entity.'),
-  }),
-
-  z.object({
-    ...measureBase,
-    op: z.literal('closest_point_on_face'),
-    point: point3Schema.describe('3D point to project onto the face.'),
-  }),
-]);
-
-const curveOps = z.discriminatedUnion('op', [
-  z.object({
-    ...measureBase,
-    op: z.literal('curvature_at_param'),
     param: z
       .number()
       .min(0)
       .max(1)
-      .describe('Parameter value along the curve (0 = start, 1 = end).'),
-  }),
+      .optional()
+      .describe('For curvature_at_param: parameter along the curve (0=start, 1=end).'),
 
-  z.object({
-    ...measureBase,
-    op: z.literal('continuity'),
-    with: faceOrEdgeIdSchema.describe('The other entity to check continuity against.'),
-  }),
+    with: faceOrEdgeIdSchema
+      .optional()
+      .describe('For continuity: the other entity to check continuity against.'),
 
-  z.object({
-    ...measureBase,
-    op: z.literal('principal_directions'),
-  }),
-]);
+    point: point3Schema
+      .optional()
+      .describe('For classify_point, closest_point_on_face: 3D point to classify or project.'),
 
-export const measureStepInputSchema = rayTestOps
-  .or(distanceOps)
-  .or(sectionOps)
-  .or(pointOps)
-  .or(curveOps);
+    tolerance: z
+      .number()
+      .nonnegative()
+      .default(0.01)
+      .optional()
+      .describe('Tolerance in mm. Default 0.01.'),
+
+    detail_level: z
+      .enum(['aggregate', 'summary', 'points'])
+      .default('aggregate')
+      .optional()
+      .describe(
+        '"aggregate" returns min/max/avg only. "summary" adds histograms. "points" returns full hit coordinates.',
+      ),
+  })
+  .strict();
 
 export type MeasureStepInput = z.infer<typeof measureStepInputSchema>;
-
-/* ------------------------------------------------------------------ */
-/*  Schema registry                                                    */
-/* ------------------------------------------------------------------ */
 
 export const toolSchemas = {
   inspect_step: inspectStepSchema,

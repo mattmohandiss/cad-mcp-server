@@ -36,92 +36,63 @@ interface MeasureHitSummary {
 
 export async function handleMeasureStep(args: MeasureStepInput) {
   return wrapTool(async () => {
-    const entityIds = args.entity_ids;
-    const op = args.op;
-
     const spec = buildMeasureSpec(args);
-    const results = await batchMeasure(args.file_path, entityIds, [spec]);
+    const results = await batchMeasure(args.file_path, args.entity_ids, [spec]);
 
     return {
       schema_version: '0.4',
       file_path: args.file_path,
-      operation: op,
-      entity_count: entityIds.length,
+      operation: args.op,
+      entity_count: args.entity_ids.length,
       results,
     };
   });
 }
 
 function buildMeasureSpec(args: MeasureStepInput): MeasureSpec {
-  switch (args.op) {
-    case 'ray_test':
-      return {
-        op: 'ray_test',
-        direction:
-          typeof args.direction === 'string'
-            ? undefined // resolved per-entity
-            : (args.direction as number[] | undefined),
-        direction_shortcut:
-          typeof args.direction === 'string' ? (args.direction as string) : undefined,
-      };
+  const base: MeasureSpec = { op: args.op };
 
-    case 'ray_test_segment':
-      return {
-        op: 'ray_test_segment',
-        direction:
-          typeof args.direction === 'string' ? undefined : (args.direction as number[] | undefined),
-        direction_shortcut:
-          typeof args.direction === 'string' ? (args.direction as string) : undefined,
-        origin: Array.isArray(args.origin) ? args.origin : (args.origin as string | undefined),
-        tmax: args.tmax,
-      };
-
-    case 'ray_test_grid':
-      return {
-        op: 'ray_test_grid',
-        direction:
-          typeof args.direction === 'string' ? undefined : (args.direction as number[] | undefined),
-        direction_shortcut:
-          typeof args.direction === 'string' ? (args.direction as string) : undefined,
-        spacing_mm: args.spacing_mm,
-      };
-
-    case 'distance':
-    case 'distance_extrema': {
-      const to = args.to as string | string[];
-      return {
-        op: args.op,
-        to: Array.isArray(to) ? to[0] : to, // single entity for the spec; batch handles iteration
-      };
+  if (args.direction !== undefined) {
+    if (Array.isArray(args.direction)) {
+      base.direction = args.direction;
+    } else {
+      base.direction_shortcut = args.direction;
     }
-
-    case 'section_by_plane':
-      return {
-        op: 'section_by_plane',
-        plane_origin: args.plane_origin,
-        plane_normal: args.plane_normal,
-        tolerance: args.tolerance,
-      };
-
-    case 'curvature_at_param':
-      return { op: 'curvature_at_param', param: args.param };
-
-    case 'continuity':
-      return { op: 'continuity', with: args.with as string };
-
-    case 'principal_directions':
-      return { op: 'principal_directions' };
-
-    case 'classify_point':
-    case 'closest_point_on_face':
-      return { op: args.op, point: args.point };
-
-    default:
-      throw {
-        type: 'not_implemented',
-        message: `Unknown measure op: ${(args as { op: string }).op}`,
-      };
   }
+
+  if (args.origin !== undefined) {
+    base.origin = args.origin;
+  }
+  if (args.tmax !== undefined) {
+    base.tmax = args.tmax;
+  }
+  if (args.spacing_mm !== undefined) {
+    base.spacing_mm = args.spacing_mm;
+  }
+  if (args.to !== undefined) {
+    const to = args.to;
+    base.to = Array.isArray(to) ? to[0] : to;
+  }
+  if (args.plane_origin !== undefined) {
+    base.plane_origin = args.plane_origin;
+  }
+  if (args.plane_normal !== undefined) {
+    base.plane_normal = args.plane_normal;
+  }
+  if (args.param !== undefined) {
+    base.param = args.param;
+  }
+  if (args.with !== undefined) {
+    base.with = args.with;
+  }
+  if (args.point !== undefined) {
+    base.point = args.point;
+  }
+  if (args.tolerance !== undefined) {
+    base.tolerance = args.tolerance;
+  }
+
+  return base;
 }
 
 async function batchMeasure(
@@ -142,11 +113,7 @@ async function batchMeasure(
     for (const id of entityIds) {
       const parsed = parseEntityId(id);
       if (!parsed) {
-        results.push({
-          entity_id: id,
-          entity_type: 'unknown',
-          results: {},
-        });
+        results.push({ entity_id: id, entity_type: 'unknown', results: {} });
         continue;
       }
 
@@ -171,14 +138,12 @@ async function batchMeasure(
         }
         handle = edgeShapes[parsed.index];
         // Edges don't have axis/normal; direction shortcuts won't resolve.
-        // The model should use explicit [x,y,z] directions for edge measurements.
         resolvedSpecs = specs.map((s) => {
-          const sc = (s as { direction_shortcut?: string }).direction_shortcut;
-          if (!sc) return s;
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { direction_shortcut: _, ...rest } = s as MeasureSpec & {
+          if (!s.direction_shortcut) return s;
+          const { direction_shortcut: __unused, ...rest } = s as MeasureSpec & {
             direction_shortcut?: string;
           };
+          void __unused;
           return rest;
         });
       } else {
@@ -208,21 +173,17 @@ function resolveDirectionShortcuts(
   normalDirection?: number[],
 ): MeasureSpec[] {
   return specs.map((spec) => {
-    const shortcut = (spec as { direction_shortcut?: string }).direction_shortcut;
+    const shortcut = spec.direction_shortcut;
     if (!shortcut) return spec;
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { direction_shortcut: _, ...rest } = spec as MeasureSpec & {
-      direction_shortcut?: string;
-    };
+    const { direction_shortcut: __, ...rest } = spec;
 
     switch (shortcut) {
       case 'along_axis':
         if (axisDirection) return { ...rest, direction: axisDirection };
         break;
       case 'along_axis_both':
-        // For 'both', we keep the shortcut marker; the measure dispatch
-        // or result processing handles bidirectional ray-testing.
         if (axisDirection) return { ...rest, direction: axisDirection };
         break;
       case 'normal':
@@ -238,7 +199,7 @@ function getResolvedDirection(
   axisDirection?: number[],
   normalDirection?: number[],
 ): number[] | undefined {
-  const shortcut = (spec as { direction_shortcut?: string }).direction_shortcut;
+  const shortcut = spec.direction_shortcut;
   if (!shortcut) return undefined;
   if (shortcut === 'along_axis' || shortcut === 'along_axis_both') return axisDirection;
   if (shortcut === 'normal') return normalDirection;
@@ -284,12 +245,7 @@ function buildHitSummary(results: MeasureResults): MeasureHitSummary | undefined
     }
     if (opName === 'distance' && typeof value === 'number') {
       return {
-        hit_distances: {
-          min: value,
-          max: value,
-          avg: value,
-          median: value,
-        },
+        hit_distances: { min: value, max: value, avg: value, median: value },
       };
     }
   }
