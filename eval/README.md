@@ -1,16 +1,16 @@
 # LLM Eval for cad-mcp-server
 
-The eval suite checks whether real LLMs can use the public CAD MCP tools (`inspect_step`, `query_step`, `diff_step`, `transact_step`) to answer geometry questions with known ground truth.
+The eval suite checks whether real LLMs can use the public CAD MCP tools (`inspect_step`, `query_faces`, `query_edges`, `measure_step`, `diff_step`) to answer geometry questions with known ground truth.
 
-## Runtime
+## How It Works
 
-The runner uses AI SDK v7 with Vercel AI Gateway:
+1. **Source-driven scenarios.** Each scenario has a `generate.py` (CadQuery script that produces a STEP file), a `ground-truth.json` (expected answer), and a `scenario.md` (prompt with frontmatter). No committed STEP fixtures — all models are generated.
 
-- Model IDs use Gateway `creator/model` format, for example `anthropic/claude-sonnet-4-5`.
-- Auth uses `AI_GATEWAY_API_KEY`, or `VERCEL_OIDC_TOKEN` when available.
-- Requests are tagged through `providerOptions.gateway` with `cad-mcp-eval`, `scenario:<id>`, and `model:<id>`.
-- Gateway generation metadata is looked up with `gateway.getGenerationInfo()` when the response includes a generation ID.
-- Scenario frontmatter declares generated STEP files under `files:`; prompts stay path-free.
+2. **Real MCP subprocess.** The runner spawns the actual MCP server as a child process. No mocks. Tests the real tool surface.
+
+3. **Model-agnostic.** Uses Vercel AI Gateway (`creator/model` format, e.g. `anthropic/claude-sonnet-4-5`). Text parsing from model responses — no `Output.object()` dependency. Works with OpenAI, Anthropic, Google, DeepSeek, and others.
+
+4. **Structured traces.** Every run produces a JSON trace with typed spans (`discovery | measurement | distraction | context | answer`), per-span checks (`argsValid`, `productive`), and component-level scores.
 
 ## Layout
 
@@ -18,59 +18,51 @@ The runner uses AI SDK v7 with Vercel AI Gateway:
 eval/
   runner/
     ai.ts          AI SDK + MCP execution
-    config.ts      paths, defaults, Gateway auth loading
+    config.ts      paths, defaults, Gateway auth
     index.ts       CLI entry
-    logging.ts     JSON and markdown logs
-    reporting.ts   console and summary reporting
+    logging.ts     JSON and markdown trace output
+    reporting.ts   console reporting with [D/M/W] breakdown
     runner.ts      orchestration
     scenarios.ts   scenario discovery and fixture generation
     scoring.ts     schema construction and deterministic scoring
-    types.ts       shared eval result types
+    types.ts       trace, span, and result types
   scenarios/       scenario.md + generate.py + ground-truth.json per scenario
-  generate/        shared CadQuery requirements/venv
-tests/eval-logs/   per-run logs, gitignored
+tests/eval-logs/   per-run traces, gitignored
 ```
 
 ## CLI
 
 ```sh
-# Full suite: default models × all scenarios
-npx tsx eval/runner/index.ts
+# Targeted scenarios (recommended — cheaper, faster)
+npx tsx eval/runner/index.ts -m anthropic/claude-sonnet-4-5 -s thin_walls
 
-# One model
-npx tsx eval/runner/index.ts -m openai/gpt-4o-mini
+# Multiple models and scenarios
+npx tsx eval/runner/index.ts -m openai/gpt-4o-mini -m google/gemini-2.5-flash -s basic_volume -s cyl_face_count
 
-# One scenario
-npx tsx eval/runner/index.ts -s basic_volume
-
-# Multiple filters
-npx tsx eval/runner/index.ts -m anthropic/claude-sonnet-4-5 -m openai/gpt-4o-mini -s cyl_face_count
+# Full suite (pre-release gate)
+npx tsx eval/runner/index.ts -m anthropic/claude-sonnet-4-5
 ```
 
-`just eval` builds the server first, then runs the default suite.
+## Understanding the output
 
-## How It Works
+Each run shows a `[D/M/W]` breakdown:
 
-For each `(model, scenario)` pair:
+- **D**iscovery: productive query_faces or query_edges calls
+- **M**easurement: productive measure_step calls
+- **W**aste: irrelevant queries, wrong tools, exploration of unrelated geometry
 
-1. Run the scenario `generate.py` into `eval/.work/<scenario-id>/` and refresh `ground-truth.json`.
-2. Start the built MCP server over stdio.
-3. Append a generated-file manifest to the prompt.
-4. Convert MCP tools to AI SDK tools with `mcpClient.tools()`.
-5. Call `generateText()` with `gateway(modelId)`, `Output.object({ schema })`, and `stopWhen: isStepCount(max_steps)`.
-6. Score the structured output against ground truth with deterministic tolerance rules.
-7. Write a JSON result and markdown transcript to `tests/eval-logs/`.
-
-This exercises the same MCP subprocess path a real local client uses; it does not call tool handlers in process.
-
-Generated STEP files are run artifacts. They are not committed.
-
-## Validation
-
-Useful local checks:
-
-```sh
-npx tsc --noEmit
-npx vitest run src/tests/eval-runner-smoke.test.ts
-npx vitest run src/tests/llm-eval-replay.test.ts
+```text
+✓ 100  smallest_fillet  claude-sonnet-4-5  1 call  [D/M/W: 1/0/0]  match (expected=1, got=1)
+✗  33  smallest_fillet  gpt-5.5            8 calls [D/M/W: 1/0/6]  no answer produced
 ```
+
+Claude found the answer in 1 focused call. GPT-5.5 got the data on call 1 but wasted 6 more steps exploring unrelated face types, hitting max_steps without producing an answer.
+
+## Adding Scenarios
+
+1. Create `eval/scenarios/<id>/` with `scenario.md`, `generate.py`, `ground-truth.json`
+2. `scenario.md` uses YAML frontmatter: `id`, `field`, `tolerance`, `max_steps`, `files`
+3. `generate.py` writes STEP files to `CAD_MCP_EVAL_OUTPUT_DIR`
+4. `ground-truth.json` contains the expected answer for the `field`
+
+Scenarios are auto-discovered from the `eval/scenarios/` directory.

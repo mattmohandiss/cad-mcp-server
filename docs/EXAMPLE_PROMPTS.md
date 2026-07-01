@@ -2,6 +2,8 @@
 
 These prompts are designed for mechanical engineers using CAD MCP Server through an AI assistant. They ask for engineering work products, not raw geometry dumps.
 
+The tool workflow: `inspect_step` for overview → `query_faces` / `query_edges` to find features → `measure_step` for measurements → `diff_step` for revisions.
+
 ## Design Review
 
 ```text
@@ -19,11 +21,11 @@ Assume I want to CNC machine these parts. Build a first-pass manufacturing plan:
 ```
 
 ```text
-Review this part for injection molding feasibility using a simple two-part mold assumption. Where are the likely undercuts, side-action needs, or geometry that should be redesigned?
+Review this part for injection molding feasibility using a simple two-part mold assumption. Use measure_step with draft_angle to check draft angles, query_faces for wall thickness candidates, and measure_step with ray_test_grid for actual wall measurements. Where are the likely undercuts or side-action needs?
 ```
 
 ```text
-Can these parts be printed on a 200 x 200 x 300 mm printer? Tell me what fits, what probably needs splitting or reorientation, and what geometry may be fragile or hard to print.
+Can these parts be printed on a 200×200×300mm printer? Tell me what fits, what needs splitting or reorientation, and what geometry may be fragile or hard to print.
 ```
 
 ## Supplier Handoff
@@ -36,26 +38,34 @@ Prepare an RFQ summary for a machine shop from VortexParts.step: part count, app
 Create a first-pass inspection plan from the STEP file. What should QC measure, which features are likely critical, and what information is missing from the model?
 ```
 
-## Revision And Fit Checks
+## Revision and Fit Checks
 
 ```text
-Compare VortexParts_revA.step and VortexParts_revB.step as an ECO review. What changed, what risks does the change introduce, and what should be rechecked?
+Compare VortexParts_revA.step and VortexParts_revB.step as an ECO review. Use diff_step to identify what changed. What risks does the change introduce, and what should be rechecked?
 ```
 
 ```text
-Audit the model for bearing and shaft interfaces. Identify likely bores, rod channels, and bearing seats, then tell me what dimensions or tolerances need verification before ordering hardware.
+Audit the model for bearing and shaft interfaces. Use query_faces to identify likely bores and bearing seats by surface_type and radius, then tell me what dimensions need verification before ordering hardware.
 ```
 
-## Assembly Review
+## Wall Thickness Analysis
 
 ```text
-Review the assembly for practical assembly/service issues. Look for repeated fastener or bearing features, access directions, fragile features, and anything that could make assembly error-prone.
+Check the wall thickness around every hole in this part. Use query_faces with surface_type cylinder to find all holes, then measure_step with op ray_test_grid and direction along_axis_both to measure the minimum wall around each hole. Flag any hole with less than 2mm wall thickness.
+```
+
+## Draft Angle Analysis
+
+```text
+Check if this part can eject cleanly from a two-part mold with +Z pull direction. Use query_faces with surface_type cylinder and surface_type plane to find all faces, then measure_step with op draft_angle and direction [0,0,1] on each face. Flag any face with negative draft (undercut) or less than 1 degree of draft.
 ```
 
 ## Good Assistant Behavior
 
-- Use CAD MCP tools to gather measured facts before making recommendations.
+- Use `inspect_step` first for model overview, then `query_faces` or `query_edges` to find specific features.
+- Use `measure_step` for measurements — pass entity IDs from prior queries.
+- Batch measure: pass multiple entity IDs to `measure_step` in one call.
 - Separate measured facts, assumptions, and engineering recommendations.
-- Cite specific model evidence such as dimensions, radii, body IDs, face/edge groups, PMI presence, or revision deltas.
-- Say when the STEP file lacks material, tolerance, process, quantity, or authoritative PMI information.
+- Cite specific model evidence such as dimensions, radii, face IDs, or revision deltas.
+- Say when the STEP file lacks material, tolerance, process, or authoritative PMI information.
 - Do not invent feature-tree intent, material, fit class, tolerance values, or manufacturability certification.
