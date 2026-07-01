@@ -91,6 +91,9 @@ function buildMeasureSpec(args: MeasureStepInput): MeasureSpec {
   if (args.tolerance !== undefined) {
     base.tolerance = args.tolerance;
   }
+  if (args.detail_level !== undefined) {
+    base.detail_level = args.detail_level;
+  }
 
   return base;
 }
@@ -152,6 +155,8 @@ async function batchMeasure(
       }
 
       const measureResults = dispatchMeasure(kernel, shape, handle, resolvedSpecs);
+      const detailLevel = resolvedSpecs[0]?.detail_level ?? 'aggregate';
+      stripRawGridData(measureResults, detailLevel);
       const hitSummary = buildHitSummary(measureResults);
 
       results.push({
@@ -204,6 +209,26 @@ function getResolvedDirection(
   if (shortcut === 'along_axis' || shortcut === 'along_axis_both') return axisDirection;
   if (shortcut === 'normal') return normalDirection;
   return undefined;
+}
+
+function stripRawGridData(results: MeasureResults, detailLevel: string): void {
+  if (detailLevel === 'aggregate' || detailLevel === 'summary') {
+    for (const [opName, value] of Object.entries(results)) {
+      if (
+        (opName === 'ray_test_grid' || opName === 'ray_test') &&
+        value &&
+        typeof value === 'object'
+      ) {
+        const grid = value as { hits?: unknown; hit_distance?: number[]; total_rays?: number };
+        // Keep total_rays, drop raw arrays
+        if (detailLevel === 'aggregate') {
+          delete grid.hits;
+          delete grid.hit_distance;
+        }
+        // 'summary' could keep a spatial histogram in the future
+      }
+    }
+  }
 }
 
 function buildHitSummary(results: MeasureResults): MeasureHitSummary | undefined {

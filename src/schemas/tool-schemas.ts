@@ -6,9 +6,7 @@ import { z } from 'zod';
 
 const nonEmpty = z.string().min(1);
 
-export const filePathSchema = nonEmpty.describe(
-  "Absolute or relative path to the STEP file on the local filesystem. Paths resolve from the server's working directory. For files > 100MB, the call may take several seconds; do not chain with other inspect calls.",
-);
+export const filePathSchema = nonEmpty.describe('Path to STEP file on local filesystem.');
 
 const point3Schema = z.array(z.number().finite()).length(3);
 
@@ -39,7 +37,7 @@ export const entityIdSchema = z
     const n = Number(index);
     return Number.isInteger(n) && n >= 0 && String(n) === index;
   }, 'Entity IDs must match face:N, edge:N, vertex:N, or body:N.')
-  .describe('Entity ID. Pattern: "face:N", "edge:N", "vertex:N", or "body:N".');
+  .describe('Entity ID: "face:N", "edge:N", "vertex:N", or "body:N".');
 
 const faceOrEdgeIdSchema = entityIdSchema.refine(
   (id) => id.startsWith('face:') || id.startsWith('edge:'),
@@ -86,14 +84,12 @@ const aggregateSpec = z
   .string()
   .regex(
     /^(count|min|max|avg|stddev|sum)(:[a-z_]+)?$/,
-    'Format: <op>[:<field>]. Examples: "count", "min:area", "max:radius".',
+    'Format: <op>[:<field>]. Examples: "count", "min:area".',
   )
-  .describe(
-    'Statistics over the result set. Format: <op>[:<field>]. Ops: count, min, max, avg, stddev, sum. Examples: "count", "min:area", "max:radius", "avg:hit_distance".',
-  );
+  .describe('Stats: count, min:field, max:field, avg:field, stddev:field, sum:field.');
 
 /* ------------------------------------------------------------------ */
-/*  inspect_step (unchanged)                                           */
+/*  inspect_step                                                       */
 /* ------------------------------------------------------------------ */
 
 export const inspectStepInputSchema = {
@@ -103,12 +99,12 @@ export const inspectStepInputSchema = {
 export const inspectStepSchema = z.object(inspectStepInputSchema).strict();
 
 /* ------------------------------------------------------------------ */
-/*  diff_step (unchanged)                                              */
+/*  diff_step                                                          */
 /* ------------------------------------------------------------------ */
 
 export const diffStepInputSchema = {
-  baseline_file_path: nonEmpty.describe('Absolute or relative path to the baseline STEP file.'),
-  comparison_file_path: nonEmpty.describe('Absolute or relative path to the comparison STEP file.'),
+  baseline_file_path: nonEmpty.describe('Path to baseline STEP file.'),
+  comparison_file_path: nonEmpty.describe('Path to comparison STEP file.'),
 };
 
 export const diffStepSchema = z.object(diffStepInputSchema).strict();
@@ -120,54 +116,27 @@ export const diffStepSchema = z.object(diffStepInputSchema).strict();
 export const queryFacesInputSchema = {
   file_path: filePathSchema,
 
-  surface_type: z
-    .enum(SURFACE_TYPES)
-    .optional()
-    .describe(
-      'Filter by face surface type: "plane", "cylinder", "cone", "sphere", "torus", "bspline", "other".',
-    ),
+  surface_type: z.enum(SURFACE_TYPES).optional().describe('Face surface type. Omit for all types.'),
 
-  area_min: z
-    .number()
-    .nonnegative()
-    .optional()
-    .describe('Minimum face area in mm^2. Omit for no lower bound.'),
+  area_min: z.number().nonnegative().optional().describe('Min face area (mm²).'),
 
-  area_max: z
-    .number()
-    .nonnegative()
-    .optional()
-    .describe('Maximum face area in mm^2. Omit for no upper bound.'),
+  area_max: z.number().nonnegative().optional().describe('Max face area (mm²).'),
 
-  radius_min: z
-    .number()
-    .nonnegative()
-    .optional()
-    .describe(
-      'Minimum radius in mm for cylindrical/conical/spherical faces. Omit for no lower bound.',
-    ),
+  radius_min: z.number().nonnegative().optional().describe('Min radius (mm).'),
 
-  radius_max: z
-    .number()
-    .nonnegative()
-    .optional()
-    .describe(
-      'Maximum radius in mm for cylindrical/conical/spherical faces. Omit for no upper bound.',
-    ),
+  radius_max: z.number().nonnegative().optional().describe('Max radius (mm).'),
 
   body_ids: z
     .array(bodyIdSchema)
     .optional()
-    .describe('Restrict to specific bodies (e.g. ["body:0"]). Omit to search all bodies.'),
+    .describe('Restrict to specific bodies. Omit for all bodies.'),
 
   group_by: z
     .array(z.enum(['axis', 'surface_type', 'area_range', 'radius_range', 'body_id']))
     .min(1)
     .max(3)
     .optional()
-    .describe(
-      'Cluster faces by a shared property. "axis" groups cylindrical/conical faces by their axis direction. "surface_type" groups by geometry type. "area_range" / "radius_range" group into size buckets.',
-    ),
+    .describe('Cluster faces by axis, surface_type, area_range, radius_range, or body_id.'),
 
   select: z
     .array(z.string())
@@ -175,17 +144,15 @@ export const queryFacesInputSchema = {
     .max(30)
     .optional()
     .describe(
-      'Fields to include per face. Default: id, surface_type, area, bbox, bbox_center, body_id. Common extras: radius, diameter, axis, normal, extent_along_axis.',
+      'Fields to return. Default: id, surface_type, area, bbox, bbox_center, body_id. Extras: radius, diameter, axis, normal.',
     ),
 
   order_by: z
     .object({
       by: z
         .string()
-        .describe(
-          'Field to sort by: "area", "radius", "surface_type", "center_x", "center_y", "center_z".',
-        ),
-      direction: z.enum(['asc', 'desc']).default('asc').describe('Sort direction. Default asc.'),
+        .describe('Sort field: area, radius, surface_type, center_x, center_y, center_z.'),
+      direction: z.enum(['asc', 'desc']).default('asc').describe('Sort direction.'),
     })
     .strict()
     .optional(),
@@ -195,31 +162,16 @@ export const queryFacesInputSchema = {
     .min(1)
     .max(20)
     .optional()
-    .describe(
-      'Statistical aggregates over matched faces. Examples: "count", "min:radius", "max:area", "avg:diameter".',
-    ),
+    .describe('Stats: "count", "min:radius", "max:area", "avg:diameter", etc.'),
 
   return_type: z
     .enum(RETURN_TYPES)
     .default('entities')
-    .describe(
-      '"entities" returns paginated faces. "summary" returns statistics only (no entity details). "groups" returns group counts with sample IDs (requires group_by).',
-    ),
+    .describe('entities | summary | groups (groups needs group_by).'),
 
-  limit: z
-    .number()
-    .int()
-    .min(1)
-    .max(1000)
-    .default(100)
-    .describe('Maximum faces to return. Default 100, max 1000.'),
+  limit: z.number().int().min(1).max(1000).default(100).describe('Max results. Default 100.'),
 
-  offset: z
-    .number()
-    .int()
-    .min(0)
-    .default(0)
-    .describe('Skip this many faces before returning. Default 0.'),
+  offset: z.number().int().min(0).default(0).describe('Skip N results.'),
 };
 
 export const queryFacesSchema = z.object(queryFacesInputSchema).strict();
@@ -234,47 +186,27 @@ export const queryEdgesInputSchema = {
   curve_type: z
     .enum(CURVE_TYPES)
     .optional()
-    .describe(
-      'Filter by edge curve type: "line" (straight), "circle" (holes/fillets), "ellipse", "bspline" (freeform), "other".',
-    ),
+    .describe('Edge curve type. "circle" = fillets/holes, "line" = straight. Omit for all.'),
 
-  length_min: z
-    .number()
-    .nonnegative()
-    .optional()
-    .describe('Minimum edge length in mm. Omit for no lower bound.'),
+  length_min: z.number().nonnegative().optional().describe('Min edge length (mm).'),
 
-  length_max: z
-    .number()
-    .nonnegative()
-    .optional()
-    .describe('Maximum edge length in mm. Omit for no upper bound.'),
+  length_max: z.number().nonnegative().optional().describe('Max edge length (mm).'),
 
-  radius_min: z
-    .number()
-    .nonnegative()
-    .optional()
-    .describe('Minimum radius in mm for circular edges. Omit for no lower bound.'),
+  radius_min: z.number().nonnegative().optional().describe('Min radius for circular edges (mm).'),
 
-  radius_max: z
-    .number()
-    .nonnegative()
-    .optional()
-    .describe('Maximum radius in mm for circular edges. Omit for no upper bound.'),
+  radius_max: z.number().nonnegative().optional().describe('Max radius for circular edges (mm).'),
 
   body_ids: z
     .array(bodyIdSchema)
     .optional()
-    .describe('Restrict to specific bodies (e.g. ["body:0"]). Omit to search all bodies.'),
+    .describe('Restrict to specific bodies. Omit for all bodies.'),
 
   group_by: z
     .array(z.enum(['curve_type', 'length_range', 'radius_range', 'body_id']))
     .min(1)
     .max(3)
     .optional()
-    .describe(
-      'Cluster edges by a shared property. "curve_type" groups by curve class. "length_range" / "radius_range" group into size buckets.',
-    ),
+    .describe('Cluster by curve_type, length_range, radius_range, or body_id.'),
 
   select: z
     .array(z.string())
@@ -282,17 +214,15 @@ export const queryEdgesInputSchema = {
     .max(30)
     .optional()
     .describe(
-      'Fields to include per edge. Default: id, curve_type, length, bbox, bbox_center, body_id. Common extras: radius, diameter, start_point, end_point.',
+      'Fields to return. Default: id, curve_type, length, bbox, bbox_center, body_id. Extras: radius, diameter, start_point, end_point.',
     ),
 
   order_by: z
     .object({
       by: z
         .string()
-        .describe(
-          'Field to sort by: "length", "radius", "curve_type", "center_x", "center_y", "center_z".',
-        ),
-      direction: z.enum(['asc', 'desc']).default('asc').describe('Sort direction. Default asc.'),
+        .describe('Sort field: length, radius, curve_type, center_x, center_y, center_z.'),
+      direction: z.enum(['asc', 'desc']).default('asc').describe('Sort direction.'),
     })
     .strict()
     .optional(),
@@ -302,31 +232,16 @@ export const queryEdgesInputSchema = {
     .min(1)
     .max(20)
     .optional()
-    .describe(
-      'Statistical aggregates over matched edges. Examples: "count", "min:radius", "max:length", "avg:diameter".',
-    ),
+    .describe('Stats: "count", "min:radius", "max:length", "avg:diameter", etc.'),
 
   return_type: z
     .enum(RETURN_TYPES)
     .default('entities')
-    .describe(
-      '"entities" returns paginated edges. "summary" returns statistics only. "groups" returns group counts with sample IDs (requires group_by).',
-    ),
+    .describe('entities | summary | groups (groups needs group_by).'),
 
-  limit: z
-    .number()
-    .int()
-    .min(1)
-    .max(1000)
-    .default(100)
-    .describe('Maximum edges to return. Default 100, max 1000.'),
+  limit: z.number().int().min(1).max(1000).default(100).describe('Max results. Default 100.'),
 
-  offset: z
-    .number()
-    .int()
-    .min(0)
-    .default(0)
-    .describe('Skip this many edges before returning. Default 0.'),
+  offset: z.number().int().min(0).default(0).describe('Skip N results.'),
 };
 
 export const queryEdgesSchema = z.object(queryEdgesInputSchema).strict();
@@ -343,85 +258,54 @@ export const measureStepInputSchema = z
       .array(faceOrEdgeIdSchema)
       .min(1)
       .max(500)
-      .describe(
-        'Entity IDs to measure. Use IDs returned by query_faces or query_edges. You can pass multiple IDs to batch-measure in one call.',
-      ),
+      .describe('Face or edge IDs from query_faces/query_edges. Batch by passing multiple IDs.'),
 
-    op: z
-      .enum(MEASURE_OPS)
-      .describe(
-        'Measurement operation. Choose based on what you need to measure. Only fill parameters relevant to your chosen op.',
-      ),
+    op: z.enum(MEASURE_OPS).describe('Measurement op. Only fill parameters needed for this op.'),
 
     direction: directionOrShortcutSchema
       .optional()
-      .describe(
-        'For ray_test, ray_test_grid, ray_test_segment: ray direction [x,y,z] or shortcut "along_axis"/"along_axis_both"/"normal".',
-      ),
+      .describe('Ray direction [x,y,z] or shortcut: along_axis, along_axis_both, normal.'),
 
     origin: originOrShortcutSchema
       .optional()
-      .describe(
-        'For ray_test_segment: ray origin. A 3D point, or "extent_min"/"extent_center"/"extent_max" relative to each entity.',
-      ),
+      .describe('Ray origin: 3D point or extent_min/center/max (ray_test_segment).'),
 
-    tmax: z
-      .number()
-      .positive()
-      .optional()
-      .describe('For ray_test_segment: maximum ray distance in mm.'),
+    tmax: z.number().positive().optional().describe('Max ray distance mm (ray_test_segment).'),
 
     spacing_mm: z
       .number()
       .positive()
       .default(2.0)
       .optional()
-      .describe('For ray_test_grid: distance between grid rays in mm. Default 2.0.'),
+      .describe('Grid spacing mm (ray_test_grid). Default 2.0.'),
 
     to: z
       .union([faceOrEdgeIdSchema, z.array(faceOrEdgeIdSchema).min(1).max(100)])
       .optional()
-      .describe(
-        'For distance, distance_extrema: target entity ID(s). Single: "face:5". Multiple: ["face:5", "edge:0"].',
-      ),
+      .describe('Target entity ID(s) for distance/distance_extrema.'),
 
-    plane_origin: point3Schema
-      .optional()
-      .describe('For section_by_plane: a point on the cutting plane.'),
+    plane_origin: point3Schema.optional().describe('Point on cutting plane (section_by_plane).'),
 
-    plane_normal: point3Schema
-      .optional()
-      .describe('For section_by_plane: normal vector of the cutting plane.'),
+    plane_normal: point3Schema.optional().describe('Normal of cutting plane (section_by_plane).'),
 
     param: z
       .number()
       .min(0)
       .max(1)
       .optional()
-      .describe('For curvature_at_param: parameter along the curve (0=start, 1=end).'),
+      .describe('Curve parameter 0-1 (curvature_at_param).'),
 
-    with: faceOrEdgeIdSchema
-      .optional()
-      .describe('For continuity: the other entity to check continuity against.'),
+    with: faceOrEdgeIdSchema.optional().describe('Other entity for continuity check.'),
 
-    point: point3Schema
-      .optional()
-      .describe('For classify_point, closest_point_on_face: 3D point to classify or project.'),
+    point: point3Schema.optional().describe('3D point for classify/closest_point.'),
 
-    tolerance: z
-      .number()
-      .nonnegative()
-      .default(0.01)
-      .optional()
-      .describe('Tolerance in mm. Default 0.01.'),
+    tolerance: z.number().nonnegative().default(0.01).optional().describe('Tolerance mm.'),
 
     detail_level: z
       .enum(['aggregate', 'summary', 'points'])
       .default('aggregate')
       .optional()
-      .describe(
-        '"aggregate" returns min/max/avg only. "summary" adds histograms. "points" returns full hit coordinates.',
-      ),
+      .describe('aggregate=stats only, summary=+histogram, points=+full coords.'),
   })
   .strict();
 

@@ -132,7 +132,7 @@ registerTool(
   {
     title: 'Inspect STEP File',
     description:
-      "Use this FIRST when given a STEP file to inspect. Returns a compact summary: bounding box, watertight status, body/solid/face/edge/vertex counts, global properties (volume, surface area, center of mass, inertia, principal axes), per-subshape validity, tolerance statistics, and XDE metadata (assembly tree, PMI summary, color/layer/material presence). Don't use for entity-level searches; use query_faces or query_edges for that.",
+      "Use this FIRST for a model overview. Returns bounding box, volume, surface area, center of mass, body/face/edge counts, watertight status, validity, PMI presence, and assembly structure. Don't use for entity searches; use query_faces or query_edges for that.",
     inputSchema: inspectStepInputSchema,
     annotations: READ_ONLY_ANNOTATIONS,
   },
@@ -151,7 +151,7 @@ registerTool(
   {
     title: 'Query Faces',
     description:
-      'Find and filter faces on a STEP model. Use this to discover cylindrical faces (holes, bosses), planar faces (mounting surfaces), or faces matching size criteria. Returns face IDs, surface types, areas, radii, diameters, axes, normals, bounding boxes, and more. Use the returned face IDs in measure_step for ray-tests, distance checks, and other geometric measurements.',
+      'Find faces by type, area, or radius. Returns IDs, surface types, areas, radii, diameters, axes, normals. Use returned IDs in measure_step for measurements.',
     inputSchema: queryFacesInputSchema,
     annotations: READ_ONLY_ANNOTATIONS,
   },
@@ -170,7 +170,7 @@ registerTool(
   {
     title: 'Query Edges',
     description:
-      'Find and filter edges on a STEP model. Use this to discover circular edges (fillets, hole boundaries, rounds), straight edges (part boundaries), or edges matching size/curvature criteria. Returns edge IDs, curve types, lengths, radii, diameters, bounding boxes, and more. Use the returned edge IDs in measure_step for ray-tests, distance checks, and other geometric measurements.',
+      'Find edges by curve type, length, or radius. Returns IDs, curve types, lengths, radii, diameters. Use returned IDs in measure_step for measurements.',
     inputSchema: queryEdgesInputSchema,
     annotations: READ_ONLY_ANNOTATIONS,
   },
@@ -189,7 +189,7 @@ registerTool(
   {
     title: 'Measure Geometry',
     description:
-      'Run geometric measurements on one or more faces or edges. Use entity IDs returned by query_faces or query_edges. Supports batch measurement (measure many entities in one call). Operations: ray_test (single ray), ray_test_grid (grid of rays for wall thickness), ray_test_segment (bounded ray), distance (min distance to target), classify_point (IN/ON/OUT test), closest_point_on_face (project point), section_by_plane, curvature_at_param, continuity, principal_directions. Use direction shortcuts "along_axis", "along_axis_both", "normal" for faces (server resolves the actual direction per entity).',
+      'Run measurements on faces or edges using IDs from query_faces/query_edges. Supports batch measurement. Ops: ray_test, ray_test_grid (wall thickness), ray_test_segment, distance, classify_point, closest_point_on_face, section_by_plane, curvature_at_param, continuity, principal_directions. Direction shortcuts: along_axis, along_axis_both, normal.',
     inputSchema: measureStepInputSchema,
     annotations: READ_ONLY_ANNOTATIONS,
   },
@@ -208,7 +208,7 @@ registerTool(
   {
     title: 'Diff STEP Files',
     description:
-      'Compare two STEP files and return metric deltas, topology changes, body-level changes, and XDE-level changes (PMI, colors, materials, assembly). Use this to compare two revisions of a part. Does NOT track feature identity across revisions — a hole that moved is "hole removed + hole added," not "hole moved." Deltas are comparison minus baseline.',
+      'Compare two STEP files. Returns deltas: volume, surface area, dimensions, face/edge/body counts. Comparison minus baseline.',
     inputSchema: diffStepInputSchema,
     annotations: READ_ONLY_ANNOTATIONS,
   },

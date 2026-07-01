@@ -52,6 +52,7 @@ export interface MeasureSpec {
   with?: string;
   point?: number[];
   tolerance?: number;
+  detail_level?: 'aggregate' | 'summary' | 'points';
 }
 
 export type MeasureResults = Record<string, unknown>;
