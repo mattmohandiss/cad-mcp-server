@@ -338,7 +338,15 @@ export function projectFace(
   fields: QueryFacesInput['select'],
   pullDirection?: number[],
 ): Record<string, unknown> {
-  const selected = fields ?? ['id', 'surface_type', 'area', 'bbox', 'bbox_center', 'body_id'];
+  const selected = fields ?? [
+    'id',
+    'surface_type',
+    'area',
+    'bbox',
+    'bbox_center',
+    'body_id',
+    'adjacent_faces',
+  ];
   const result: Record<string, unknown> = {};
 
   // Always surface body_id when available (even if not explicitly requested).

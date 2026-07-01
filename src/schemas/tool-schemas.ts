@@ -67,11 +67,7 @@ export const MEASURE_OPS = [
   'ray_test_grid',
   'ray_test_segment',
   'distance',
-  'distance_extrema',
-  'section_by_plane',
-  'curvature_at_param',
-  'continuity',
-  'principal_directions',
+  'draft_angle',
   'closest_point_on_face',
   'classify_point',
 ] as const;
@@ -144,7 +140,7 @@ export const queryFacesInputSchema = {
     .max(30)
     .optional()
     .describe(
-      'Fields to return. Default: id, surface_type, area, bbox, bbox_center, body_id. Extras: radius, diameter, axis, normal.',
+      'Fields to return. Default: id, surface_type, area, bbox, bbox_center, body_id, adjacent_faces. Extras: radius, diameter, axis, normal.',
     ),
 
   order_by: z
@@ -264,7 +260,9 @@ export const measureStepInputSchema = z
 
     direction: directionOrShortcutSchema
       .optional()
-      .describe('Ray direction [x,y,z] or shortcut: along_axis, along_axis_both, normal.'),
+      .describe(
+        'Ray direction or draft pull direction [x,y,z]. Shortcuts: along_axis, along_axis_both, normal.',
+      ),
 
     origin: originOrShortcutSchema
       .optional()
@@ -277,12 +275,12 @@ export const measureStepInputSchema = z
       .positive()
       .default(2.0)
       .optional()
-      .describe('Grid spacing mm (ray_test_grid). Default 2.0.'),
+      .describe('Grid spacing mm (ray_test_grid).'),
 
     to: z
       .union([faceOrEdgeIdSchema, z.array(faceOrEdgeIdSchema).min(1).max(100)])
       .optional()
-      .describe('Target entity ID(s) for distance/distance_extrema.'),
+      .describe('Target entity ID(s) for distance op.'),
 
     plane_origin: point3Schema.optional().describe('Point on cutting plane (section_by_plane).'),
 

@@ -136,6 +136,24 @@ function runMeasure(
       const dist = kernel.distanceBetween(entityHandle, targetShape);
       return dist;
     }
+    case 'draft_angle': {
+      const direction = normalizeDirection(spec.direction ?? [0, 0, 1]);
+      // Sample the face normal at the center UV (0.5, 0.5)
+      const normal = kernel.surfaceNormal(entityHandle, 0.5, 0.5);
+      if (!normal) return { error: 'could not compute face normal' };
+      const dot = normal.x * direction.x + normal.y * direction.y + normal.z * direction.z;
+      const clamped = Math.max(-1, Math.min(1, dot));
+      const angle = Math.acos(clamped) * (180 / Math.PI);
+      // Draft angle = 90° - angle between normal and pull direction
+      // Positive = face tapers inward (good for ejection)
+      // Negative = face overhangs (undercut — needs side action)
+      const draft = 90 - angle;
+      return {
+        draft_angle_deg: Math.round(draft * 100) / 100,
+        normal: [normal.x, normal.y, normal.z] as [number, number, number],
+        undercut: draft < 0,
+      };
+    }
     case 'classify_point': {
       if (!spec.point) {
         return { error: 'missing "point" coordinate' };
