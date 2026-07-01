@@ -49,3 +49,4 @@ tests/eval-logs/
 # Eval secrets
 eval/.env
 eval/.env.local
+STRATEGY.md
