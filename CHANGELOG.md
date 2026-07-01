@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.4.0](https://github.com/mattmohandiss/cad-mcp-server/compare/v0.3.3...v0.4.0) (2026-07-01)
+
+
+### Features
+
+* add draft_angle op, adjacency defaults, remove unimplemented ops ([728ffe6](https://github.com/mattmohandiss/cad-mcp-server/commit/728ffe6d39c52245b47c81abdf2459e171a70593))
+* add draft_check, hole_classification, hole_type scenarios ([d5db859](https://github.com/mattmohandiss/cad-mcp-server/commit/d5db859c02548e9efc21cea16b81841f860d066e))
+* add drill_directions and clearance_hole_to_edge reasoning scenarios ([74a68da](https://github.com/mattmohandiss/cad-mcp-server/commit/74a68da86a570de1ba1dd16bb9556c0531015242))
+
+
+### Bug Fixes
+
+* add WASM guards to integration tests that require OCCT kernel ([36eb590](https://github.com/mattmohandiss/cad-mcp-server/commit/36eb59070fcf6d5d8532e61359356ca3422ae9bb))
+* flatten measure_step schema and add thin_walls reasoning scenario ([4dfd0dd](https://github.com/mattmohandiss/cad-mcp-server/commit/4dfd0dd7335b932a04d20db83ee50ed07fd35ffe))
+* handle exhausted-max-steps edge case in eval text parsing ([43a633a](https://github.com/mattmohandiss/cad-mcp-server/commit/43a633a55c5c541860dc139c410975ed714868a7))
+* remove Output.object() to support all models agnostically ([10e3389](https://github.com/mattmohandiss/cad-mcp-server/commit/10e3389e9f31294ec5c0d30196cd81704daa4c2b))
+* update test assertions for 16 scenarios and 7 measure ops ([d984bf2](https://github.com/mattmohandiss/cad-mcp-server/commit/d984bf2e52053b9b21f05599f229d7cda32982bc))
+
+
+### Performance Improvements
+
+* trim MCP schema descriptions and strip raw ray-grid data ([d773524](https://github.com/mattmohandiss/cad-mcp-server/commit/d77352454e9a3ffb77de3e34573798476b421469))
+
 ## [0.3.3](https://github.com/mattmohandiss/cad-mcp-server/compare/v0.3.2...v0.3.3) (2026-06-29)
 
 

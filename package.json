@@ -1,6 +1,6 @@
 {
   "name": "cad-mcp-server",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "mcpName": "io.github.mattmohandiss/cad-mcp-server",
   "description": "Give your AI assistant the ability to inspect, measure, and compare 3D CAD models. Works locally with any STEP file — no CAD license, no cloud, no setup.",
   "type": "module",
