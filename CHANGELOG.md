@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/mattmohandiss/cad-mcp-server/compare/v0.4.0...v0.4.1) (2026-07-01)
+
+
+### Bug Fixes
+
+* remove flaky diff test that blocks CI releases ([281f13a](https://github.com/mattmohandiss/cad-mcp-server/commit/281f13ab17ca74adc243fe20cf114db2aa0af94b))
+
 ## [0.4.0](https://github.com/mattmohandiss/cad-mcp-server/compare/v0.3.3...v0.4.0) (2026-07-01)
 
 
