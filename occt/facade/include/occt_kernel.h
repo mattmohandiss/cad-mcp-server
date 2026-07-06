@@ -200,6 +200,10 @@ class OcctKernel {
     bool hasFreeEdges(uint32_t id);
     int freeEdgeCount(uint32_t id);
     std::vector<double> shapeContents(uint32_t id);
+    double faceTolerance(uint32_t faceId);
+    uint32_t sectionByPlane(uint32_t shapeId, double px, double py, double pz, double nx, double ny, double nz);
+    std::string edgeContinuity(uint32_t edgeId, uint32_t faceAId, uint32_t faceBId);
+    std::vector<double> distanceExtrema(uint32_t shapeAId, uint32_t shapeBId);
 
     // --- Geometry Utilities ---
     bool areAxesCoaxial(double ax1x, double ax1y, double ax1z,

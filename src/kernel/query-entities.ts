@@ -55,7 +55,11 @@ export interface ExtractedEdgeEntity {
   start_vertex?: string;
   end_vertex?: string;
   radius?: number;
+  is_closed?: boolean;
+  is_periodic?: boolean;
   convexity?: string;
+  dihedral_angle_deg?: number;
+  continuity?: string;
   body_id?: string;
   adjacent_faces?: Array<{ face_id: string; surface_type: string }>;
 }
@@ -65,7 +69,6 @@ export function extractEdgeEntities(
   shape: ShapeHandle,
   bodyMap?: { faceBody: number[]; edgeBody: number[] },
 ): ExtractedEdgeEntity[] {
-  kernel.graphBuild(shape);
   const edges = kernel.getSubShapes(shape, 'edge');
   const entities: ExtractedEdgeEntity[] = [];
 
@@ -91,6 +94,11 @@ export function extractEdgeEntities(
       if (entity.radius! < 0) entity.radius = undefined;
     }
 
+    entity.is_closed = kernel.curveIsClosed(edge);
+    if (curveType === 'bspline' || curveType === 'ellipse') {
+      entity.is_periodic = kernel.curveIsPeriodic(edge);
+    }
+
     // Vertex IDs via BRepGraph.
     try {
       const verts = kernel.graphEdgeVertices(i);
@@ -110,7 +118,14 @@ export function extractEdgeEntities(
         const fA = allFaces[faceIndices[0]];
         const fB = allFaces[faceIndices[1]];
         if (fA && fB) {
-          entity.convexity = computeEdgeConvexity(kernel, fA, fB, edge).convexity;
+          const result = computeEdgeConvexity(kernel, fA, fB, edge);
+          entity.convexity = result.convexity;
+          entity.dihedral_angle_deg = result.dihedral_angle_deg;
+          try {
+            entity.continuity = kernel.edgeContinuity(edge, fA, fB);
+          } catch {
+            // continuity check failed
+          }
         }
       }
     } catch {
@@ -153,6 +168,9 @@ export interface ExtractedFaceEntity {
     location: [number, number, number];
   };
   body_id?: string;
+  is_valid?: boolean;
+  tolerance?: number;
+  uv_bounds?: { u_min: number; u_max: number; v_min: number; v_max: number };
   outer_edges?: string[];
   inner_wires?: string[][];
   adjacent_faces?: Array<{
@@ -172,7 +190,6 @@ export function extractFaceEntities(
   shape: ShapeHandle,
   bodyMap?: { faceBody: number[]; edgeBody: number[] },
 ): ExtractedFaceEntity[] {
-  kernel.graphBuild(shape);
   const faces = kernel.getSubShapes(shape, 'face');
   const entities: ExtractedFaceEntity[] = [];
 
@@ -204,6 +221,20 @@ export function extractFaceEntities(
       // Normal extraction failed.
     }
 
+    // Per-face validity.
+    try {
+      entity.is_valid = kernel.isValid(face);
+    } catch {
+      // Validity check failed.
+    }
+
+    // Per-face tolerance.
+    try {
+      entity.tolerance = kernel.faceTolerance(face);
+    } catch {
+      // Tolerance query failed.
+    }
+
     // Cylinder data.
     if (surfaceType === 'cylinder') {
       try {
@@ -223,6 +254,19 @@ export function extractFaceEntities(
       } catch {
         // ignore
       }
+    }
+
+    // UV parameter domain.
+    try {
+      const uv = kernel.uvBounds(face);
+      entity.uv_bounds = {
+        u_min: uv.uMin,
+        u_max: uv.uMax,
+        v_min: uv.vMin,
+        v_max: uv.vMax,
+      };
+    } catch {
+      // ignore
     }
 
     // Wire topology via BRepGraph.

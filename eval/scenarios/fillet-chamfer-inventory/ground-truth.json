@@ -1,0 +1,5 @@
+{
+  "g1_fillet_edges": 4,
+  "sharp_corners": 4,
+  "smallest_fillet_radius_mm": 2.0
+}

@@ -7,13 +7,10 @@ files:
   box_with_holes: box_with_3_holes.step
 ---
 
-# Unique drill directions
+# Drilling direction count
 
-The box with holes contains three through-holes, all drilled from the
-same face. Use group_by axis on cylindrical faces to group faces that
-share the same drilling axis. Count how many unique axis groups exist.
-
-All three holes share the same Z-axis direction. Coaxial faces count as
-one group.
+This box has three through-holes, all drilled from the same face.
+We're setting up a CNC drill operation. How many unique drilling
+directions does this part need? Coaxial holes count as one direction.
 
 Return JSON: {"unique_axes": number}

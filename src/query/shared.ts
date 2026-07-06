@@ -3,7 +3,7 @@ import type {
   StepQueryPagination,
   StepQueryUnits,
   StepQueryCoordinateSystem,
-} from '../tools/step-tools.js';
+} from '../types/query.js';
 import { CAD_RESPONSE_SCHEMA_VERSION } from '../schema-version.js';
 import { normalizeVector, angleDegreesNormalized } from '../utils/vectors.js';
 

@@ -7,14 +7,14 @@ files:
   pin: tapered_pin.step
 ---
 
-# Draft angle check
+# Injection molding draft check
 
-A 20mm tall tapered pin has a base radius of 10mm and top radius of 8mm.
-Use measure_step with op draft_angle and direction [0,0,1] (+Z pull) on
-all lateral faces (query_faces for cylinder or cone surfaces). Check if
-the minimum draft angle exceeds 1° — a requirement for injection molding.
+This 20mm tall tapered pin has a base radius of 10mm and a top radius
+of 8mm, tapering inward from bottom to top. It is intended for injection
+molding with a +Z pull direction.
 
-The pin tapers inward from bottom to top, so draft angles should be
-positive (>0°). Faces with 0° draft are parting surfaces (top/bottom).
+What is the minimum draft angle on the lateral faces? Does the part meet
+the 1° minimum draft requirement for injection molding? The top and
+bottom faces are parting surfaces and don't need draft.
 
 Return JSON: {"min_draft_deg": number, "moldable": boolean}

@@ -14,6 +14,7 @@ import {
   DEFAULT_QUERY_LIMITS,
   type ComputedGroup,
 } from './shared.js';
+import { applyAggregate } from './aggregate.js';
 
 export interface QueryFacesInput {
   where?: Record<string, unknown>;
@@ -22,6 +23,7 @@ export interface QueryFacesInput {
   group_by?: string[];
   order_by?: { by: string; direction?: 'asc' | 'desc' };
   return_type?: 'summary' | 'entities' | 'groups';
+  aggregate?: string[];
   pull_direction?: number[];
   limit?: number;
   offset?: number;
@@ -70,6 +72,14 @@ export async function queryStepFaces(filePath: string, input: QueryFacesInput) {
     );
     const pagination = createPagination(limit, offset, paginated.length, total_matched);
 
+    const baseStats: Record<string, unknown> = {
+      total_faces: allFaces.length,
+      matched_faces: total_matched,
+      surface_types: aggregateSurfaceTypes(filtered),
+      area_range: getAreaRange(filtered),
+    };
+    applyAggregate(baseStats, filtered as unknown as Record<string, unknown>[], input.aggregate);
+
     return createQueryResponse(
       filePath,
       {
@@ -80,12 +90,7 @@ export async function queryStepFaces(filePath: string, input: QueryFacesInput) {
       },
       pagination,
       entities,
-      {
-        total_faces: allFaces.length,
-        matched_faces: total_matched,
-        surface_types: aggregateSurfaceTypes(filtered),
-        area_range: getAreaRange(filtered),
-      },
+      baseStats,
       groups,
       [],
       [],
@@ -263,6 +268,19 @@ export function applyFaceFilters(
     result = result.filter((f) => f.surface_type === where.surface_type);
   }
 
+  if (typeof where.validity_status === 'string') {
+    if (where.validity_status === 'valid') {
+      result = result.filter((f) => f.is_valid === true);
+    } else if (where.validity_status === 'invalid') {
+      result = result.filter((f) => f.is_valid === false);
+    }
+  }
+
+  const toleranceMax = where.tolerance_max;
+  if (typeof toleranceMax === 'number') {
+    result = result.filter((f) => f.tolerance !== undefined && f.tolerance <= toleranceMax);
+  }
+
   const areaMin = where.area_min;
   if (typeof areaMin === 'number') {
     result = result.filter((f) => f.area >= areaMin);
@@ -403,6 +421,20 @@ export function projectFace(
       case 'axis':
         if (face.axis !== undefined) result.axis = face.axis;
         break;
+      case 'extent_along_axis':
+        if (face.axis !== undefined) {
+          const diag = [
+            face.bbox.max[0] - face.bbox.min[0],
+            face.bbox.max[1] - face.bbox.min[1],
+            face.bbox.max[2] - face.bbox.min[2],
+          ];
+          const dot =
+            diag[0] * face.axis.direction[0] +
+            diag[1] * face.axis.direction[1] +
+            diag[2] * face.axis.direction[2];
+          result.extent_along_axis = Math.abs(dot);
+        }
+        break;
       case 'adjacent_faces':
         if (face.adjacent_faces !== undefined) result.adjacent_faces = face.adjacent_faces;
         break;
@@ -421,6 +453,12 @@ export function projectFace(
         break;
       case 'inner_wires':
         if (face.inner_wires !== undefined) result.inner_wires = face.inner_wires;
+        break;
+      case 'uv_bounds':
+        if (face.uv_bounds !== undefined) result.uv_bounds = face.uv_bounds;
+        break;
+      case 'is_valid':
+        result.is_valid = face.is_valid;
         break;
     }
   }

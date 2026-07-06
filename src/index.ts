@@ -189,7 +189,7 @@ registerTool(
   {
     title: 'Measure Geometry',
     description:
-      'Run measurements on faces or edges using IDs from query_faces/query_edges. Supports batch measurement. Ops: ray_test, ray_test_grid (wall thickness), ray_test_segment, distance, draft_angle, closest_point_on_face, classify_point. Direction shortcuts: along_axis, along_axis_both, normal.',
+      'Run measurements on faces or edges. Batch by passing multiple entity_ids. Ops: ray_test, ray_test_grid, ray_test_segment, distance, distance_extrema, draft_angle, closest_point_on_face, classify_point, contains_point, surface_curvature, edge_projection, section_by_plane, continuity. Direction shortcuts: along_axis, along_axis_both, normal.',
     inputSchema: measureStepInputSchema,
     annotations: READ_ONLY_ANNOTATIONS,
   },

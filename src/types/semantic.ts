@@ -2,10 +2,9 @@ import type { Limitation, ProviderInfo, Provenance, UnitSystem } from './schema.
 
 export interface PmiSummary {
   hasPmi: boolean;
-  hasGdt: boolean;
-  hasDimensions: boolean;
+  hasGdtKeywords: boolean;
+  hasDimensionKeywords: boolean;
   detectedKeywords: string[];
-  semanticStatus: 'not_detected' | 'keyword_detected' | 'unknown';
 }
 
 export interface SemanticFact {

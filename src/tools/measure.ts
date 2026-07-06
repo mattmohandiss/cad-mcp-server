@@ -70,8 +70,7 @@ function buildMeasureSpec(args: MeasureStepInput): MeasureSpec {
     base.spacing_mm = args.spacing_mm;
   }
   if (args.to !== undefined) {
-    const to = args.to;
-    base.to = Array.isArray(to) ? to[0] : to;
+    base.to = args.to;
   }
   if (args.plane_origin !== undefined) {
     base.plane_origin = args.plane_origin;

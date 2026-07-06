@@ -9,8 +9,7 @@ files:
 
 # Blind vs through holes
 
-The box with blind hole contains two holes.
-One is blind (doesn't go all the way through). Which one is it?
-Use ray tests from both ends to classify each hole as blind or through.
+This box contains two holes. One is blind (doesn't go all the way through)
+and one goes through the full depth. Determine which is which.
 
 Return JSON: {"through_holes": number, "blind_holes": number}

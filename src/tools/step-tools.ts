@@ -20,6 +20,14 @@ export async function handleInspectStepFile(filePath: string) {
         /* ignore */
       }
 
+      // Raw inertia matrix (3x3 row-major, about center of mass).
+      let inertia: number[] | undefined;
+      try {
+        inertia = kernel.getInertia(shape);
+      } catch {
+        /* ignore */
+      }
+
       // Oriented bounding box (may fail same as above).
       let obb: number[] | undefined;
       try {
@@ -28,18 +36,71 @@ export async function handleInspectStepFile(filePath: string) {
         /* ignore */
       }
 
-      // Shell watertight analysis.
-      let freeEdgeCount = -1;
-      try {
-        freeEdgeCount = kernel.freeEdgeCount(shape);
-      } catch {
-        /* ignore */
-      }
-
       // Shape contents inventory.
       let contents: number[] | undefined;
       try {
         contents = kernel.shapeContents(shape);
+      } catch {
+        /* ignore */
+      }
+
+      // Single traversal: edges for watertight + degenerate analysis,
+      // faces for tolerance statistics.
+      const allEdges = kernel.getSubShapes(shape, 'edge');
+      const allFaces = kernel.getSubShapes(shape, 'face');
+
+      // Shell watertight analysis + free edge IDs.
+      let freeEdgeCount = -1;
+      let freeEdgeIds: string[] | undefined;
+      try {
+        kernel.graphBuild(shape);
+        const freeEdges: string[] = [];
+        for (let i = 0; i < allEdges.length; i++) {
+          try {
+            const faceIndices = kernel.graphEdgeFaces(i);
+            if (faceIndices.length === 1) {
+              freeEdges.push(`edge:${i}`);
+            }
+          } catch {
+            // skip edges that can't be queried
+          }
+        }
+        freeEdgeCount = freeEdges.length;
+        if (freeEdgeCount > 0) freeEdgeIds = freeEdges;
+      } catch {
+        /* ignore */
+      }
+
+      // Degenerate edge detection.
+      let degenerateEdgeIds: string[] | undefined;
+      try {
+        const degEdges: string[] = [];
+        for (let i = 0; i < allEdges.length; i++) {
+          const len = kernel.getLength(allEdges[i]);
+          if (len < 1e-6) {
+            degEdges.push(`edge:${i}`);
+          }
+        }
+        if (degEdges.length > 0) degenerateEdgeIds = degEdges;
+      } catch {
+        /* ignore */
+      }
+
+      // Tolerance statistics.
+      let toleranceStats: { min: number; max: number; avg: number } | undefined;
+      try {
+        if (allFaces.length > 0) {
+          let min = Number.POSITIVE_INFINITY;
+          let max = Number.NEGATIVE_INFINITY;
+          let sum = 0;
+          for (const face of allFaces) {
+            const tol = kernel.faceTolerance(face);
+            if (tol < min) min = tol;
+            if (tol > max) max = tol;
+            sum += tol;
+          }
+          toleranceStats = { min, max, avg: sum / allFaces.length };
+        }
       } catch {
         /* ignore */
       }
@@ -65,6 +126,19 @@ export async function handleInspectStepFile(filePath: string) {
               axis_1: [principal[3], principal[4], principal[5]],
               axis_2: [principal[6], principal[7], principal[8]],
               axis_3: [principal[9], principal[10], principal[11]],
+            }
+          : undefined,
+        inertia_matrix: inertia
+          ? {
+              ixx: inertia[0],
+              ixy: inertia[1],
+              ixz: inertia[2],
+              iyx: inertia[3],
+              iyy: inertia[4],
+              iyz: inertia[5],
+              izx: inertia[6],
+              izy: inertia[7],
+              izz: inertia[8],
             }
           : undefined,
         bounding_box_obb: obb
@@ -98,6 +172,9 @@ export async function handleInspectStepFile(filePath: string) {
             ? {
                 free_edge_count: freeEdgeCount,
                 is_watertight: freeEdgeCount === 0,
+                free_edge_ids: freeEdgeIds,
+                degenerate_edge_ids: degenerateEdgeIds,
+                tolerance_stats: toleranceStats,
                 shape_contents: contents
                   ? {
                       faces: contents[0],
@@ -113,10 +190,10 @@ export async function handleInspectStepFile(filePath: string) {
               }
             : undefined,
         pmi: {
-          has_pmi: semantic.pmi?.hasGdt || semantic.pmi?.hasDimensions || false,
-          has_gdt: semantic.pmi?.hasGdt || false,
-          has_dimensions: semantic.pmi?.hasDimensions || false,
-          semantic_status: semantic.pmi?.semanticStatus || 'not_detected',
+          has_pmi: semantic.pmi?.hasPmi || false,
+          has_gdt_keywords: semantic.pmi?.hasGdtKeywords || false,
+          has_dimension_keywords: semantic.pmi?.hasDimensionKeywords || false,
+          detected_keywords: semantic.pmi?.detectedKeywords || [],
           tolerance_entity_count: semantic.toleranceEntityCount,
         },
         topology_summary: {
@@ -135,7 +212,10 @@ export async function handleInspectStepFile(filePath: string) {
         },
         geometry_extremes: {
           edges_length_lt_1_mm: brep.edgeStatistics ? brep.edgeStatistics.byLengthRange.tiny : 0,
-          min_edge_length: brep.edgeStatistics?.minLength || 0,
+          min_edge_length:
+            brep.edgeStatistics && Number.isFinite(brep.edgeStatistics.minLength)
+              ? brep.edgeStatistics.minLength
+              : undefined,
         },
         bodies: brep.bodies.map((b) => ({
           id: b.id,
@@ -162,47 +242,10 @@ export async function handleInspectStepFile(filePath: string) {
 /*  Response types (consumed by query engine and shared services)      */
 /* ------------------------------------------------------------------ */
 
-export interface StepQueryUnits {
-  length: 'mm';
-  area: 'mm^2';
-  volume: 'mm^3';
-  angle: 'deg';
-}
-
-export interface StepQueryCoordinateSystem {
-  origin: 'STEP model origin';
-  axes: 'model coordinates';
-  handedness: 'right';
-}
-
-export interface StepQueryPagination {
-  limit: number;
-  offset: number;
-  returned: number;
-  total_matched: number;
-  has_more: boolean;
-}
-
-export interface StepQueryGroup {
-  id: string;
-  key: Record<string, unknown>;
-  entity_count: number;
-  sample_entity_ids: string[];
-  sample_entity_limit: number;
-  sample_is_complete: boolean;
-  summary: Record<string, unknown>;
-}
-
-export interface StepQueryResponse<TEntity extends Record<string, unknown>> {
-  schema_version: typeof CAD_RESPONSE_SCHEMA_VERSION;
-  file_path: string;
-  units: StepQueryUnits;
-  coordinate_system: StepQueryCoordinateSystem;
-  query: Record<string, unknown>;
-  statistics: Record<string, unknown>;
-  pagination: StepQueryPagination;
-  entities: TEntity[];
-  groups: StepQueryGroup[];
-  warnings: unknown[];
-  limitations: unknown[];
-}
+export type {
+  StepQueryUnits,
+  StepQueryCoordinateSystem,
+  StepQueryPagination,
+  StepQueryGroup,
+  StepQueryResponse,
+} from '../types/query.js';

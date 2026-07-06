@@ -145,6 +145,15 @@ async function buildSuccessTrace(
       ? ((extracted as Record<string, unknown>)[scenario.field] ?? null)
       : null;
 
+  const cost = parseFloat(
+    String(
+      (result as { providerMetadata?: { gateway?: { cost?: string | number } } }).providerMetadata
+        ?.gateway?.cost ?? 0,
+    ),
+  );
+
+  const generationId = (result as { id?: string }).id;
+
   const trace: EvalTrace = {
     scenarioId: scenario.id,
     modelId,
@@ -159,6 +168,8 @@ async function buildSuccessTrace(
     totalTokens: (result.usage?.inputTokens ?? 0) + (result.usage?.outputTokens ?? 0),
     durationMs: Date.now() - start,
     timestamp: new Date().toISOString(),
+    cost,
+    generationId,
   };
 
   return { ok: true, trace };
@@ -180,19 +191,47 @@ const SCENARIO_TOOL_MAP: Record<string, { expected: string[]; distraction: strin
   basic_volume: { expected: ['inspect_step'], distraction: [] },
   verify_dimensions: { expected: ['inspect_step'], distraction: [] },
   face_delta: { expected: ['diff_step'], distraction: [] },
-  cyl_face_count: { expected: ['query_faces'], distraction: ['query_edges', 'measure_step'] },
-  face_types: { expected: ['query_faces'], distraction: ['query_edges', 'measure_step'] },
   hole_diameters: { expected: ['query_faces'], distraction: ['query_edges', 'measure_step'] },
-  hole_directions: { expected: ['query_faces'], distraction: ['query_edges'] },
-  smallest_fillet: { expected: ['query_edges'], distraction: ['query_faces', 'measure_step'] },
-  smallest_hole: { expected: ['query_faces'], distraction: ['query_edges', 'measure_step'] },
   drill_directions: { expected: ['query_faces'], distraction: ['query_edges'] },
   blind_vs_through: { expected: ['query_faces', 'measure_step'], distraction: ['query_edges'] },
   thin_walls: { expected: ['query_faces', 'measure_step'], distraction: ['query_edges'] },
   clearance_hole_to_edge: { expected: ['query_faces', 'measure_step'], distraction: [] },
   draft_check: { expected: ['query_faces', 'measure_step'], distraction: ['query_edges'] },
   hole_classification: { expected: ['query_faces', 'measure_step'], distraction: ['query_edges'] },
-  hole_type: { expected: ['query_faces'], distraction: ['query_edges', 'measure_step'] },
+  aggregate_statistics: { expected: ['query_faces'], distraction: ['query_edges', 'measure_step'] },
+  clean_import_verification: {
+    expected: ['inspect_step'],
+    distraction: ['query_faces', 'query_edges', 'measure_step'],
+  },
+  clearance_verification: {
+    expected: ['inspect_step', 'measure_step'],
+    distraction: ['query_faces', 'query_edges'],
+  },
+  cross_section_verification: {
+    expected: ['query_faces', 'measure_step'],
+    distraction: ['query_edges'],
+  },
+  fillet_chamfer_inventory: {
+    expected: ['query_edges'],
+    distraction: ['query_faces', 'measure_step'],
+  },
+  hole_pattern_analysis: {
+    expected: ['query_faces', 'measure_step'],
+    distraction: ['query_edges'],
+  },
+  moldability_check: { expected: ['query_faces', 'query_edges'], distraction: ['measure_step'] },
+  point_containment_test: {
+    expected: ['inspect_step', 'measure_step'],
+    distraction: ['query_faces', 'query_edges'],
+  },
+  surface_curvature_analysis: {
+    expected: ['query_faces', 'query_edges', 'measure_step'],
+    distraction: [],
+  },
+  wall_thickness_analysis: {
+    expected: ['query_faces', 'measure_step'],
+    distraction: ['query_edges'],
+  },
 };
 
 const IRRELEVANT_FACE_TYPES = new Set(['other', 'bspline', 'torus']);

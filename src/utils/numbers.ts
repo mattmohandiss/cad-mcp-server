@@ -7,7 +7,7 @@ interface NumericStats {
 }
 
 export function emptyStats(): NumericStats {
-  return { count: 0, total: 0, average: 0, min: 0, max: 0 };
+  return { count: 0, total: 0, average: 0, min: NaN, max: NaN };
 }
 
 export function bucketLength(length: number): 'tiny' | 'small' | 'medium' | 'large' | 'xlarge' {

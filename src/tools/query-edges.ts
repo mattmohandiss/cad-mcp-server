@@ -23,11 +23,13 @@ export async function handleQueryEdges(args: QueryEdgesArgs) {
     if (args.radius_min !== undefined && args.radius_min > 0) where.radius_min = args.radius_min;
     if (args.radius_max !== undefined && args.radius_max > 0) where.radius_max = args.radius_max;
     if (args.body_ids !== undefined && args.body_ids.length > 0) where.body_ids = args.body_ids;
+    if (args.dihedral_min_deg !== undefined) where.dihedral_min_deg = args.dihedral_min_deg;
 
     return queryStepEdges(args.file_path, {
       where: Object.keys(where).length > 0 ? where : undefined,
       select: args.select,
       group_by: args.group_by as string[] | undefined,
+      aggregate: args.aggregate,
       order_by: args.order_by,
       return_type: args.return_type,
       limit: args.limit,

@@ -164,6 +164,8 @@ function buildReason(
 function buildUsageEntry(trace: EvalTrace): UsageEntry {
   return {
     totalTokens: trace.totalTokens,
+    cost: trace.cost,
+    generationId: trace.generationId,
   };
 }
 

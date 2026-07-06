@@ -17,9 +17,9 @@ describe('eval runner: plumbing smoke test', () => {
     expect(DEFAULT_MODELS).toContain('google/gemini-2.5-flash');
   });
 
-  it('loads 10 scenarios with valid structure', () => {
+  it('loads 20 scenarios with valid structure', () => {
     const scenarios = loadScenarios();
-    expect(scenarios.length).toBe(16);
+    expect(scenarios.length).toBe(20);
     for (const s of scenarios) {
       expect(s.id).toBeTruthy();
       expect(s.field).toBeTruthy();

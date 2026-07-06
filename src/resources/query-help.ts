@@ -13,6 +13,7 @@
 
 import { SURFACE_TYPES, CURVE_TYPES, MEASURE_OPS, RETURN_TYPES } from '../schemas/tool-schemas.js';
 import { toolExamples } from '../schemas/examples.js';
+import { CAD_MCP_SERVER_VERSION } from '../schema-version.js';
 
 export const QUERY_HELP_URI = 'cad-mcp://query-help';
 
@@ -33,7 +34,7 @@ export function queryHelpResourceHandler(): ResourceContent {
 
 function buildHelpDocument() {
   return {
-    version: '0.5.0',
+    version: CAD_MCP_SERVER_VERSION,
     surface: '5-tool (inspect → query → measure pattern)',
     description:
       'CAD MCP Server exposes 5 read-only tools for STEP geometry inspection. Workflow: (1) inspect_step for overview, (2) query_faces or query_edges to find entities, (3) measure_step for geometric measurements on discovered entities.',
@@ -55,6 +56,9 @@ function buildHelpDocument() {
           'radius_min',
           'radius_max',
           'body_ids',
+          'validity_status',
+          'tolerance_max',
+          'normal',
         ],
         select_fields: [
           'id',
@@ -65,11 +69,21 @@ function buildHelpDocument() {
           'diameter',
           'axis',
           'extent_along_axis',
+          'uv_bounds',
+          'is_valid',
+          'tolerance',
           'bbox',
           'bbox_center',
           'body_id',
         ],
-        group_by: ['axis', 'surface_type', 'area_range', 'radius_range', 'body_id'],
+        group_by: [
+          'axis',
+          'normal_direction',
+          'surface_type',
+          'area_range',
+          'radius_range',
+          'body_id',
+        ],
       },
       edges: {
         description: 'Edges of the B-rep model.',
@@ -79,6 +93,7 @@ function buildHelpDocument() {
           'length_max',
           'radius_min',
           'radius_max',
+          'dihedral_min_deg',
           'body_ids',
         ],
         select_fields: [
@@ -89,6 +104,10 @@ function buildHelpDocument() {
           'diameter',
           'start_point',
           'end_point',
+          'dihedral_angle_deg',
+          'continuity',
+          'is_closed',
+          'is_periodic',
           'bbox',
           'bbox_center',
           'body_id',
@@ -130,7 +149,7 @@ function buildHelpDocument() {
           order_by: '{by, direction} (optional): by length, radius, curve_type, center_x/y/z',
           aggregate: 'string[] (optional): "count", "min:radius", "max:length"',
           limit: 'integer (default 100, max 1000)',
-          offset: 'integer (默认 0)',
+          offset: 'integer (default 0)',
           return_type: `enum (default entities): ${RETURN_TYPES.join(', ')}`,
         },
         examples: toolExamples.query_edges,
@@ -145,11 +164,12 @@ function buildHelpDocument() {
           direction: '[x,y,z] | "along_axis" | "along_axis_both" | "normal" (ray ops only)',
           spacing_mm: 'number (ray_test_grid, default 2.0)',
           tmax: 'number (ray_test_segment, max ray distance)',
-          to: 'entity ID or array (distance ops)',
+          to: 'entity ID (distance ops)',
+          point:
+            '[x,y,z] (classify_point, closest_point_on_face, contains_point, surface_curvature, edge_projection)',
           plane_origin: '[x,y,z] (section_by_plane)',
           plane_normal: '[x,y,z] (section_by_plane)',
-          param: 'number 0-1 (curvature_at_param)',
-          point: '[x,y,z] (classify_point, closest_point_on_face)',
+          tolerance: 'number (contains_point, default 1e-7)',
         },
         examples: toolExamples.measure_step,
       },

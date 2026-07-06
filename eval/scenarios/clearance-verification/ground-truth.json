@@ -1,0 +1,5 @@
+{
+  "min_clearance_mm": 2.0,
+  "approach_pairs": 1,
+  "gap_maintained": true
+}

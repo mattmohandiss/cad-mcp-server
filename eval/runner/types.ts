@@ -36,6 +36,8 @@ export interface EvalTrace {
   totalTokens: number;
   durationMs: number;
   timestamp: string;
+  cost?: number;
+  generationId?: string;
 }
 
 // ── Legacy result types (keep for output compatibility) ──────────────

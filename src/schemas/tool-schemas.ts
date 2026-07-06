@@ -67,9 +67,15 @@ export const MEASURE_OPS = [
   'ray_test_grid',
   'ray_test_segment',
   'distance',
+  'distance_extrema',
   'draft_angle',
   'closest_point_on_face',
   'classify_point',
+  'contains_point',
+  'surface_curvature',
+  'edge_projection',
+  'section_by_plane',
+  'continuity',
 ] as const;
 
 /* ------------------------------------------------------------------ */
@@ -79,7 +85,7 @@ export const MEASURE_OPS = [
 const aggregateSpec = z
   .string()
   .regex(
-    /^(count|min|max|avg|stddev|sum)(:[a-z_]+)?$/,
+    /^(count|min|max|avg|stddev|sum)(:[a-z_][a-z0-9_]*)?$/,
     'Format: <op>[:<field>]. Examples: "count", "min:area".',
   )
   .describe('Stats: count, min:field, max:field, avg:field, stddev:field, sum:field.');
@@ -122,17 +128,50 @@ export const queryFacesInputSchema = {
 
   radius_max: z.number().nonnegative().optional().describe('Max radius (mm).'),
 
+  validity_status: z
+    .enum(['valid', 'invalid'])
+    .optional()
+    .describe('Filter by kernel validity. "invalid" finds faces that failed BRepCheck.'),
+
+  tolerance_max: z
+    .number()
+    .nonnegative()
+    .optional()
+    .describe('Max face tolerance (mm). Filter faces with tolerance above this threshold.'),
+
   body_ids: z
     .array(bodyIdSchema)
     .optional()
     .describe('Restrict to specific bodies. Omit for all bodies.'),
 
+  normal: z
+    .object({
+      parallel_to: z
+        .array(z.number())
+        .length(3)
+        .describe('Direction vector to match normals against.'),
+      tolerance_degrees: z
+        .number()
+        .min(0)
+        .max(180)
+        .default(10)
+        .optional()
+        .describe('Angle tolerance in degrees. Default 10.'),
+    })
+    .strict()
+    .optional()
+    .describe('Filter faces by normal direction. Omit to match any orientation.'),
+
   group_by: z
-    .array(z.enum(['axis', 'surface_type', 'area_range', 'radius_range', 'body_id']))
+    .array(
+      z.enum(['axis', 'normal_direction', 'surface_type', 'area_range', 'radius_range', 'body_id']),
+    )
     .min(1)
     .max(3)
     .optional()
-    .describe('Cluster faces by axis, surface_type, area_range, radius_range, or body_id.'),
+    .describe(
+      'Cluster faces. area_range bins: 0-1,1-10,10-100,100-1000,1000-10000,10000+ mm². radius_range rounds to nearest 0.5mm. axis/normal_direction snap to ±XYZ within 15°. body_id groups by owning body.',
+    ),
 
   select: z
     .array(z.string())
@@ -182,7 +221,9 @@ export const queryEdgesInputSchema = {
   curve_type: z
     .enum(CURVE_TYPES)
     .optional()
-    .describe('Edge curve type. "circle" = fillets/holes, "line" = straight. Omit for all.'),
+    .describe(
+      'Edge curve type. "circle" = constant-curvature edges. "line" = straight edges. Omit for all.',
+    ),
 
   length_min: z.number().nonnegative().optional().describe('Min edge length (mm).'),
 
@@ -191,6 +232,13 @@ export const queryEdgesInputSchema = {
   radius_min: z.number().nonnegative().optional().describe('Min radius for circular edges (mm).'),
 
   radius_max: z.number().nonnegative().optional().describe('Max radius for circular edges (mm).'),
+
+  dihedral_min_deg: z
+    .number()
+    .min(0)
+    .max(180)
+    .optional()
+    .describe('Min dihedral angle (degrees). Filter sharp corners (e.g. >30). Requires adjacency.'),
 
   body_ids: z
     .array(bodyIdSchema)
@@ -202,7 +250,9 @@ export const queryEdgesInputSchema = {
     .min(1)
     .max(3)
     .optional()
-    .describe('Cluster by curve_type, length_range, radius_range, or body_id.'),
+    .describe(
+      'Cluster edges. length_range bins: 0-1,1-10,10-100,100-1000,1000-10000,10000+ mm. radius_range rounds to nearest 0.5mm. body_id groups by owning body.',
+    ),
 
   select: z
     .array(z.string())
@@ -277,10 +327,7 @@ export const measureStepInputSchema = z
       .optional()
       .describe('Grid spacing mm (ray_test_grid).'),
 
-    to: z
-      .union([faceOrEdgeIdSchema, z.array(faceOrEdgeIdSchema).min(1).max(100)])
-      .optional()
-      .describe('Target entity ID(s) for distance op.'),
+    to: faceOrEdgeIdSchema.optional().describe('Target entity ID for distance op.'),
 
     plane_origin: point3Schema.optional().describe('Point on cutting plane (section_by_plane).'),
 

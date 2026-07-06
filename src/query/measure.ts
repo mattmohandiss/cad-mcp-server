@@ -5,25 +5,30 @@
  * the structured per-entity result. The result is a `MeasureResults` object
  * keyed by the op name (e.g. `{ray_test: [...], distance: 0.42}`).
  *
- * Wired ops (use existing kernel bindings):
+ * Implemented ops:
  *   - ray_test                single ray, returns hits
  *   - ray_test_segment         bounded ray (origin + direction + tmax)
  *   - ray_test_grid            grid of rays across a face/edge
  *   - distance                 min distance to a target entity
+ *   - distance_extrema         closest point pairs between two shapes
+ *   - draft_angle              face draft relative to pull direction
  *   - classify_point           IN/ON/OUT of a face (UV-based)
  *   - closest_point_on_face    project 3D point to face, return UV
+ *   - contains_point           3D point-in-solid test
+ *   - surface_curvature        min/max/gaussian/mean at a point on a face
+ *   - edge_projection          closest point on edge + tangent + parameter
+ *   - section_by_plane         planar cross-section, returns edge curves
+ *   - continuity               edge smoothness between adjacent faces
  *
- * Not yet implemented:
- *   - distance_extrema
- *   - section_by_plane
+ * Staged (not yet implemented):
  *   - curvature_at_param
- *   - continuity
  *   - principal_directions
  */
 
 import type { OcctKernel, ShapeHandle, Vec3 } from 'occt-wasm';
 import { resolveRayHits, queryRay } from '../kernel/ray-utils.js';
 import { parseEntityId } from '../utils/ids.js';
+import { toBoundingBox } from '../kernel/measure.js';
 
 type MeasureOpName =
   | 'ray_test'
@@ -35,11 +40,15 @@ type MeasureOpName =
   | 'curvature_at_param'
   | 'continuity'
   | 'principal_directions'
+  | 'draft_angle'
   | 'closest_point_on_face'
-  | 'classify_point';
+  | 'classify_point'
+  | 'contains_point'
+  | 'surface_curvature'
+  | 'edge_projection';
 
 export interface MeasureSpec {
-  op: MeasureOpName | string;
+  op: MeasureOpName;
   direction?: number[];
   direction_shortcut?: string;
   origin?: number[] | string;
@@ -102,7 +111,7 @@ function runMeasure(
     case 'ray_test': {
       const origin = resolveOrigin(spec.origin, context);
       const direction = normalizeDirection(spec.direction ?? [0, 0, 1]);
-      const hits = queryRay(kernel, entityHandle, origin, direction);
+      const hits = queryRay(kernel, shape, origin, direction);
       return hits;
     }
     case 'ray_test_segment': {
@@ -182,11 +191,121 @@ function runMeasure(
       const pointOnSurface = kernel.pointOnSurface(entityHandle, uv[0], uv[1]);
       return { uv, point_on_surface: pointOnSurface };
     }
-    /* Not yet implemented ops */
-    case 'distance_extrema':
-    case 'section_by_plane':
+    case 'contains_point': {
+      if (!spec.point) {
+        return { error: 'missing "point" coordinate' };
+      }
+      const tol = spec.tolerance ?? 1e-7;
+      const inside = kernel.containsPoint(
+        shape,
+        { x: spec.point[0], y: spec.point[1], z: spec.point[2] },
+        tol,
+      );
+      return inside;
+    }
+    case 'surface_curvature': {
+      if (!spec.point) {
+        return { error: 'missing "point" coordinate' };
+      }
+      const uv = tryProjectToFaceUV(kernel, entityHandle, spec.point);
+      if (!uv) {
+        return { error: 'point does not project to face' };
+      }
+      const curvature = kernel.surfaceCurvature(entityHandle, uv[0], uv[1]);
+      return {
+        min_curvature: curvature.min,
+        max_curvature: curvature.max,
+        gaussian_curvature: curvature.gaussian,
+        mean_curvature: curvature.mean,
+      };
+    }
+    case 'edge_projection': {
+      if (!spec.point) {
+        return { error: 'missing "point" coordinate' };
+      }
+      try {
+        const projection = kernel.projectPointOnEdge(entityHandle, {
+          x: spec.point[0],
+          y: spec.point[1],
+          z: spec.point[2],
+        });
+        return {
+          closest_point: [projection.point.x, projection.point.y, projection.point.z],
+          tangent: [projection.tangent.x, projection.tangent.y, projection.tangent.z],
+          parameter: projection.parameter,
+        };
+      } catch {
+        return { error: 'edge projection failed' };
+      }
+    }
+    case 'distance_extrema': {
+      if (!spec.to) {
+        return { error: 'missing "to" entity ID' };
+      }
+      const targetShape = resolveTargetShape(kernel, shape, spec.to);
+      if (!targetShape) {
+        return { error: `target "${spec.to}" not found` };
+      }
+      const pairs = kernel.distanceExtrema(entityHandle, targetShape);
+      return {
+        pairs: pairs.map((p) => ({
+          point_on_entity: [p.pointA.x, p.pointA.y, p.pointA.z] as [number, number, number],
+          point_on_target: [p.pointB.x, p.pointB.y, p.pointB.z] as [number, number, number],
+        })),
+        pair_count: pairs.length,
+      };
+    }
+    case 'section_by_plane': {
+      if (!spec.plane_origin || !spec.plane_normal) {
+        return { error: 'missing "plane_origin" and "plane_normal"' };
+      }
+      const origin = {
+        x: spec.plane_origin[0],
+        y: spec.plane_origin[1],
+        z: spec.plane_origin[2],
+      };
+      const normal = normalizeDirection(spec.plane_normal);
+      const sectionShape = kernel.sectionByPlane(entityHandle, origin, normal);
+      /* Extract edges from the section result. */
+      const sectionEdges = kernel.getSubShapes(sectionShape, 'edge');
+      const edgeData = sectionEdges.map((e) => {
+        try {
+          const bbox = toBoundingBox(kernel, e);
+          return {
+            curve_type: kernel.curveType(e),
+            length: kernel.getLength(e),
+            bbox,
+          };
+        } catch {
+          return { curve_type: 'unknown', length: 0, bbox: null };
+        }
+      });
+      return { edge_count: sectionEdges.length, edges: edgeData };
+    }
+    case 'continuity': {
+      /* Resolve the two faces sharing this edge via BRepGraph. */
+      const edgeIdx = findEdgeIndex(kernel, shape, entityHandle);
+      if (edgeIdx < 0) {
+        return { error: 'could not resolve edge index' };
+      }
+      kernel.graphBuild(shape);
+      try {
+        const faceIndices = kernel.graphEdgeFaces(edgeIdx);
+        if (faceIndices.length < 2) {
+          return { error: 'edge is not shared by two faces' };
+        }
+        const allFaces = kernel.getSubShapes(shape, 'face');
+        const cont = kernel.edgeContinuity(
+          entityHandle,
+          allFaces[faceIndices[0]],
+          allFaces[faceIndices[1]],
+        );
+        return { continuity: cont };
+      } catch {
+        return { error: 'continuity check failed' };
+      }
+    }
     case 'curvature_at_param':
-    case 'continuity':
     case 'principal_directions':
       return {
         staged: true,
@@ -309,11 +428,22 @@ function runRayTestGrid(
     for (let c = 0; c < cols && totalRays < MAX_RAYS; c++) {
       const uu = uMin + (c + 0.5) * spacing;
       const vv = vMin + (r + 0.5) * spacing;
-      const origin: Vec3 = {
+      const gridOrigin: Vec3 = {
         x: uAxis.x * uu + vAxis.x * vv,
         y: uAxis.y * uu + vAxis.y * vv,
         z: uAxis.z * uu + vAxis.z * vv,
       };
+      /* Project the grid origin onto the entity surface so rays start
+       * from the actual face, not the bbox projection plane. */
+      let origin = gridOrigin;
+      try {
+        const projected = kernel.projectPointOnFace(entityHandle, gridOrigin);
+        if (projected) {
+          origin = projected;
+        }
+      } catch {
+        /* Keep gridOrigin if projection fails (non-planar face edge case). */
+      }
       /* Fire against the parent shape, not the entity itself. */
       const rayHits = queryRay(kernel, shape, origin, direction);
       for (const h of rayHits) hits.push(h);
@@ -357,4 +487,12 @@ function tryProjectToFaceUV(
   } catch {
     return undefined;
   }
+}
+
+function findEdgeIndex(kernel: OcctKernel, shape: ShapeHandle, edge: ShapeHandle): number {
+  const edges = kernel.getSubShapes(shape, 'edge');
+  for (let i = 0; i < edges.length; i++) {
+    if (kernel.isSame(edges[i], edge)) return i;
+  }
+  return -1;
 }

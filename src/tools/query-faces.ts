@@ -23,11 +23,15 @@ export async function handleQueryFaces(args: QueryFacesArgs) {
     if (args.radius_min !== undefined && args.radius_min > 0) where.radius_min = args.radius_min;
     if (args.radius_max !== undefined && args.radius_max > 0) where.radius_max = args.radius_max;
     if (args.body_ids !== undefined && args.body_ids.length > 0) where.body_ids = args.body_ids;
+    if (args.normal !== undefined) where.normal = args.normal;
+    if (args.validity_status !== undefined) where.validity_status = args.validity_status;
+    if (args.tolerance_max !== undefined) where.tolerance_max = args.tolerance_max;
 
     return queryStepFaces(args.file_path, {
       where: Object.keys(where).length > 0 ? where : undefined,
       select: args.select,
       group_by: args.group_by as string[] | undefined,
+      aggregate: args.aggregate,
       order_by: args.order_by,
       return_type: args.return_type,
       limit: args.limit,

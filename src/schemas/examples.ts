@@ -49,7 +49,7 @@ const queryFacesExamples: Example[] = [
     order_by: { by: 'radius', direction: 'asc' },
   },
 
-  /* 5. Find large faces (potential mounting surfaces) */
+  /* 5. Find large faces */
   {
     file_path: 'model.step',
     area_min: 100,
@@ -88,7 +88,7 @@ const queryEdgesExamples: Example[] = [
     limit: 1,
   },
 
-  /* 4. Find long straight edges (potential outer boundaries) */
+  /* 4. Find long straight edges */
   {
     file_path: 'model.step',
     curve_type: 'line',

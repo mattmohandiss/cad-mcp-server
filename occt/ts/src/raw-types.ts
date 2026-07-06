@@ -218,6 +218,10 @@ export interface OcctRawKernel {
     hasFreeEdges(id: number): boolean;
     freeEdgeCount(id: number): number;
     shapeContents(id: number): EmbindVectorF64;
+    faceTolerance(faceId: number): number;
+    sectionByPlane(shapeId: number, px: number, py: number, pz: number, nx: number, ny: number, nz: number): number;
+    edgeContinuity(edgeId: number, faceAId: number, faceBId: number): string;
+    distanceExtrema(shapeAId: number, shapeBId: number): EmbindVectorF64;
     areAxesCoaxial(
       ax1x: number, ax1y: number, ax1z: number,
       al1x: number, al1y: number, al1z: number,

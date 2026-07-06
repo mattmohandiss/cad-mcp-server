@@ -2503,7 +2503,100 @@ return {static_cast<double>(c.NbFaces()),
         category: "query",
         return_type: ReturnType::VectorDouble,
     },
-    // ── BRepGraph topology queries ─────────────────────────────────
+    MethodSpec {
+        name: "faceTolerance",
+        kind: MethodKind::CustomBody,
+        params: &[FacadeParam::ShapeId("faceId")],
+        occt_class: "",
+        ctor_args: "",
+        setup_code: "\
+const auto& face = TopoDS::Face(get(faceId));
+return BRep_Tool::Tolerance(face);",
+        includes: &["BRep_Tool.hxx", "TopoDS_Face.hxx"],
+        category: "query",
+        return_type: ReturnType::Double,
+    },
+    MethodSpec {
+        name: "sectionByPlane",
+        kind: MethodKind::CustomBody,
+        params: &[
+            FacadeParam::ShapeId("shapeId"),
+            FacadeParam::Double("px"), FacadeParam::Double("py"), FacadeParam::Double("pz"),
+            FacadeParam::Double("nx"), FacadeParam::Double("ny"), FacadeParam::Double("nz"),
+        ],
+        occt_class: "",
+        ctor_args: "",
+        setup_code: "\
+const auto& shape = get(shapeId);
+gp_Pln plane(gp_Pnt(px, py, pz), gp_Dir(nx, ny, nz));
+BRepAlgoAPI_Section sec(shape, plane, false);
+sec.Build();
+if (!sec.IsDone()) {
+  throw std::runtime_error(\"sectionByPlane: failed to compute section\");
+}
+return store(sec.Shape());",
+        includes: &["BRepAlgoAPI_Section.hxx", "gp_Pln.hxx", "gp_Pnt.hxx", "gp_Dir.hxx"],
+        category: "query",
+        return_type: ReturnType::ShapeId,
+    },
+    MethodSpec {
+        name: "edgeContinuity",
+        kind: MethodKind::CustomBody,
+        params: &[
+            FacadeParam::ShapeId("edgeId"),
+            FacadeParam::ShapeId("faceAId"),
+            FacadeParam::ShapeId("faceBId"),
+        ],
+        occt_class: "",
+        ctor_args: "",
+        setup_code: "\
+const auto& edge = TopoDS::Edge(get(edgeId));
+const auto& faceA = TopoDS::Face(get(faceAId));
+const auto& faceB = TopoDS::Face(get(faceBId));
+GeomAbs_Shape cont = BRep_Tool::Continuity(edge, faceA, faceB);
+switch (cont) {
+  case GeomAbs_C0: return std::string(\"C0\");
+  case GeomAbs_G1: return std::string(\"G1\");
+  case GeomAbs_C1: return std::string(\"C1\");
+  case GeomAbs_G2: return std::string(\"G2\");
+  case GeomAbs_C2: return std::string(\"C2\");
+  case GeomAbs_C3: return std::string(\"C3\");
+  case GeomAbs_CN: return std::string(\"CN\");
+  default: return std::string(\"C0\");
+}",
+        includes: &["BRep_Tool.hxx", "TopoDS_Edge.hxx", "TopoDS_Face.hxx", "GeomAbs_Shape.hxx"],
+        category: "query",
+        return_type: ReturnType::String,
+    },
+    MethodSpec {
+        name: "distanceExtrema",
+        kind: MethodKind::CustomBody,
+        params: &[
+            FacadeParam::ShapeId("shapeAId"),
+            FacadeParam::ShapeId("shapeBId"),
+        ],
+        occt_class: "",
+        ctor_args: "",
+        setup_code: "\
+const auto& shapeA = get(shapeAId);
+const auto& shapeB = get(shapeBId);
+BRepExtrema_DistShapeShape extrema(shapeA, shapeB);
+if (!extrema.IsDone() || extrema.NbSolution() == 0) {
+  return {};
+}
+// Return alternating point pairs: [A1x, A1y, A1z, B1x, B1y, B1z, A2x, ...]
+std::vector<double> result;
+for (int i = 1; i <= extrema.NbSolution(); i++) {
+  gp_Pnt pA = extrema.PointOnShape1(i);
+  gp_Pnt pB = extrema.PointOnShape2(i);
+  result.push_back(pA.X()); result.push_back(pA.Y()); result.push_back(pA.Z());
+  result.push_back(pB.X()); result.push_back(pB.Y()); result.push_back(pB.Z());
+}
+return result;",
+        includes: &["BRepExtrema_DistShapeShape.hxx", "gp_Pnt.hxx"],
+        category: "query",
+        return_type: ReturnType::VectorDouble,
+    },
     MethodSpec {
         name: "graphBuild",
         kind: MethodKind::Skip,

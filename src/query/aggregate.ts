@@ -30,7 +30,7 @@ export interface AggregateResult {
   value: number;
 }
 
-const AGGREGATE_REGEX = /^(count|min|max|avg|stddev|sum)(?::([a-z_][a-z0-9_]*))?$/i;
+const AGGREGATE_REGEX = /^(count|min|max|avg|stddev|sum)(?::([a-z_][a-z0-9_]*))?$/;
 
 export function parseAggregateSpec(spec: string): { op: AggregateOp; field: string | undefined } {
   const m = AGGREGATE_REGEX.exec(spec);
@@ -60,8 +60,7 @@ export function dispatchAggregate(
       continue;
     }
     if (!field) {
-      out.push({ spec, op, field: undefined, value: 0 });
-      continue;
+      throw new Error(`aggregate spec "${spec}" requires a field name (e.g. "${op}:area")`);
     }
     const values = extractFieldValues(records, field);
     out.push({ spec, op, field, value: computeOp(op, values) });
@@ -73,6 +72,21 @@ export function dispatchAggregate(
  * Merge aggregate results into a flat statistics object keyed by spec.
  * This is the shape that lands in the response's `statistics` field.
  */
+/**
+ * Convenience: run dispatchAggregate + aggregateToStatistics and merge
+ * results into a stats object. No-op when specs is empty/undefined.
+ */
+export function applyAggregate(
+  stats: Record<string, unknown>,
+  records: ReadonlyArray<Record<string, unknown>>,
+  specs: ReadonlyArray<string> | undefined,
+): void {
+  if (specs && specs.length > 0) {
+    const aggResults = dispatchAggregate(records, specs);
+    Object.assign(stats, aggregateToStatistics(aggResults));
+  }
+}
+
 export function aggregateToStatistics(results: AggregateResult[]): Record<string, number> {
   const out: Record<string, number> = {};
   for (const r of results) {

@@ -10,6 +10,7 @@ import {
   DEFAULT_QUERY_LIMITS,
   type ComputedGroup,
 } from './shared.js';
+import { applyAggregate } from './aggregate.js';
 
 export interface QueryEdgesInput {
   where?: Record<string, unknown>;
@@ -18,6 +19,7 @@ export interface QueryEdgesInput {
   group_by?: string[];
   order_by?: { by: string; direction?: 'asc' | 'desc' };
   return_type?: 'summary' | 'entities' | 'groups';
+  aggregate?: string[];
   limit?: number;
   offset?: number;
 }
@@ -54,6 +56,14 @@ export async function queryStepEdges(filePath: string, input: QueryEdgesInput) {
     const entities = augmentedEdges.map((edge) => projectEdge(edge, input.select));
     const pagination = createPagination(limit, offset, paginated.length, total_matched);
 
+    const baseStats: Record<string, unknown> = {
+      total_edges: allEdges.length,
+      matched_edges: total_matched,
+      curve_types: aggregateCurveTypes(filtered),
+      length_range: getLengthRange(filtered),
+    };
+    applyAggregate(baseStats, filtered as unknown as Record<string, unknown>[], input.aggregate);
+
     return createQueryResponse(
       filePath,
       {
@@ -64,12 +74,7 @@ export async function queryStepEdges(filePath: string, input: QueryEdgesInput) {
       },
       pagination,
       entities,
-      {
-        total_edges: allEdges.length,
-        matched_edges: total_matched,
-        curve_types: aggregateCurveTypes(filtered),
-        length_range: getLengthRange(filtered),
-      },
+      baseStats,
       groups,
       [],
       [],
@@ -183,6 +188,13 @@ export function applyEdgeFilters(
     result = result.filter((e) => e.radius !== undefined && e.radius <= radiusMax);
   }
 
+  const dihedralMin = where.dihedral_min_deg;
+  if (typeof dihedralMin === 'number') {
+    result = result.filter(
+      (e) => e.dihedral_angle_deg !== undefined && e.dihedral_angle_deg >= dihedralMin,
+    );
+  }
+
   return result;
 }
 
@@ -268,6 +280,19 @@ export function projectEdge(
         break;
       case 'convexity':
         if (edge.convexity !== undefined) result.convexity = edge.convexity;
+        break;
+      case 'dihedral_angle_deg':
+        if (edge.dihedral_angle_deg !== undefined)
+          result.dihedral_angle_deg = edge.dihedral_angle_deg;
+        break;
+      case 'continuity':
+        if (edge.continuity !== undefined) result.continuity = edge.continuity;
+        break;
+      case 'is_closed':
+        if (edge.is_closed !== undefined) result.is_closed = edge.is_closed;
+        break;
+      case 'is_periodic':
+        if (edge.is_periodic !== undefined) result.is_periodic = edge.is_periodic;
         break;
       case 'adjacent_faces':
         if (edge.adjacent_faces !== undefined) result.adjacent_faces = edge.adjacent_faces;
