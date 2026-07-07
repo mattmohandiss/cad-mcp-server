@@ -10,7 +10,7 @@ export const DEFAULT_MODELS = [
 export const EVAL_ROOT = path.resolve(process.cwd(), 'eval');
 export const SCENARIOS_DIR = path.join(EVAL_ROOT, 'scenarios');
 export const EVAL_WORK_DIR = path.join(EVAL_ROOT, '.work');
-export const DEFAULT_LOG_DIR = path.resolve(process.cwd(), 'tests', 'eval-logs');
+export const DEFAULT_LOG_DIR = path.resolve(EVAL_ROOT, 'runs');
 
 export function loadEvalEnv(): void {
   if (process.env.AI_GATEWAY_API_KEY) return;

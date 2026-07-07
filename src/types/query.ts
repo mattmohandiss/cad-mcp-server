@@ -1,5 +1,3 @@
-import { CAD_RESPONSE_SCHEMA_VERSION } from '../schema-version.js';
-
 export interface StepQueryUnits {
   length: 'mm';
   area: 'mm^2';
@@ -32,7 +30,6 @@ export interface StepQueryGroup {
 }
 
 export interface StepQueryResponse<TEntity extends Record<string, unknown>> {
-  schema_version: typeof CAD_RESPONSE_SCHEMA_VERSION;
   file_path: string;
   units: StepQueryUnits;
   coordinate_system: StepQueryCoordinateSystem;

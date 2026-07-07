@@ -1,5 +1,4 @@
 import { withStepModel } from './model-store.js';
-import { CAD_RESPONSE_SCHEMA_VERSION } from './schema-version.js';
 
 export async function compareStepFiles(fileA: string, fileB: string) {
   return withStepModel(fileA, async (modelA) =>
@@ -12,7 +11,6 @@ export async function compareStepFiles(fileA: string, fileB: string) {
       ]);
 
       return {
-        schema_version: CAD_RESPONSE_SCHEMA_VERSION,
         files: { a: fileA, b: fileB },
         deltas: {
           dimensions: {

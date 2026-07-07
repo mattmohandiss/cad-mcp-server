@@ -30,21 +30,26 @@ export async function queryStepEdges(filePath: string, input: QueryEdgesInput) {
     const { kernel, shape } = await model.getShapeContext('query_step_edges');
 
     let filtered = applyEdgeFilters(allEdges, input);
+
+    // Enrich raw entities with computed fields (e.g. diameter) so sorting
+    // and aggregation work on the same data that projectEdge produces.
+    const enriched = filtered.map((edge) => enrichEdge(edge));
+
     if (input.order_by) {
-      filtered = sortEdges(filtered, input.order_by);
+      sortEdgesInPlace(enriched, input.order_by);
     }
 
     const resultMode = input.return_type ?? 'entities';
-    const total_matched = filtered.length;
+    const total_matched = enriched.length;
 
     const groups =
       resultMode === 'groups'
-        ? groupEdges(filtered, input.group_by, DEFAULT_QUERY_LIMITS.sample_entity_limit)
+        ? groupEdges(enriched, input.group_by, DEFAULT_QUERY_LIMITS.sample_entity_limit)
         : [];
 
     const { limit, offset } = normalizePagination(input.limit, input.offset);
     const includeEntities = resultMode === 'entities';
-    const paginated = includeEntities ? filtered.slice(offset, offset + limit) : [];
+    const paginated = includeEntities ? enriched.slice(offset, offset + limit) : [];
 
     const edgeAdjacencies = buildEdgeToFaceAdjacencies(kernel, shape, paginated, input.select);
 
@@ -59,10 +64,10 @@ export async function queryStepEdges(filePath: string, input: QueryEdgesInput) {
     const baseStats: Record<string, unknown> = {
       total_edges: allEdges.length,
       matched_edges: total_matched,
-      curve_types: aggregateCurveTypes(filtered),
-      length_range: getLengthRange(filtered),
+      curve_types: aggregateCurveTypes(enriched),
+      length_range: getLengthRange(enriched),
     };
-    applyAggregate(baseStats, filtered as unknown as Record<string, unknown>[], input.aggregate);
+    applyAggregate(baseStats, enriched as unknown as Record<string, unknown>[], input.aggregate);
 
     return createQueryResponse(
       filePath,
@@ -196,6 +201,47 @@ export function applyEdgeFilters(
   }
 
   return result;
+}
+
+function enrichEdge(edge: ExtractedEdgeEntity): ExtractedEdgeEntity & { diameter?: number } {
+  return {
+    ...edge,
+    diameter: edge.radius !== undefined ? edge.radius * 2 : undefined,
+  };
+}
+
+export function sortEdgesInPlace(
+  edges: (ExtractedEdgeEntity & { diameter?: number })[],
+  sort: NonNullable<QueryEdgesInput['order_by']>,
+): void {
+  const direction = sort.direction === 'desc' ? -1 : 1;
+  edges.sort((a, b) => {
+    let cmp = 0;
+    switch (sort.by) {
+      case 'length':
+        cmp = a.length - b.length;
+        break;
+      case 'curve_type':
+        cmp = a.curve_type.localeCompare(b.curve_type);
+        break;
+      case 'radius':
+        cmp = (a.radius ?? 0) - (b.radius ?? 0);
+        break;
+      case 'diameter':
+        cmp = (a.diameter ?? 0) - (b.diameter ?? 0);
+        break;
+      case 'center_x':
+        cmp = a.bbox_center[0] - b.bbox_center[0];
+        break;
+      case 'center_y':
+        cmp = a.bbox_center[1] - b.bbox_center[1];
+        break;
+      case 'center_z':
+        cmp = a.bbox_center[2] - b.bbox_center[2];
+        break;
+    }
+    return cmp * direction;
+  });
 }
 
 export function sortEdges(

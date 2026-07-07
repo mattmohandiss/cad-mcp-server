@@ -4,7 +4,6 @@ import type {
   StepQueryUnits,
   StepQueryCoordinateSystem,
 } from '../types/query.js';
-import { CAD_RESPONSE_SCHEMA_VERSION } from '../schema-version.js';
 import { normalizeVector, angleDegreesNormalized } from '../utils/vectors.js';
 
 /**
@@ -203,7 +202,6 @@ export function createQueryResponse<T extends Record<string, unknown>>(
   limitations: unknown[] = [],
 ): StepQueryResponse<T> {
   return {
-    schema_version: CAD_RESPONSE_SCHEMA_VERSION,
     file_path,
     units: STEP_QUERY_UNITS,
     coordinate_system: STEP_QUERY_COORDINATE_SYSTEM,

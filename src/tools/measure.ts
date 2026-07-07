@@ -40,7 +40,6 @@ export async function handleMeasureStep(args: MeasureStepInput) {
     const results = await batchMeasure(args.file_path, args.entity_ids, [spec]);
 
     return {
-      schema_version: '0.4',
       file_path: args.file_path,
       operation: args.op,
       entity_count: args.entity_ids.length,
@@ -140,14 +139,16 @@ async function batchMeasure(
         }
         handle = edgeShapes[parsed.index];
         // Edges don't have axis/normal; direction shortcuts won't resolve.
-        resolvedSpecs = specs.map((s) => {
-          if (!s.direction_shortcut) return s;
-          const { direction_shortcut: __unused, ...rest } = s as MeasureSpec & {
-            direction_shortcut?: string;
-          };
-          void __unused;
-          return rest;
-        });
+        resolvedSpecs = stripShortcuts(specs);
+      } else if (parsed.type === 'body') {
+        const solids = kernel.getSubShapes(shape, 'solid');
+        if (parsed.index >= solids.length) {
+          results.push({ entity_id: id, entity_type: 'body', results: {} });
+          continue;
+        }
+        handle = solids[parsed.index];
+        // Bodies don't have axis/normal; direction shortcuts won't resolve.
+        resolvedSpecs = stripShortcuts(specs);
       } else {
         results.push({ entity_id: id, entity_type: parsed.type, results: {} });
         continue;
@@ -168,6 +169,17 @@ async function batchMeasure(
     }
 
     return results;
+  });
+}
+
+function stripShortcuts(specs: MeasureSpec[]): MeasureSpec[] {
+  return specs.map((s) => {
+    if (!s.direction_shortcut) return s;
+    const { direction_shortcut: __unused, ...rest } = s as MeasureSpec & {
+      direction_shortcut?: string;
+    };
+    void __unused;
+    return rest;
   });
 }
 
@@ -218,13 +230,33 @@ function stripRawGridData(results: MeasureResults, detailLevel: string): void {
         value &&
         typeof value === 'object'
       ) {
-        const grid = value as { hits?: unknown; hit_distance?: number[]; total_rays?: number };
-        // Keep total_rays, drop raw arrays
+        const grid = value as {
+          hits?: unknown;
+          hit_distance?: number[];
+          total_rays?: number;
+          statistics?: {
+            min_distance: number;
+            max_distance: number;
+            avg_distance: number;
+            hit_count: number;
+            miss_count: number;
+          };
+        };
         if (detailLevel === 'aggregate') {
+          // Compute aggregate stats before stripping raw data
+          if (grid.hit_distance && grid.hit_distance.length > 0) {
+            const sorted = [...grid.hit_distance].sort((a, b) => a - b);
+            grid.statistics = {
+              min_distance: sorted[0],
+              max_distance: sorted[sorted.length - 1],
+              avg_distance: sorted.reduce((s, v) => s + v, 0) / sorted.length,
+              hit_count: sorted.length,
+              miss_count: (grid.total_rays ?? 0) - sorted.length,
+            };
+          }
           delete grid.hits;
           delete grid.hit_distance;
         }
-        // 'summary' could keep a spatial histogram in the future
       }
     }
   }
@@ -233,7 +265,31 @@ function stripRawGridData(results: MeasureResults, detailLevel: string): void {
 function buildHitSummary(results: MeasureResults): MeasureHitSummary | undefined {
   for (const [opName, value] of Object.entries(results)) {
     if (opName === 'ray_test_grid' && value && typeof value === 'object') {
-      const grid = value as { hit_distance?: number[]; total_rays?: number };
+      const grid = value as {
+        hit_distance?: number[];
+        total_rays?: number;
+        statistics?: {
+          min_distance: number;
+          max_distance: number;
+          avg_distance: number;
+          hit_count: number;
+          miss_count: number;
+        };
+      };
+      // Use pre-computed statistics (aggregate mode), or compute from raw data
+      if (grid.statistics) {
+        return {
+          total_rays: grid.total_rays ?? 0,
+          hit_count: grid.statistics.hit_count,
+          miss_count: grid.statistics.miss_count,
+          hit_distances: {
+            min: grid.statistics.min_distance,
+            max: grid.statistics.max_distance,
+            avg: grid.statistics.avg_distance,
+            median: grid.statistics.avg_distance,
+          },
+        };
+      }
       if (grid.hit_distance && grid.total_rays !== undefined) {
         const hits = grid.hit_distance;
         const sorted = [...hits].sort((a, b) => a - b);

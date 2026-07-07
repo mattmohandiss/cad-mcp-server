@@ -1,5 +1,4 @@
 import { readStepText } from '../kernel/import.js';
-import { CAD_RESPONSE_SCHEMA_VERSION } from '../schema-version.js';
 
 /* ------------------------------------------------------------------ */
 /*  STEP entity parser (lightweight, PMI-focused)                     */
@@ -480,7 +479,6 @@ function findEnumParam(params: StepParam[], index: number): string | null {
 /* ------------------------------------------------------------------ */
 
 interface PmiQueryResult {
-  schema_version: typeof CAD_RESPONSE_SCHEMA_VERSION;
   file_path: string;
   pmi_entities: PmiExtractedEntity[];
   statistics: {
@@ -511,7 +509,6 @@ export async function extractPmiEntities(filePath: string): Promise<PmiQueryResu
   }
 
   return {
-    schema_version: CAD_RESPONSE_SCHEMA_VERSION,
     file_path: filePath,
     pmi_entities: pmiEntities,
     statistics: {

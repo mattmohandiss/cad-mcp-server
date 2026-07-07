@@ -68,14 +68,14 @@ fmt-check:
 
 # Remove generated artifacts and installed dependencies
 clean:
-	rm -rf dist node_modules occt/ts/node_modules occt/dist occt/build occt/ts/dist occt/*.tgz *.tgz tests/eval-logs
+	rm -rf dist node_modules occt/ts/node_modules occt/dist occt/build occt/ts/dist occt/*.tgz *.tgz eval/runs
 
 # Verify no build artifacts or tarballs remain (for pre-PR check)
 check-clean:
 	@! test -d dist && echo "✅ dist/ clean" || { echo "❌ dist/ still exists"; exit 1; }
 	@! test -f *.tgz && echo "✅ no root .tgz" || { echo "❌ root .tgz found"; exit 1; }
 	@! test -f occt/*.tgz && echo "✅ no occt .tgz" || { echo "❌ occt .tgz found"; exit 1; }
-	@! test -d tests/eval-logs && echo "✅ eval-logs/ clean" || { echo "❌ tests/eval-logs/ still exists"; exit 1; }
+	@! test -d eval/runs && echo "✅ eval/runs/ clean" || { echo "❌ eval/runs/ still exists"; exit 1; }
 	@echo "🎉 Clean check passed"
 
 # Internal: build root MCP server TypeScript

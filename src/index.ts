@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { CAD_MCP_SERVER_VERSION } from './schema-version.js';
+import pkg from '../package.json' with { type: 'json' };
 import { inspectStepInput, handleInspectStep } from './tools/inspect.js';
 import { queryFacesInput, handleQueryFaces } from './tools/query-faces.js';
 import { queryEdgesInput, handleQueryEdges } from './tools/query-edges.js';
@@ -24,7 +24,7 @@ import { toolExamples } from './schemas/examples.js';
 
 const server = new McpServer({
   name: 'cad-mcp-server',
-  version: CAD_MCP_SERVER_VERSION,
+  version: pkg.version,
 });
 
 type ToolResponse<T> =

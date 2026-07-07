@@ -6,6 +6,7 @@
  *   npx tsx eval/runner/index.ts -m anthropic/claude-sonnet-4-5   # one model
  *   npx tsx eval/runner/index.ts -s basic_volume                  # one scenario
  *   npx tsx eval/runner/index.ts -m openai/gpt-4o-mini -s box_volume
+ *   npx tsx eval/runner/index.ts -l eval/runs/bench-001           # custom log dir
  *
  * Model IDs are Vercel AI Gateway identifiers in creator/model format.
  */
@@ -21,17 +22,26 @@ function resolveItems(args: string[], flags: string[]): string[] | undefined {
   return out.length > 0 ? out : undefined;
 }
 
+function resolveString(args: string[], flags: string[]): string | undefined {
+  for (let i = 0; i < args.length; i++) {
+    if (flags.includes(args[i]) && i + 1 < args.length) return args[i + 1];
+  }
+  return undefined;
+}
+
 async function main() {
   loadEvalEnv();
 
   const args = process.argv.slice(2);
   const models = resolveItems(args, ['-m', '--model']) ?? DEFAULT_MODELS;
   const scenarioIds = resolveItems(args, ['-s', '--scenario']);
+  const logDir = resolveString(args, ['-l', '--log-dir']) ?? DEFAULT_LOG_DIR;
 
   console.log(`Models (${models.length}):   ${models.join(', ')}`);
   if (scenarioIds) console.log(`Scenarios (${scenarioIds.length}): ${scenarioIds.join(', ')}`);
+  console.log(`Log dir: ${logDir}`);
 
-  const bulk = await runAll({ models, scenarioIds, logDir: DEFAULT_LOG_DIR });
+  const bulk = await runAll({ models, scenarioIds, logDir });
   console.log(formatReport(bulk));
 
   if (bulk.overall.pass < bulk.overall.total) process.exit(1);

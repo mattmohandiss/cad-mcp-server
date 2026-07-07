@@ -13,7 +13,7 @@
 
 import { SURFACE_TYPES, CURVE_TYPES, MEASURE_OPS, RETURN_TYPES } from '../schemas/tool-schemas.js';
 import { toolExamples } from '../schemas/examples.js';
-import { CAD_MCP_SERVER_VERSION } from '../schema-version.js';
+import pkg from '../../package.json' with { type: 'json' };
 
 export const QUERY_HELP_URI = 'cad-mcp://query-help';
 
@@ -34,7 +34,7 @@ export function queryHelpResourceHandler(): ResourceContent {
 
 function buildHelpDocument() {
   return {
-    version: CAD_MCP_SERVER_VERSION,
+    version: pkg.version,
     surface: '5-tool (inspect → query → measure pattern)',
     description:
       'CAD MCP Server exposes 5 read-only tools for STEP geometry inspection. Workflow: (1) inspect_step for overview, (2) query_faces or query_edges to find entities, (3) measure_step for geometric measurements on discovered entities.',

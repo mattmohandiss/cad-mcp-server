@@ -71,9 +71,9 @@ extract_raw_methods() {
 
 # ── Extract method names from index.ts (wrapper class) ───────────────────
 extract_index_methods() {
-  # Match lines like:     methodName(params): returnType {
+  # Match class method lines like:   methodName(params): returnType {
   # Strip leading whitespace, then filter out non-public methods.
-  grep -oP '^\s{4}\w+(?=\()' "${ROOT}/occt/ts/src/index.ts" \
+  grep -oP '^\s{2,}\w+(?=\()' "${ROOT}/occt/ts/src/index.ts" \
     | sed 's/^\s*//' \
     | grep -vE '^(private|protected|public|static|constructor|get|set)$' \
     | sort -u

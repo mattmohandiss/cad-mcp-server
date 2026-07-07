@@ -2,7 +2,7 @@ import { assertGatewayAuth, DEFAULT_MODELS } from './config.js';
 import { runModelWithMcp } from './ai.js';
 import { writeScenarioLog } from './logging.js';
 import { formatRunLine, summarizeResults } from './reporting.js';
-import { buildAnswerSchema, compareAnswer } from './scoring.js';
+import { buildAnswerSchema, compareFields } from './scoring.js';
 import { generateGroundTruth, loadScenarios } from './scenarios.js';
 import type { BulkResult, EvalTrace, ScenarioMeta, ScenarioResult, UsageEntry } from './types.js';
 
@@ -26,7 +26,13 @@ export async function runOne(
       scenarioId: scenario.id,
       modelId,
       trace: {
+        trace_version: 1,
         scenarioId: scenario.id,
+        scenario: {
+          field: scenario.field,
+          tolerance: scenario.tolerance,
+          files: { ...scenario.files },
+        },
         modelId,
         prompt: scenario.prompt,
         answer: { extracted: null, expected: null, match: false, sourceStep: -1 },
@@ -34,13 +40,13 @@ export async function runOne(
         totalTokens: 0,
         durationMs: Date.now() - start,
         timestamp: new Date().toISOString(),
+        error: generated.error?.slice(0, 160) ?? 'ground truth generation failed',
       },
       field: scenario.field,
       expected: null,
       extracted: null,
       correct: false,
-      checks: { toolCorrect: 0, pathEfficient: 0, fieldExtraction: 0, argsValid: 0 },
-      compositeScore: 0,
+      fieldResults: [],
       reason: `SKIP: ${generated.error}`,
       finishReason: '',
       usage: null,
@@ -70,13 +76,8 @@ export async function runOne(
 
   const trace = modelRun.trace;
   trace.answer.expected = expected;
-  trace.answer.match =
-    trace.answer.extracted !== null &&
-    compareAnswer(trace.answer.extracted, expected, scenario.tolerance);
-
-  // Compute checks from spans
-  const checks = computeChecks(trace);
-
+  const fieldResults = compareFields(trace.answer.extracted, expected, scenario.tolerance);
+  trace.answer.match = fieldResults.length > 0 && fieldResults.every((field) => field.match);
   const correct = trace.answer.match;
 
   const result: ScenarioResult = {
@@ -87,14 +88,7 @@ export async function runOne(
     expected,
     extracted: trace.answer.extracted,
     correct,
-    checks,
-    compositeScore: Math.round(
-      (checks.toolCorrect * 0.3 +
-        checks.pathEfficient * 0.2 +
-        checks.fieldExtraction * 0.3 +
-        checks.argsValid * 0.2) *
-        100,
-    ),
+    fieldResults,
     reason: buildReason(null, correct, expected, trace.answer.extracted),
     finishReason: trace.answer.match ? 'stop' : 'tool-calls',
     usage: buildUsageEntry(trace),
@@ -122,28 +116,6 @@ export async function runAll(options: RunAllOptions = {}): Promise<BulkResult> {
   }
 
   return summarizeResults(results, Date.now() - startedAt);
-}
-
-// ── Check computation ────────────────────────────────────────────────
-
-function computeChecks(trace: EvalTrace) {
-  const totalSpans = trace.spans.length;
-  if (totalSpans === 0) {
-    return { toolCorrect: 0, pathEfficient: 0, fieldExtraction: 0, argsValid: 0 };
-  }
-
-  const argsValid = trace.spans.filter((s) => s.checks.argsValid).length / totalSpans;
-  const productiveSpans = trace.spans.filter((s) => s.type !== 'distraction').length;
-  const pathEfficient = productiveSpans / totalSpans;
-  const toolCorrect = productiveSpans / totalSpans;
-  const fieldExtraction = trace.answer.match ? 1 : 0;
-
-  return {
-    toolCorrect,
-    pathEfficient,
-    fieldExtraction,
-    argsValid,
-  };
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -178,7 +150,13 @@ function buildFailureScenarioResult(
   durationMs: number,
 ): ScenarioResult {
   const fallbackTrace: EvalTrace = trace ?? {
+    trace_version: 1,
     scenarioId: scenario.id,
+    scenario: {
+      field: scenario.field,
+      tolerance: scenario.tolerance,
+      files: { ...scenario.files },
+    },
     modelId,
     prompt: scenario.prompt,
     answer: { extracted: null, expected: null, match: false, sourceStep: -1 },
@@ -186,6 +164,7 @@ function buildFailureScenarioResult(
     totalTokens: 0,
     durationMs,
     timestamp: new Date().toISOString(),
+    error: error.slice(0, 160),
   };
 
   return {
@@ -196,8 +175,7 @@ function buildFailureScenarioResult(
     expected,
     extracted: null,
     correct: false,
-    checks: { toolCorrect: 0, pathEfficient: 0, fieldExtraction: 0, argsValid: 0 },
-    compositeScore: 0,
+    fieldResults: [],
     reason: `error: ${error.slice(0, 160)}`,
     finishReason: '',
     usage: null,

@@ -44,7 +44,7 @@ occt/*.tgz
 # LLM eval
 eval/generate/.venv/
 eval/.work/
-tests/eval-logs/
+eval/runs/
 
 # Eval secrets
 eval/.env

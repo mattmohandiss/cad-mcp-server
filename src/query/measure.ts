@@ -118,7 +118,7 @@ function runMeasure(
       const origin = resolveOrigin(spec.origin, context);
       const direction = normalizeDirection(spec.direction ?? [0, 0, 1]);
       const tmax = spec.tmax ?? Number.POSITIVE_INFINITY;
-      const raw = kernel.rayIntersect(entityHandle, origin, direction);
+      const raw = kernel.rayIntersect(shape, origin, direction);
       /* Filter hits to tmax (the kernel doesn't take a bounded tmax). */
       const filtered = filterByDistance(raw, tmax);
       const hits = resolveRayHits(kernel, shape, filtered);
@@ -247,12 +247,22 @@ function runMeasure(
         return { error: `target "${spec.to}" not found` };
       }
       const pairs = kernel.distanceExtrema(entityHandle, targetShape);
-      return {
-        pairs: pairs.map((p) => ({
+      const mapped = pairs.map((p) => {
+        const dx = p.pointB.x - p.pointA.x;
+        const dy = p.pointB.y - p.pointA.y;
+        const dz = p.pointB.z - p.pointA.z;
+        return {
+          distance: Math.sqrt(dx * dx + dy * dy + dz * dz),
           point_on_entity: [p.pointA.x, p.pointA.y, p.pointA.z] as [number, number, number],
           point_on_target: [p.pointB.x, p.pointB.y, p.pointB.z] as [number, number, number],
-        })),
+        };
+      });
+      const distances = mapped.map((p) => p.distance);
+      return {
+        pairs: mapped,
         pair_count: pairs.length,
+        min_distance: distances.length > 0 ? Math.min(...distances) : undefined,
+        max_distance: distances.length > 0 ? Math.max(...distances) : undefined,
       };
     }
     case 'section_by_plane': {
@@ -295,11 +305,9 @@ function runMeasure(
           return { error: 'edge is not shared by two faces' };
         }
         const allFaces = kernel.getSubShapes(shape, 'face');
-        const cont = kernel.edgeContinuity(
-          entityHandle,
-          allFaces[faceIndices[0]],
-          allFaces[faceIndices[1]],
-        );
+        const faceA = allFaces[faceIndices[0]];
+        const faceB = allFaces[faceIndices[1]];
+        const cont = kernel.edgeContinuity(entityHandle, faceA, faceB);
         return { continuity: cont };
       } catch {
         return { error: 'continuity check failed' };
@@ -378,6 +386,16 @@ function runRayTestGrid(
   const MAX_RAYS = 10000;
   let totalRays = 0;
 
+  /* Find the entity's face index so we can filter out self-hits. */
+  const faceShapes = kernel.getSubShapes(shape, 'face');
+  let entityFaceIdx = -1;
+  for (let i = 0; i < faceShapes.length; i++) {
+    if (kernel.isSame(faceShapes[i], entityHandle)) {
+      entityFaceIdx = i;
+      break;
+    }
+  }
+
   /* Pick two perpendicular axes in the plane orthogonal to direction. */
   const absDir = [Math.abs(direction.x), Math.abs(direction.y), Math.abs(direction.z)];
   let uAxis: Vec3 =
@@ -444,9 +462,13 @@ function runRayTestGrid(
       } catch {
         /* Keep gridOrigin if projection fails (non-planar face edge case). */
       }
-      /* Fire against the parent shape, not the entity itself. */
+      /* Fire against the parent shape, not the entity itself.
+       * Skip self-hits (ray starting on the same face it hit). */
       const rayHits = queryRay(kernel, shape, origin, direction);
-      for (const h of rayHits) hits.push(h);
+      for (const h of rayHits) {
+        if (entityFaceIdx >= 0 && h.face_id === `face:${entityFaceIdx}`) continue;
+        hits.push(h);
+      }
       totalRays++;
     }
   }
@@ -464,9 +486,10 @@ function resolveTargetShape(
   entityId: string,
 ): ShapeHandle | undefined {
   const parsed = parseEntityId(entityId);
-  if (!parsed || parsed.type === 'body') return undefined;
+  if (!parsed) return undefined;
   try {
-    const subs = kernel.getSubShapes(shape, parsed.type);
+    const kernelType = parsed.type === 'body' ? 'solid' : parsed.type;
+    const subs = kernel.getSubShapes(shape, kernelType);
     return subs[parsed.index];
   } catch {
     return undefined;

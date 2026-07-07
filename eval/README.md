@@ -27,7 +27,7 @@ eval/
     scoring.ts     schema construction and deterministic scoring
     types.ts       trace, span, and result types
   scenarios/       scenario.md + generate.py + ground-truth.json per scenario
-tests/eval-logs/   per-run traces, gitignored
+eval/runs/        per-run traces, gitignored
 ```
 
 ## CLI

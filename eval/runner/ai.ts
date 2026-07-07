@@ -155,7 +155,13 @@ async function buildSuccessTrace(
   const generationId = (result as { id?: string }).id;
 
   const trace: EvalTrace = {
+    trace_version: 1,
     scenarioId: scenario.id,
+    scenario: {
+      field: scenario.field,
+      tolerance: scenario.tolerance,
+      files: { ...scenario.files },
+    },
     modelId,
     prompt: scenario.prompt,
     answer: {

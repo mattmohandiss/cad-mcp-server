@@ -23,7 +23,7 @@
     "src/**/*",
     "eval/runner/**/*",
     "eval/generate/**/*",
-    "tests/eval-logs/**/*",
+    "eval/runs/**/*",
     "vitest.config.ts"
   ],
   "exclude": ["node_modules", "dist", "eval/generate/.venv", "eval/runner/.venv", "occt"]

@@ -1,5 +1,4 @@
 import { withStepModel } from '../model-store.js';
-import { CAD_RESPONSE_SCHEMA_VERSION } from '../schema-version.js';
 import { wrapTool } from './shared.js';
 
 /* ------------------------------------------------------------------ */
@@ -106,7 +105,6 @@ export async function handleInspectStepFile(filePath: string) {
       }
 
       return {
-        schema_version: CAD_RESPONSE_SCHEMA_VERSION,
         file_path: filePath,
         identity: {
           product_names: semantic.productNames,

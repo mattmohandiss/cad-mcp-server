@@ -44,6 +44,11 @@ const faceOrEdgeIdSchema = entityIdSchema.refine(
   'Must be a face:N or edge:N ID from a prior query result.',
 );
 
+const faceOrEdgeOrBodyIdSchema = entityIdSchema.refine(
+  (id) => id.startsWith('face:') || id.startsWith('edge:') || id.startsWith('body:'),
+  'Must be a face:N, edge:N, or body:N ID from a prior query result.',
+);
+
 /* ------------------------------------------------------------------ */
 /*  Enums                                                              */
 /* ------------------------------------------------------------------ */
@@ -301,10 +306,12 @@ export const measureStepInputSchema = z
     file_path: filePathSchema,
 
     entity_ids: z
-      .array(faceOrEdgeIdSchema)
+      .array(faceOrEdgeOrBodyIdSchema)
       .min(1)
       .max(500)
-      .describe('Face or edge IDs from query_faces/query_edges. Batch by passing multiple IDs.'),
+      .describe(
+        'Face or edge IDs from query_faces/query_edges, or body:N from inspect_step bodies. Batch by passing multiple IDs.',
+      ),
 
     op: z.enum(MEASURE_OPS).describe('Measurement op. Only fill parameters needed for this op.'),
 
@@ -327,7 +334,7 @@ export const measureStepInputSchema = z
       .optional()
       .describe('Grid spacing mm (ray_test_grid).'),
 
-    to: faceOrEdgeIdSchema.optional().describe('Target entity ID for distance op.'),
+    to: faceOrEdgeOrBodyIdSchema.optional().describe('Target entity ID for distance op.'),
 
     plane_origin: point3Schema.optional().describe('Point on cutting plane (section_by_plane).'),
 

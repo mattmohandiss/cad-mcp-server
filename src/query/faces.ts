@@ -35,21 +35,26 @@ export async function queryStepFaces(filePath: string, input: QueryFacesInput) {
     const { kernel, shape } = await model.getShapeContext('query_step_faces');
 
     let filtered = applyFaceFilters(allFaces, input);
+
+    // Enrich raw entities with computed fields (e.g. diameter) so sorting
+    // and aggregation work on the same data that projectFace produces.
+    const enriched = filtered.map((face) => enrichFace(face));
+
     if (input.order_by) {
-      filtered = sortFaces(filtered, input.order_by);
+      sortFacesInPlace(enriched, input.order_by);
     }
 
     const resultMode = input.return_type ?? 'entities';
-    const total_matched = filtered.length;
+    const total_matched = enriched.length;
 
     const groups =
       resultMode === 'groups'
-        ? groupFaces(filtered, input.group_by, DEFAULT_QUERY_LIMITS.sample_entity_limit)
+        ? groupFaces(enriched, input.group_by, DEFAULT_QUERY_LIMITS.sample_entity_limit)
         : [];
 
     const { limit, offset } = normalizePagination(input.limit, input.offset);
     const includeEntities = resultMode === 'entities';
-    const paginated = includeEntities ? filtered.slice(offset, offset + limit) : [];
+    const paginated = includeEntities ? enriched.slice(offset, offset + limit) : [];
 
     const faceShapes = kernel.getSubShapes(shape, 'face');
     const adjacencies = buildFaceAdjacencies(kernel, shape, faceShapes, paginated, input.select);
@@ -75,10 +80,10 @@ export async function queryStepFaces(filePath: string, input: QueryFacesInput) {
     const baseStats: Record<string, unknown> = {
       total_faces: allFaces.length,
       matched_faces: total_matched,
-      surface_types: aggregateSurfaceTypes(filtered),
-      area_range: getAreaRange(filtered),
+      surface_types: aggregateSurfaceTypes(enriched),
+      area_range: getAreaRange(enriched),
     };
-    applyAggregate(baseStats, filtered as unknown as Record<string, unknown>[], input.aggregate);
+    applyAggregate(baseStats, enriched as unknown as Record<string, unknown>[], input.aggregate);
 
     return createQueryResponse(
       filePath,
@@ -314,6 +319,47 @@ export function applyFaceFilters(
   }
 
   return result;
+}
+
+function enrichFace(face: ExtractedFaceEntity): ExtractedFaceEntity & { diameter?: number } {
+  return {
+    ...face,
+    diameter: face.radius !== undefined ? face.radius * 2 : undefined,
+  };
+}
+
+export function sortFacesInPlace(
+  faces: (ExtractedFaceEntity & { diameter?: number })[],
+  sort: NonNullable<QueryFacesInput['order_by']>,
+): void {
+  const direction = sort.direction === 'desc' ? -1 : 1;
+  faces.sort((a, b) => {
+    let cmp = 0;
+    switch (sort.by) {
+      case 'area':
+        cmp = a.area - b.area;
+        break;
+      case 'surface_type':
+        cmp = a.surface_type.localeCompare(b.surface_type);
+        break;
+      case 'radius':
+        cmp = (a.radius ?? 0) - (b.radius ?? 0);
+        break;
+      case 'diameter':
+        cmp = (a.diameter ?? 0) - (b.diameter ?? 0);
+        break;
+      case 'center_x':
+        cmp = a.bbox_center[0] - b.bbox_center[0];
+        break;
+      case 'center_y':
+        cmp = a.bbox_center[1] - b.bbox_center[1];
+        break;
+      case 'center_z':
+        cmp = a.bbox_center[2] - b.bbox_center[2];
+        break;
+    }
+    return cmp * direction;
+  });
 }
 
 export function sortFaces(

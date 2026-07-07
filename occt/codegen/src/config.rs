@@ -2554,6 +2554,9 @@ const auto& edge = TopoDS::Edge(get(edgeId));
 const auto& faceA = TopoDS::Face(get(faceAId));
 const auto& faceB = TopoDS::Face(get(faceBId));
 GeomAbs_Shape cont = BRep_Tool::Continuity(edge, faceA, faceB);
+if (cont == GeomAbs_C0) {
+  cont = BRepLib::ContinuityOfFaces(edge, faceA, faceB, 0.01);
+}
 switch (cont) {
   case GeomAbs_C0: return std::string(\"C0\");
   case GeomAbs_G1: return std::string(\"G1\");
@@ -2564,7 +2567,7 @@ switch (cont) {
   case GeomAbs_CN: return std::string(\"CN\");
   default: return std::string(\"C0\");
 }",
-        includes: &["BRep_Tool.hxx", "TopoDS_Edge.hxx", "TopoDS_Face.hxx", "GeomAbs_Shape.hxx"],
+        includes: &["BRep_Tool.hxx", "BRepLib.hxx", "TopoDS_Edge.hxx", "TopoDS_Face.hxx", "GeomAbs_Shape.hxx"],
         category: "query",
         return_type: ReturnType::String,
     },

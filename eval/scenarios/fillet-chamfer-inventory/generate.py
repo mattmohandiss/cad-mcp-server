@@ -12,12 +12,20 @@ box = box.edges(">Z").chamfer(1)
 
 cq.exporters.export(box, str(dest / "fillet_chamfer_bracket.step"))
 
-# 4 vertical filleted edges at R2 → these edges are straight (not circular)
-# The fillets create partial cylindrical faces around the original edges
-# 4 bottom edges are sharp (no fillet, no chamfer) → 90° dihedral
-# 4 top chamfered edges are planar bevels (not circular)
+# 4 vertical rounded corner features at R2. These are feature-level treatments;
+# in BRep topology each round is represented by a cylindrical face bounded by
+# multiple edges, not by one persistent design edge.
+# 4 top chamfered edge features are planar bevels.
+# 4 external bottom edges remain sharp (dihedral angle over 30°).
 json.dump(
-    {"g1_fillet_edges": 4, "sharp_corners": 4, "smallest_fillet_radius_mm": 2.0},
+    {
+        "edge_treatment_audit": {
+            "rounded_vertical_corner_features": 4,
+            "top_chamfer_features": 4,
+            "sharp_bottom_external_edges": 4,
+            "rounded_vertical_corner_radius_mm": 2.0,
+        }
+    },
     open(out / "ground-truth.json", "w"),
     indent=2,
 )

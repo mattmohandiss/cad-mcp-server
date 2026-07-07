@@ -33,21 +33,41 @@ export function compareAnswer(extracted: unknown, expected: unknown, tolerance: 
     );
   }
 
+  if (isPlainObject(expected) && isPlainObject(extracted)) {
+    const expectedKeys = Object.keys(expected);
+    return expectedKeys.every(
+      (key) => key in extracted && compareAnswer(extracted[key], expected[key], tolerance),
+    );
+  }
+
   return extracted === expected;
 }
 
-export function computeScore(
+export interface FieldComparison {
+  path: string;
+  expected: unknown;
+  extracted: unknown;
+  match: boolean;
+}
+
+export function compareFields(
   extracted: unknown,
   expected: unknown,
   tolerance: number,
-  matched: boolean,
-): number {
-  if (!matched) return 0;
-  if (typeof expected === 'number' && typeof extracted === 'number' && tolerance > 0) {
-    const diff = Math.abs(extracted - expected);
-    return Math.max(60, Math.round(100 - (diff / tolerance) * 40));
+  path = '',
+): FieldComparison[] {
+  if (isPlainObject(expected)) {
+    return Object.entries(expected).flatMap(([key, value]) =>
+      compareFields(
+        isPlainObject(extracted) ? extracted[key] : undefined,
+        value,
+        tolerance,
+        path ? `${path}.${key}` : key,
+      ),
+    );
   }
-  return 100;
+
+  return [{ path, expected, extracted, match: compareAnswer(extracted, expected, tolerance) }];
 }
 
 function schemaForValue(value: unknown): z.ZodType {
@@ -64,7 +84,16 @@ function schemaForValue(value: unknown): z.ZodType {
     if (typeof item === 'boolean') return z.array(z.boolean());
     return z.array(z.unknown());
   }
+  if (isPlainObject(value)) {
+    return z.object(
+      Object.fromEntries(Object.entries(value).map(([key, item]) => [key, schemaForValue(item)])),
+    );
+  }
   return z.unknown();
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function compareJsonValues(a: unknown, b: unknown): number {

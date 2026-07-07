@@ -1,5 +1,8 @@
 {
-  "g1_fillet_edges": 4,
-  "sharp_corners": 4,
-  "smallest_fillet_radius_mm": 2.0
+  "edge_treatment_audit": {
+    "rounded_vertical_corner_features": 4,
+    "top_chamfer_features": 4,
+    "sharp_bottom_external_edges": 4,
+    "rounded_vertical_corner_radius_mm": 2.0
+  }
 }

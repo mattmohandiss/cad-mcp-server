@@ -28,7 +28,13 @@ export interface EvalSpan {
 }
 
 export interface EvalTrace {
+  trace_version: 1;
   scenarioId: string;
+  scenario: {
+    field: string;
+    tolerance: number;
+    files: Record<string, string>;
+  };
   modelId: string;
   prompt: string;
   answer: { extracted: unknown; expected: unknown; match: boolean; sourceStep: number };
@@ -38,6 +44,14 @@ export interface EvalTrace {
   timestamp: string;
   cost?: number;
   generationId?: string;
+  error?: string;
+}
+
+export interface FieldResult {
+  path: string;
+  expected: unknown;
+  extracted: unknown;
+  match: boolean;
 }
 
 // ── Legacy result types (keep for output compatibility) ──────────────
@@ -109,13 +123,7 @@ export interface ScenarioResult {
   expected: unknown;
   extracted: unknown;
   correct: boolean;
-  checks: {
-    toolCorrect: number;
-    pathEfficient: number;
-    fieldExtraction: number;
-    argsValid: number;
-  };
-  compositeScore: number;
+  fieldResults: FieldResult[];
   reason: string;
   finishReason: string;
   usage: UsageEntry | null;
@@ -126,9 +134,9 @@ export interface ScenarioResult {
 
 export interface BulkResult {
   results: ScenarioResult[];
-  perModel: Record<string, { pass: number; total: number; avgComposite: number }>;
+  perModel: Record<string, { pass: number; total: number }>;
   perScenario: Record<string, { pass: number; total: number }>;
-  overall: { pass: number; total: number; pct: number; avgComposite: number };
+  overall: { pass: number; total: number; pct: number };
   _meta: {
     modelMeta: Record<string, { tokens: number; cost: number }>;
     totalTokens: number;
