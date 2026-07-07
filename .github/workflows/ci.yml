@@ -28,7 +28,7 @@ jobs:
           node-version: '24'
           cache: 'npm'
 
-      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
         with:
           driver-opts: network=host
 
@@ -39,13 +39,13 @@ jobs:
         run: cd occt/ts && npm ci
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@67ef31d5b988238dd797d409d6f9574278e20537 # master
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
           toolchain: 1.95
           components: rustfmt clippy
 
       - name: Install just
-        uses: taiki-e/install-action@bffeee26d4db9be238a4ea78d8826604ebcb594d # v2
+        uses: taiki-e/install-action@c93ccc03e00cd0e08e494f5fd058a6c55a6a1907 # v2
         with:
           tool: just
 
@@ -56,7 +56,7 @@ jobs:
       # (metadata-only — the original PR already validated the code).
       - name: Build OCCT builder image (cached)
         if: ${{ !startsWith(github.head_ref, 'release-please--') }}
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: occt
           file: occt/Dockerfile.builder
@@ -67,7 +67,7 @@ jobs:
 
       - name: Build WASM (cached)
         if: ${{ !startsWith(github.head_ref, 'release-please--') }}
-        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: occt
           file: occt/Dockerfile
