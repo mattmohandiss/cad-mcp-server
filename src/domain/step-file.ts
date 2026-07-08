@@ -157,6 +157,7 @@ export async function handleInspectStepFile(filePath: string) {
         is_valid: brep.health.isValid,
         warning_count: brep.health.warnings.length,
         high_warning_count: brep.health.warnings.filter((w) => w.severity === 'high').length,
+        warnings: brep.health.warnings,
         complexity: {
           body_count: brep.bodyCount,
           face_count: brep.faceCount,
@@ -220,27 +221,6 @@ export async function handleInspectStepFile(filePath: string) {
         dimensions: b.dimensions,
         center_of_mass: b.centerOfMass,
       })),
-      warnings: brep.health.warnings,
-      limitations: [
-        ...semantic.limitations,
-        {
-          source: 'inspect_step_file',
-          message:
-            'Face area extremes, surface-type counts, and adjacency graph are deferred. Use query_step with specific fields for those details.',
-        },
-      ],
     };
   });
 }
-
-/* ------------------------------------------------------------------ */
-/*  Response types (consumed by query engine and shared services)      */
-/* ------------------------------------------------------------------ */
-
-export type {
-  StepQueryUnits,
-  StepQueryCoordinateSystem,
-  StepQueryPagination,
-  StepQueryGroup,
-  StepQueryResponse,
-} from '../types/query.js';

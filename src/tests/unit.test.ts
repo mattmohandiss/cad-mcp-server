@@ -8,7 +8,7 @@ import {
   normalizePagination,
   sampleEntityIds,
   DEFAULT_QUERY_LIMITS,
-} from '../query/shared.js';
+} from '../query/utils.js';
 import { applyFaceFilters, sortFaces, projectFace } from '../query/faces.js';
 import { applyEdgeFilters, sortEdges, projectEdge } from '../query/edges.js';
 import type { ExtractedFaceEntity, ExtractedEdgeEntity } from '../kernel/query-entities.js';

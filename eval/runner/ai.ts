@@ -1,5 +1,5 @@
 import { createMCPClient, type MCPClient } from '@ai-sdk/mcp';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import type { GatewayProviderOptions } from '@ai-sdk/gateway';
 import { generateText, gateway, isStepCount } from 'ai';
 import { resolveServerPath } from './config.js';
@@ -193,50 +193,66 @@ function buildFailureTrace(scenarioId: string, modelId: string, error: unknown):
 
 // ── Span classification ──────────────────────────────────────────────
 
+const MEASURE_TOOLS = [
+  'measure_distance',
+  'measure_thickness',
+  'measure_draft',
+  'measure_geometry',
+];
+
 const SCENARIO_TOOL_MAP: Record<string, { expected: string[]; distraction: string[] }> = {
   basic_volume: { expected: ['inspect_step'], distraction: [] },
   verify_dimensions: { expected: ['inspect_step'], distraction: [] },
   face_delta: { expected: ['diff_step'], distraction: [] },
-  hole_diameters: { expected: ['query_faces'], distraction: ['query_edges', 'measure_step'] },
-  drill_directions: { expected: ['query_faces'], distraction: ['query_edges'] },
-  blind_vs_through: { expected: ['query_faces', 'measure_step'], distraction: ['query_edges'] },
-  thin_walls: { expected: ['query_faces', 'measure_step'], distraction: ['query_edges'] },
-  clearance_hole_to_edge: { expected: ['query_faces', 'measure_step'], distraction: [] },
-  draft_check: { expected: ['query_faces', 'measure_step'], distraction: ['query_edges'] },
-  hole_classification: { expected: ['query_faces', 'measure_step'], distraction: ['query_edges'] },
-  aggregate_statistics: { expected: ['query_faces'], distraction: ['query_edges', 'measure_step'] },
+  hole_diameters: { expected: ['find_faces'], distraction: ['find_edges', ...MEASURE_TOOLS] },
+  drill_directions: { expected: ['find_faces'], distraction: ['find_edges'] },
+  blind_vs_through: { expected: ['find_faces', ...MEASURE_TOOLS], distraction: ['find_edges'] },
+  thin_walls: { expected: ['find_faces', 'measure_thickness'], distraction: ['find_edges'] },
+  clearance_hole_to_edge: { expected: ['find_faces', 'measure_distance'], distraction: [] },
+  draft_check: { expected: ['find_faces', 'measure_draft'], distraction: ['find_edges'] },
+  hole_classification: {
+    expected: ['find_faces', ...MEASURE_TOOLS],
+    distraction: ['find_edges'],
+  },
+  aggregate_statistics: {
+    expected: ['find_faces'],
+    distraction: ['find_edges', ...MEASURE_TOOLS],
+  },
   clean_import_verification: {
     expected: ['inspect_step'],
-    distraction: ['query_faces', 'query_edges', 'measure_step'],
+    distraction: ['find_faces', 'find_edges', ...MEASURE_TOOLS],
   },
   clearance_verification: {
-    expected: ['inspect_step', 'measure_step'],
-    distraction: ['query_faces', 'query_edges'],
+    expected: ['inspect_step', 'measure_distance'],
+    distraction: ['find_faces', 'find_edges'],
   },
   cross_section_verification: {
-    expected: ['query_faces', 'measure_step'],
-    distraction: ['query_edges'],
+    expected: ['find_faces', 'measure_geometry'],
+    distraction: ['find_edges'],
   },
   fillet_chamfer_inventory: {
-    expected: ['query_edges'],
-    distraction: ['query_faces', 'measure_step'],
+    expected: ['find_edges'],
+    distraction: ['find_faces', ...MEASURE_TOOLS],
   },
   hole_pattern_analysis: {
-    expected: ['query_faces', 'measure_step'],
-    distraction: ['query_edges'],
+    expected: ['find_faces', ...MEASURE_TOOLS],
+    distraction: ['find_edges'],
   },
-  moldability_check: { expected: ['query_faces', 'query_edges'], distraction: ['measure_step'] },
+  moldability_check: {
+    expected: ['find_faces', 'find_edges', 'measure_draft'],
+    distraction: [...MEASURE_TOOLS.filter((t) => t !== 'measure_draft')],
+  },
   point_containment_test: {
-    expected: ['inspect_step', 'measure_step'],
-    distraction: ['query_faces', 'query_edges'],
+    expected: ['inspect_step', 'measure_geometry'],
+    distraction: ['find_faces', 'find_edges'],
   },
   surface_curvature_analysis: {
-    expected: ['query_faces', 'query_edges', 'measure_step'],
+    expected: ['find_faces', 'find_edges', 'measure_geometry'],
     distraction: [],
   },
   wall_thickness_analysis: {
-    expected: ['query_faces', 'measure_step'],
-    distraction: ['query_edges'],
+    expected: ['find_faces', 'measure_thickness'],
+    distraction: ['find_edges'],
   },
 };
 
@@ -254,23 +270,23 @@ function classifyStep(
 
   const map = SCENARIO_TOOL_MAP[scenario.id];
 
-  if (toolName === 'measure_step') {
-    if (map?.expected.includes('measure_step')) return 'measurement';
+  if (MEASURE_TOOLS.includes(toolName)) {
+    if (map?.expected.some((t) => MEASURE_TOOLS.includes(t))) return 'measurement';
     return 'distraction';
   }
 
-  if (toolName === 'query_faces') {
-    const surfaceType = args?.surface_type;
-    if (map?.distraction.includes('query_faces')) return 'distraction';
+  if (toolName === 'find_faces') {
+    const surfaceType = args?.filters?.type;
+    if (map?.distraction.includes('find_faces')) return 'distraction';
     if (typeof surfaceType === 'string' && IRRELEVANT_FACE_TYPES.has(surfaceType)) {
       return 'distraction';
     }
     return 'discovery';
   }
 
-  if (toolName === 'query_edges') {
-    const curveType = args?.curve_type;
-    if (map?.distraction.includes('query_edges')) return 'distraction';
+  if (toolName === 'find_edges') {
+    const curveType = args?.filters?.type;
+    if (map?.distraction.includes('find_edges')) return 'distraction';
     if (typeof curveType === 'string' && IRRELEVANT_EDGE_TYPES.has(curveType)) {
       return 'distraction';
     }
@@ -295,6 +311,7 @@ function buildSpanChecks(
     const raw = output.raw as string;
     if (raw.includes('MCP error -32602') || raw.includes('Input validation error')) {
       argsValid = false;
+      productive = false;
     }
   }
 
@@ -305,7 +322,7 @@ function buildSpanChecks(
   }
 
   // Check for zero results with active filters (suspicious)
-  if (toolName === 'query_faces' || toolName === 'query_edges') {
+  if (MEASURE_TOOLS.includes(toolName) || toolName === 'find_faces' || toolName === 'find_edges') {
     const data = output.structured as Record<string, unknown> | undefined;
     const stats = data?.statistics as Record<string, number> | undefined;
     if (stats && stats.matched_faces === 0 && stats.total_faces > 0) {

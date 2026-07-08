@@ -24,7 +24,6 @@ export interface UnitSystem {
 export interface ProviderInfo {
   name: string;
   capabilities: string[];
-  limitations: string[];
 }
 
 export interface Provenance {
@@ -39,9 +38,4 @@ export interface Warning {
   severity: 'info' | 'low' | 'medium' | 'high';
   message: string;
   sourceIds: string[];
-}
-
-export interface Limitation {
-  source: string;
-  message: string;
 }

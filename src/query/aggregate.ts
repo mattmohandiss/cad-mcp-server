@@ -23,6 +23,17 @@
 
 export type AggregateOp = 'count' | 'min' | 'max' | 'avg' | 'stddev' | 'sum';
 
+function isAggregateOp(value: string): value is AggregateOp {
+  return (
+    value === 'count' ||
+    value === 'min' ||
+    value === 'max' ||
+    value === 'avg' ||
+    value === 'stddev' ||
+    value === 'sum'
+  );
+}
+
 export interface AggregateResult {
   spec: string;
   op: AggregateOp;
@@ -37,7 +48,11 @@ export function parseAggregateSpec(spec: string): { op: AggregateOp; field: stri
   if (!m) {
     throw new Error(`invalid aggregate spec "${spec}"`);
   }
-  return { op: m[1].toLowerCase() as AggregateOp, field: m[2] };
+  const op = m[1].toLowerCase();
+  if (!isAggregateOp(op)) {
+    throw new Error(`invalid aggregate op "${op}"`);
+  }
+  return { op, field: m[2] };
 }
 
 /**
@@ -49,7 +64,7 @@ export function parseAggregateSpec(spec: string): { op: AggregateOp; field: stri
  * and pulls out the requested field.
  */
 export function dispatchAggregate(
-  records: ReadonlyArray<Record<string, unknown>>,
+  records: ReadonlyArray<object>,
   specs: ReadonlyArray<string>,
 ): AggregateResult[] {
   const out: AggregateResult[] = [];
@@ -78,7 +93,7 @@ export function dispatchAggregate(
  */
 export function applyAggregate(
   stats: Record<string, unknown>,
-  records: ReadonlyArray<Record<string, unknown>>,
+  records: ReadonlyArray<object>,
   specs: ReadonlyArray<string> | undefined,
 ): void {
   if (specs && specs.length > 0) {
@@ -99,13 +114,10 @@ export function aggregateToStatistics(results: AggregateResult[]): Record<string
 /*  Internal helpers                                                    */
 /* ------------------------------------------------------------------ */
 
-function extractFieldValues(
-  records: ReadonlyArray<Record<string, unknown>>,
-  field: string,
-): number[] {
+function extractFieldValues(records: ReadonlyArray<object>, field: string): number[] {
   const out: number[] = [];
   for (const r of records) {
-    const v = r[field];
+    const v = readField(r, field);
     if (typeof v === 'number' && Number.isFinite(v)) {
       out.push(v);
     } else if (Array.isArray(v)) {
@@ -121,6 +133,11 @@ function extractFieldValues(
     }
   }
   return out;
+}
+
+function readField(record: object, field: string): unknown {
+  if (!Object.prototype.hasOwnProperty.call(record, field)) return undefined;
+  return (record as Record<string, unknown>)[field];
 }
 
 function computeOp(op: AggregateOp, values: number[]): number {

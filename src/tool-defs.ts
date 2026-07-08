@@ -1,8 +1,11 @@
 export const PUBLIC_TOOL_NAMES = [
   'inspect_step',
-  'query_faces',
-  'query_edges',
-  'measure_step',
+  'find_faces',
+  'find_edges',
+  'measure_distance',
+  'measure_thickness',
+  'measure_draft',
+  'measure_geometry',
   'diff_step',
 ] as const;
 

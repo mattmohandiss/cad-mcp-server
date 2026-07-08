@@ -38,6 +38,4 @@ export interface StepQueryResponse<TEntity extends Record<string, unknown>> {
   pagination: StepQueryPagination;
   entities: TEntity[];
   groups: StepQueryGroup[];
-  warnings: unknown[];
-  limitations: unknown[];
 }

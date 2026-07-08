@@ -32,15 +32,15 @@ The store uses a small LRU cache and avoids eviction of models actively used by 
 
 1. **`inspect_step`** — cheap first-pass overview: volume, bounding box, topology, watertight status, principal axes, PMI summary. Use first.
 
-2. **`query_faces`** — find faces by type, area, radius, or body. Default response includes IDs, surface types, areas, bounding boxes, body IDs, and adjacency. Additional selected fields can include radii, diameters, axes, normals, wire topology, validity, and tolerances.
+2. **`find_faces`** — find faces by task-oriented filters such as type, area, radius, normal, quality, or body. Include presets control result detail; summaries cover grouping, stats, and unique radii/diameters.
 
-3. **`query_edges`** — find edges by curve type, length, or radius. Default response includes IDs, curve types, lengths, bounding boxes, and body IDs. Additional selected fields can include radii, diameters, vertices, convexity, continuity, and adjacent faces.
+3. **`find_edges`** — find edges by task-oriented filters such as curve type, length, radius, dihedral angle, or body. Include presets control result detail; summaries cover grouping, stats, and unique radii/diameters.
 
-4. **`measure_step`** — batch geometric measurement. Send entity IDs from prior queries. Supported ops are defined by `MEASURE_OPS` in `src/public-contract.ts` and include ray tests, distance/extrema, draft, point/curvature, section, and continuity measurements. Direction shortcuts (along_axis, along_axis_both, normal) resolve per-entity.
+4. **`measure_geometry`** — batch geometric measurement. Send entity IDs from prior find/inspect results. The public schema uses a typed `measurement` request for distance, thickness, ray, ray_grid, draft_angle, point_analysis, section, and continuity.
 
 5. **`diff_step`** — compare two STEP files: volume, surface area, dimensions, face/edge/body count deltas. Deltas are comparison minus baseline.
 
-Face adjacency is computed via BRepGraph O(1) lookups and included by default in `query_faces` responses.
+Face adjacency is computed via BRepGraph O(1) lookups and available through `find_faces` include presets.
 
 ## Backend Boundaries
 
@@ -53,9 +53,9 @@ Face adjacency is computed via BRepGraph O(1) lookups and included by default in
 
 - **Deterministic.** Every computation uses OCCT built-in classes. No custom math where OCCT already provides it.
 - **Read-only.** No geometry creation or modification.
-- **Entity-type split.** `query_faces` and `query_edges` are separate tools. The model cannot fill face fields in edge queries (the #1 failure mode in LLM tool use).
+- **Entity-type split.** `find_faces` and `find_edges` are separate tools. The model cannot fill face fields in edge queries (the #1 failure mode in LLM tool use).
 - **Adapters over engines.** Tool handlers are thin adapters. The face/edge services are the internal contract. No central query engine orchestrator.
-- **Batch-first.** `measure_step` accepts multiple entity IDs. The model measures all faces in one call, not one at a time.
+- **Batch-first.** `measure_geometry` accepts multiple entity IDs. The model measures all faces in one call, not one at a time.
 
 ## Non-Goals
 

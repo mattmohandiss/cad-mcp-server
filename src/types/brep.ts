@@ -5,7 +5,7 @@ import type {
   Provenance,
   UnitSystem,
   Warning,
-} from './schema.js';
+} from './geometry.js';
 
 export interface BRepBody {
   id: string;

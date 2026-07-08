@@ -1,4 +1,4 @@
-import { withStepModel } from './model-store.js';
+import { withStepModel } from '../model-store.js';
 
 export async function compareStepFiles(fileA: string, fileB: string) {
   return withStepModel(fileA, async (modelA) =>
@@ -35,16 +35,6 @@ export async function compareStepFiles(fileA: string, fileB: string) {
           productNamesA: semanticA.productNames,
           productNamesB: semanticB.productNames,
         },
-        warnings: [...brepA.health.warnings, ...brepB.health.warnings],
-        limitations: [
-          ...semanticA.limitations,
-          ...semanticB.limitations,
-          {
-            source: 'compare_step_files',
-            message:
-              'Comparison uses metric and metadata deltas only; stable feature identity and adjacency across revisions are not inferred.',
-          },
-        ],
         providers: {
           a: [brepA.provider, semanticA.provider],
           b: [brepB.provider, semanticB.provider],

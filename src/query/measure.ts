@@ -22,8 +22,8 @@
  */
 
 import type { OcctKernel, ShapeHandle, Vec3 } from 'occt-wasm';
-import type { MEASURE_OPS } from '../public-contract.js';
-import { resolveRayHits, queryRay } from '../kernel/ray-utils.js';
+import type { MEASURE_OPS } from '../tool-defs.js';
+import { resolveRayHits, queryRay } from '../kernel/ray.js';
 import { parseEntityId } from '../utils/ids.js';
 import { toBoundingBox } from '../kernel/measure.js';
 
@@ -33,6 +33,7 @@ export interface MeasureSpec {
   op: MeasureOpName;
   direction?: number[];
   direction_shortcut?: string;
+  bidirectional?: boolean;
   origin?: number[] | string;
   tmax?: number;
   spacing_mm?: number;
@@ -46,7 +47,75 @@ export interface MeasureSpec {
   detail_level?: 'aggregate' | 'summary' | 'points';
 }
 
-export type MeasureResults = Record<string, unknown>;
+export interface MeasureErrorResult {
+  error: string;
+}
+
+export type RayHit = { face_id: string; distance: number; point: [number, number, number] };
+
+export interface RayGridResult {
+  hits?: RayHit[];
+  hit_distance?: number[];
+  total_rays?: number;
+  statistics?: {
+    min_distance: number;
+    max_distance: number;
+    avg_distance: number;
+    hit_count: number;
+    miss_count: number;
+  };
+}
+
+export type MeasureOpResult =
+  | MeasureErrorResult
+  | RayHit[]
+  | RayGridResult
+  | number
+  | boolean
+  | 'in'
+  | 'on'
+  | 'out'
+  | {
+      draft_angle_deg: number;
+      normal: [number, number, number];
+      undercut: boolean;
+    }
+  | {
+      uv: [number, number];
+      point_on_surface: Vec3;
+    }
+  | {
+      min_curvature: number;
+      max_curvature: number;
+      gaussian_curvature: number;
+      mean_curvature: number;
+    }
+  | {
+      closest_point: number[];
+      tangent: number[];
+      parameter: number;
+    }
+  | {
+      pairs: Array<{
+        distance: number;
+        point_on_entity: [number, number, number];
+        point_on_target: [number, number, number];
+      }>;
+      pair_count: number;
+      min_distance?: number;
+      max_distance?: number;
+    }
+  | {
+      edge_count: number;
+      edges: Array<{
+        curve_type: string;
+        length: number;
+        bbox: ReturnType<typeof toBoundingBox> | null;
+      }>;
+    }
+  | { continuity: string };
+
+export type MeasureResults = Partial<Record<MeasureOpName, MeasureOpResult>>;
 
 /**
  * Dispatch all measure ops against a single entity's shape handle.
@@ -88,7 +157,7 @@ function runMeasure(
   entityHandle: ShapeHandle,
   spec: MeasureSpec,
   context: MeasureContext,
-): unknown {
+): MeasureOpResult | undefined {
   switch (spec.op) {
     case 'ray_test': {
       const origin = resolveOrigin(spec.origin, context);
@@ -114,7 +183,21 @@ function runMeasure(
        * see if rays exit the model. */
       const direction = normalizeDirection(spec.direction ?? [0, 0, 1]);
       const spacing = spec.spacing_mm ?? 2.0;
-      return runRayTestGrid(kernel, shape, entityHandle, direction, spacing);
+      const forward = runRayTestGrid(kernel, shape, entityHandle, direction, spacing);
+      if (!spec.bidirectional) return forward;
+
+      const reverse = runRayTestGrid(
+        kernel,
+        shape,
+        entityHandle,
+        { x: -direction.x, y: -direction.y, z: -direction.z },
+        spacing,
+      );
+      return {
+        hits: [...forward.hits, ...reverse.hits],
+        total_rays: forward.total_rays + reverse.total_rays,
+        hit_distance: [...forward.hit_distance, ...reverse.hit_distance],
+      };
     }
     case 'distance': {
       if (!spec.to) {

@@ -1,7 +1,7 @@
 import type { OcctKernel, ShapeHandle } from 'occt-wasm';
-import { FACE_DEFAULT_SELECT_FIELDS } from '../public-contract.js';
+import { FACE_DEFAULT_SELECT_FIELDS } from '../tool-defs.js';
 import { type ExtractedFaceEntity } from '../kernel/query-entities.js';
-import { computeEdgeConvexity } from '../kernel/aag-utils.js';
+import { computeEdgeConvexity } from '../kernel/aag.js';
 import { normalizeVector, angleDegreesNormalized } from '../utils/vectors.js';
 import { withStepModel } from '../model-store.js';
 import {
@@ -14,7 +14,7 @@ import {
   axisDirectionKey,
   DEFAULT_QUERY_LIMITS,
   type ComputedGroup,
-} from './shared.js';
+} from './utils.js';
 import { applyAggregate } from './aggregate.js';
 
 export interface QueryFacesInput {
@@ -25,6 +25,7 @@ export interface QueryFacesInput {
   order_by?: { by: string; direction?: 'asc' | 'desc' };
   return_type?: 'summary' | 'entities' | 'groups';
   aggregate?: string[];
+  unique?: string[];
   pull_direction?: number[];
   limit?: number;
   offset?: number;
@@ -84,7 +85,8 @@ export async function queryStepFaces(filePath: string, input: QueryFacesInput) {
       surface_types: aggregateSurfaceTypes(enriched),
       area_range: getAreaRange(enriched),
     };
-    applyAggregate(baseStats, enriched as unknown as Record<string, unknown>[], input.aggregate);
+    applyAggregate(baseStats, enriched, input.aggregate);
+    applyUnique(baseStats, enriched, input.unique);
 
     return createQueryResponse(
       filePath,
@@ -98,10 +100,26 @@ export async function queryStepFaces(filePath: string, input: QueryFacesInput) {
       entities,
       baseStats,
       groups,
-      [],
-      [],
     );
   });
+}
+
+function applyUnique(
+  stats: Record<string, unknown>,
+  records: ReadonlyArray<object>,
+  fields: string[] | undefined,
+): void {
+  if (!fields) return;
+  for (const field of fields) {
+    const values = records
+      .map((record) => (record as Record<string, unknown>)[field])
+      .filter(
+        (value): value is number | string => typeof value === 'number' || typeof value === 'string',
+      );
+    stats[`unique_${field}s`] = [...new Set(values)].sort((a, b) =>
+      typeof a === 'number' && typeof b === 'number' ? a - b : String(a).localeCompare(String(b)),
+    );
+  }
 }
 
 /**
@@ -307,7 +325,7 @@ export function applyFaceFilters(
     result = result.filter((f) => f.radius !== undefined && f.radius <= radiusMax);
   }
 
-  const normal = where.normal as { parallel_to?: number[]; tolerance_degrees?: number } | undefined;
+  const normal = parseNormalFilter(where.normal);
   if (normal?.parallel_to) {
     const targetNormal = normalizeVector(normal.parallel_to);
     const tolerance = normal.tolerance_degrees ?? 10;
@@ -320,6 +338,22 @@ export function applyFaceFilters(
   }
 
   return result;
+}
+
+function parseNormalFilter(
+  value: unknown,
+): { parallel_to: number[]; tolerance_degrees?: number } | undefined {
+  if (value === null || typeof value !== 'object') return undefined;
+  const fields = value as Record<string, unknown>;
+  if (!Array.isArray(fields.parallel_to)) return undefined;
+  if (!fields.parallel_to.every((n): n is number => typeof n === 'number')) return undefined;
+  if (fields.tolerance_degrees !== undefined && typeof fields.tolerance_degrees !== 'number') {
+    return undefined;
+  }
+  return {
+    parallel_to: fields.parallel_to,
+    tolerance_degrees: fields.tolerance_degrees,
+  };
 }
 
 function enrichFace(face: ExtractedFaceEntity): ExtractedFaceEntity & { diameter?: number } {
@@ -335,7 +369,7 @@ export function sortFacesInPlace(
 ): void {
   const direction = sort.direction === 'desc' ? -1 : 1;
   faces.sort((a, b) => {
-    let cmp = 0;
+    let cmp: number;
     switch (sort.by) {
       case 'area':
         cmp = a.area - b.area;
@@ -358,6 +392,8 @@ export function sortFacesInPlace(
       case 'center_z':
         cmp = a.bbox_center[2] - b.bbox_center[2];
         break;
+      default:
+        throw new Error(`Unknown sort field: ${sort.by}`);
     }
     return cmp * direction;
   });
@@ -367,38 +403,9 @@ export function sortFaces(
   faces: ExtractedFaceEntity[],
   sort: NonNullable<QueryFacesInput['order_by']>,
 ): ExtractedFaceEntity[] {
-  const sorted = [...faces];
-  const direction = sort.direction === 'desc' ? -1 : 1;
-
-  sorted.sort((a, b) => {
-    let cmp = 0;
-    switch (sort.by) {
-      case 'area':
-        cmp = a.area - b.area;
-        break;
-      case 'surface_type':
-        cmp = a.surface_type.localeCompare(b.surface_type);
-        break;
-      case 'radius':
-        cmp = (a.radius ?? 0) - (b.radius ?? 0);
-        break;
-      case 'diameter':
-        cmp = (a.radius ?? 0) * 2 - (b.radius ?? 0) * 2;
-        break;
-      case 'center_x':
-        cmp = a.bbox_center[0] - b.bbox_center[0];
-        break;
-      case 'center_y':
-        cmp = a.bbox_center[1] - b.bbox_center[1];
-        break;
-      case 'center_z':
-        cmp = a.bbox_center[2] - b.bbox_center[2];
-        break;
-    }
-    return cmp * direction;
-  });
-
-  return sorted;
+  const enriched = faces.map((f) => enrichFace(f));
+  sortFacesInPlace(enriched, sort);
+  return enriched;
 }
 
 export function projectFace(

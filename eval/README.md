@@ -1,6 +1,6 @@
 # LLM Eval for cad-mcp-server
 
-The eval suite checks whether real LLMs can use the public CAD MCP tools (`inspect_step`, `query_faces`, `query_edges`, `measure_step`, `diff_step`) to answer geometry questions with known ground truth.
+The eval suite checks whether real LLMs can use the public CAD MCP tools (`inspect_step`, `find_faces`, `find_edges`, `measure_geometry`, `diff_step`) to answer geometry questions with known ground truth.
 
 ## How It Works
 
@@ -32,6 +32,14 @@ eval/runs/        per-run traces, gitignored
 
 ## CLI
 
+Set up Python fixtures once before running evals:
+
+```sh
+just setup-eval
+```
+
+On Nix, run eval commands from `nix develop`; the dev shell provides the native libraries needed by CadQuery/OCP.
+
 ```sh
 # Targeted scenarios (recommended — cheaper, faster)
 npx tsx eval/runner/index.ts -m anthropic/claude-sonnet-4-5 -s thin_walls
@@ -47,8 +55,8 @@ npx tsx eval/runner/index.ts -m anthropic/claude-sonnet-4-5
 
 Each run shows a `[D/M/W]` breakdown:
 
-- **D**iscovery: productive query_faces or query_edges calls
-- **M**easurement: productive measure_step calls
+- **D**iscovery: productive find_faces or find_edges calls
+- **M**easurement: productive measure_geometry calls
 - **W**aste: irrelevant queries, wrong tools, exploration of unrelated geometry
 
 ```text

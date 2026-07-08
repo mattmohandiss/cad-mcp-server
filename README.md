@@ -37,13 +37,13 @@ Point your AI at any STEP file and ask questions like:
 
 ## What It Can Do
 
-| Tool           | Example question                                                   |
-| -------------- | ------------------------------------------------------------------ |
-| `inspect_step` | "What are the overall dimensions and volume?"                      |
-| `query_faces`  | "Find all cylindrical faces. Which ones are holes vs bosses?"      |
-| `query_edges`  | "What's the smallest fillet radius on this part?"                  |
-| `measure_step` | "Check wall thickness around every hole. Flag anything below 2mm." |
-| `diff_step`    | "What changed between revision A and revision B?"                  |
+| Tool               | Example question                                                   |
+| ------------------ | ------------------------------------------------------------------ |
+| `inspect_step`     | "What are the overall dimensions and volume?"                      |
+| `find_faces`       | "Find all cylindrical faces. Which ones are holes vs bosses?"      |
+| `find_edges`       | "What's the smallest fillet radius on this part?"                  |
+| `measure_geometry` | "Check wall thickness around every hole. Flag anything below 2mm." |
+| `diff_step`        | "What changed between revision A and revision B?"                  |
 
 The AI assistant interprets the measurements. You get engineering answers, not raw numbers.
 

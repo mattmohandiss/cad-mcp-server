@@ -1,19 +1,22 @@
-/**
- * diff_step — two-file comparison.
- *
- * Thin adapter: validates the input, delegates to the existing
- * `compareStepFiles` service. The output is metric deltas plus
- * (in the next release) PMI / color / material deltas.
- */
-
 import { z } from 'zod';
-import { diffStepSchema } from '../schemas/tool-schemas.js';
-import { compareStepFiles } from '../compare.js';
-import { wrapTool } from './shared.js';
+import { compareStepFiles } from '../domain/compare.js';
+import { runTool } from '../tool-helper.js';
 
-export const diffStepInput = diffStepSchema;
-export type DiffStepArgs = z.infer<typeof diffStepSchema>;
+export const schema = z
+  .object({
+    baseline_file_path: z.string().min(1).meta({
+      description: 'Path to baseline STEP file.',
+    }),
+    comparison_file_path: z.string().min(1).meta({
+      description: 'Path to comparison STEP file.',
+    }),
+  })
+  .strict();
 
-export async function handleDiffStep(args: DiffStepArgs) {
-  return wrapTool(() => compareStepFiles(args.baseline_file_path, args.comparison_file_path));
+export const examples = [
+  { baseline_file_path: 'model_v1.step', comparison_file_path: 'model_v2.step' },
+];
+
+export async function handler(args: z.output<typeof schema>) {
+  return runTool(() => compareStepFiles(args.baseline_file_path, args.comparison_file_path));
 }

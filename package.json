@@ -104,13 +104,14 @@
     "url": "https://github.com/mattmohandiss/cad-mcp-server/issues"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/server": "2.0.0-beta.1",
     "occt-wasm": "file:./occt/ts",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@ai-sdk/gateway": "^4.0.8",
     "@ai-sdk/mcp": "^2.0.5",
+    "@modelcontextprotocol/client": "2.0.0-beta.1",
     "@commitlint/cli": "^21.2.0",
     "@commitlint/config-conventional": "^21.2.0",
     "@eslint/js": "^10.0.1",

@@ -1,8 +1,8 @@
 import type { OcctKernel, ShapeHandle } from 'occt-wasm';
-import type { BoundingBox, Point3D } from '../types/schema.js';
+import type { BoundingBox, Point3D } from '../types/geometry.js';
 import { makeId } from '../utils/ids.js';
 import { toBoundingBox } from './measure.js';
-import { computeEdgeConvexity } from './aag-utils.js';
+import { computeEdgeConvexity } from './aag.js';
 
 function bboxToTuple(bbox: BoundingBox): {
   min: [number, number, number];
