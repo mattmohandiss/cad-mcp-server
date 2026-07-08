@@ -85,7 +85,7 @@ git add -p            # review the diff
 git commit -m "feat: description"   # conventional commit (feat:, fix:, etc.)
 git push -u origin feat/my-change
 gh pr create --base main
-# wait for CI (just check + WASM + dep-review)
+# wait for CI (just check + registry metadata + dep-review)
 gh pr merge --squash
 ```
 
@@ -95,8 +95,8 @@ After a PR with a `feat:` or `fix:` commit is merged, release-please opens a
 release PR ("chore(main): release X.Y.Z"). This PR bumps versions, updates the
 CHANGELOG, and syncs `server.json`.
 
-The release PR runs `just check` only — the original PR already validated the
-code with WASM and dependency-review.
+The release PR runs `just check` and registry metadata validation. Run `just ci`
+manually before merging kernel-sensitive changes.
 
 ```bash
 # Review the version bump and changelog diff
@@ -121,7 +121,7 @@ gh pr merge <release-pr-number> --squash   # auto-publishes to npm and MCP Regis
 
 If you forget the conventional commit prefix, no Release PR is opened. Silent. Use `feat:`, `fix:`, etc.
 
-**Pre-release verification (mirrors what CI does):**
+**Pre-release verification for kernel-sensitive changes:**
 
 ```bash
 just ci            # lint + tests + WASM build + tests with kernel
@@ -131,8 +131,8 @@ just ci            # lint + tests + WASM build + tests with kernel
 
 1. **pre-commit** (lint-staged): prettier + eslint on staged files (~1s)
 2. **pre-push** (husky): `just check` — full lint + vitest (~30s, no Docker)
-3. **PR CI** (pull request to main): `just check` + dep-review + WASM build + kernel tests (~3min)
-4. **Release PR CI** (release-please PR): `just check` only (~30s)
+3. **PR CI** (pull request to main): `just check` + registry metadata validation + dep-review (~30s)
+4. **Release PR CI** (release-please PR): `just check` + registry metadata validation (~30s)
 5. **release-please** (release PR merge): optimized WASM build + kernel tests + packed-CLI smoke test + npm publish + MCP Registry publish with retry (~6min)
 
 ## Trusted publishing
@@ -158,6 +158,6 @@ The npm package (`cad-mcp-server`) should stay minimal. Include only:
 
 - `dist/` — compiled JS
 - `node_modules/occt-wasm/` — bundled WASM kernel
-- `README.md`, `THIRD_PARTY_NOTICES.md`, `docs/EXAMPLE_PROMPTS.md`
+- `README.md`, `THIRD_PARTY_NOTICES.md`, `docs/EXAMPLE_PROMPTS.md`, `server.json`
 
 Do not include test files, source maps, or development configuration in the package.

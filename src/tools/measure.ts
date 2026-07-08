@@ -154,7 +154,11 @@ async function batchMeasure(
         continue;
       }
 
-      const measureResults = dispatchMeasure(kernel, shape, handle, resolvedSpecs);
+      const bbox = kernel.getBoundingBox(handle, false);
+      const measureResults = dispatchMeasure(kernel, shape, handle, resolvedSpecs, {
+        current_extent_min: [bbox.xmin, bbox.ymin, bbox.zmin],
+        current_extent_max: [bbox.xmax, bbox.ymax, bbox.zmax],
+      });
       const detailLevel = resolvedSpecs[0]?.detail_level ?? 'aggregate';
       stripRawGridData(measureResults, detailLevel);
       const hitSummary = buildHitSummary(measureResults);

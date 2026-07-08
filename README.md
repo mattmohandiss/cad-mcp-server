@@ -59,7 +59,7 @@ See [docs/EXAMPLE_PROMPTS.md](docs/EXAMPLE_PROMPTS.md) for more.
 
 ## Requirements
 
-- Node.js 22+
+- Node.js 24+
 - STEP files (export from SolidWorks, FreeCAD, Fusion 360, CATIA, or any CAD system)
 
 ## License

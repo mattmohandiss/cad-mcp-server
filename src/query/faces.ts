@@ -1,4 +1,5 @@
 import type { OcctKernel, ShapeHandle } from 'occt-wasm';
+import { FACE_DEFAULT_SELECT_FIELDS } from '../public-contract.js';
 import { type ExtractedFaceEntity } from '../kernel/query-entities.js';
 import { computeEdgeConvexity } from '../kernel/aag-utils.js';
 import { normalizeVector, angleDegreesNormalized } from '../utils/vectors.js';
@@ -124,7 +125,7 @@ function buildFaceAdjacencies(
       }>
     >
   | undefined {
-  if (!fields?.includes('adjacent_faces')) return undefined;
+  if (!selectedFaceFields(fields).includes('adjacent_faces')) return undefined;
 
   const result = new Map<
     string,
@@ -186,7 +187,7 @@ function buildClosestFaceDistances(
   allFaces: ExtractedFaceEntity[],
   fields: QueryFacesInput['select'],
 ): Map<string, { face_id: string; distance: number }> | undefined {
-  if (!fields?.includes('closest_face_distance')) return undefined;
+  if (!selectedFaceFields(fields).includes('closest_face_distance')) return undefined;
 
   const result = new Map<string, { face_id: string; distance: number }>();
   const allIndices = allFaces.map((f) => f.index);
@@ -381,6 +382,9 @@ export function sortFaces(
       case 'radius':
         cmp = (a.radius ?? 0) - (b.radius ?? 0);
         break;
+      case 'diameter':
+        cmp = (a.radius ?? 0) * 2 - (b.radius ?? 0) * 2;
+        break;
       case 'center_x':
         cmp = a.bbox_center[0] - b.bbox_center[0];
         break;
@@ -402,15 +406,7 @@ export function projectFace(
   fields: QueryFacesInput['select'],
   pullDirection?: number[],
 ): Record<string, unknown> {
-  const selected = fields ?? [
-    'id',
-    'surface_type',
-    'area',
-    'bbox',
-    'bbox_center',
-    'body_id',
-    'adjacent_faces',
-  ];
+  const selected = selectedFaceFields(fields);
   const result: Record<string, unknown> = {};
 
   // Always surface body_id when available (even if not explicitly requested).
@@ -506,10 +502,17 @@ export function projectFace(
       case 'is_valid':
         result.is_valid = face.is_valid;
         break;
+      case 'tolerance':
+        if (face.tolerance !== undefined) result.tolerance = face.tolerance;
+        break;
     }
   }
 
   return result;
+}
+
+function selectedFaceFields(fields: QueryFacesInput['select']): readonly string[] {
+  return fields ?? FACE_DEFAULT_SELECT_FIELDS;
 }
 
 function aggregateSurfaceTypes(faces: ExtractedFaceEntity[]): Record<string, number> {

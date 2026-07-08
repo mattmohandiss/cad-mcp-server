@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { handleInspectStepFile } from '../tools/step-tools.js';
+import { handleInspectStep } from '../tools/inspect.js';
 
 interface ToolSuccess {
   ok: true;
@@ -21,7 +21,9 @@ function expectFailure(value: unknown): ToolFailure {
 
 describe('error handling', () => {
   it('returns file_not_found for missing STEP files', async () => {
-    const missing = expectFailure(await handleInspectStepFile('/tmp/does_not_exist.step'));
+    const missing = expectFailure(
+      await handleInspectStep({ file_path: '/tmp/does_not_exist.step' }),
+    );
     expect(missing.error.type).toBe('file_not_found');
   });
 });

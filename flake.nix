@@ -69,6 +69,7 @@
             # Python for the LLM eval (cadquery STEP generation).
             # Use the `python` wrapper so cadquery-ocp can find its
             # native deps. `python3` is also on PATH for direct use.
+						uv
             python3WithPip
             pythonWrapper
           ];

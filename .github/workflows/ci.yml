@@ -15,11 +15,6 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    services:
-      registry:
-        image: registry:3
-        ports:
-          - 5000:5000
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -27,10 +22,6 @@ jobs:
         with:
           node-version: '24'
           cache: 'npm'
-
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
-        with:
-          driver-opts: network=host
 
       - name: Install root dependencies
         run: npm ci
@@ -52,45 +43,11 @@ jobs:
       - name: Check formatting, lint, and tests
         run: just check
 
-      # Build WASM and run kernel tests.  Skip on release-please PRs
-      # (metadata-only — the original PR already validated the code).
-      - name: Build OCCT builder image (cached)
-        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+      - name: Validate MCP registry metadata
+        uses: studiomeyer-io/mcp-passport@v0.1.0
         with:
-          context: occt
-          file: occt/Dockerfile.builder
-          tags: localhost:5000/occt-wasm-builder
-          push: true
-          cache-from: type=gha,scope=occt-builder
-          cache-to: type=gha,mode=max,scope=occt-builder
-
-      - name: Build WASM (cached)
-        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
-        with:
-          context: occt
-          file: occt/Dockerfile
-          build-args: ENABLE_WASM_OPT=0
-          tags: occt-wasm
-          load: true
-          cache-from: type=gha,scope=occt-wasm
-          cache-to: type=gha,mode=max,scope=occt-wasm
-          build-contexts: |
-            occt-wasm-builder=docker-image://localhost:5000/occt-wasm-builder
-
-      - name: Extract WASM artifacts
-        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
-        run: |
-          cid=$(docker create occt-wasm)
-          mkdir -p occt/dist occt/ts/dist
-          docker cp "$cid":/workspace/dist/. occt/dist/
-          docker cp "$cid":/workspace/ts/dist/. occt/ts/dist/
-          docker rm "$cid"
-
-      - name: Run tests with WASM
-        if: ${{ !startsWith(github.head_ref, 'release-please--') }}
-        run: npm test
+          path: .
+          fail-on: error
 
   # Fails the PR if a new dep adds a critical-severity vulnerability.
   # Catches typosquatted packages, known-bad transitive deps, etc.

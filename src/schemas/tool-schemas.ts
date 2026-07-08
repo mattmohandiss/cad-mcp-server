@@ -1,4 +1,29 @@
 import { z } from 'zod';
+import {
+  CURVE_TYPES,
+  EDGE_GROUP_BY_FIELDS,
+  EDGE_ORDER_FIELDS,
+  EDGE_SELECT_FIELDS,
+  FACE_GROUP_BY_FIELDS,
+  FACE_ORDER_FIELDS,
+  FACE_SELECT_FIELDS,
+  MEASURE_OPS,
+  RETURN_TYPES,
+  SURFACE_TYPES,
+} from '../public-contract.js';
+
+export {
+  CURVE_TYPES,
+  EDGE_GROUP_BY_FIELDS,
+  EDGE_ORDER_FIELDS,
+  EDGE_SELECT_FIELDS,
+  FACE_GROUP_BY_FIELDS,
+  FACE_ORDER_FIELDS,
+  FACE_SELECT_FIELDS,
+  MEASURE_OPS,
+  RETURN_TYPES,
+  SURFACE_TYPES,
+} from '../public-contract.js';
 
 /* ------------------------------------------------------------------ */
 /*  Common primitive schemas                                           */
@@ -48,40 +73,6 @@ const faceOrEdgeOrBodyIdSchema = entityIdSchema.refine(
   (id) => id.startsWith('face:') || id.startsWith('edge:') || id.startsWith('body:'),
   'Must be a face:N, edge:N, or body:N ID from a prior query result.',
 );
-
-/* ------------------------------------------------------------------ */
-/*  Enums                                                              */
-/* ------------------------------------------------------------------ */
-
-export const SURFACE_TYPES = [
-  'plane',
-  'cylinder',
-  'cone',
-  'sphere',
-  'torus',
-  'bspline',
-  'other',
-] as const;
-
-export const CURVE_TYPES = ['line', 'circle', 'ellipse', 'bspline', 'other'] as const;
-
-export const RETURN_TYPES = ['entities', 'summary', 'groups'] as const;
-
-export const MEASURE_OPS = [
-  'ray_test',
-  'ray_test_grid',
-  'ray_test_segment',
-  'distance',
-  'distance_extrema',
-  'draft_angle',
-  'closest_point_on_face',
-  'classify_point',
-  'contains_point',
-  'surface_curvature',
-  'edge_projection',
-  'section_by_plane',
-  'continuity',
-] as const;
 
 /* ------------------------------------------------------------------ */
 /*  Aggregate spec                                                     */
@@ -168,9 +159,7 @@ export const queryFacesInputSchema = {
     .describe('Filter faces by normal direction. Omit to match any orientation.'),
 
   group_by: z
-    .array(
-      z.enum(['axis', 'normal_direction', 'surface_type', 'area_range', 'radius_range', 'body_id']),
-    )
+    .array(z.enum(FACE_GROUP_BY_FIELDS))
     .min(1)
     .max(3)
     .optional()
@@ -179,19 +168,17 @@ export const queryFacesInputSchema = {
     ),
 
   select: z
-    .array(z.string())
+    .array(z.enum(FACE_SELECT_FIELDS))
     .min(1)
     .max(30)
     .optional()
     .describe(
-      'Fields to return. Default: id, surface_type, area, bbox, bbox_center, body_id, adjacent_faces. Extras: radius, diameter, axis, normal.',
+      `Fields to return. Default: id, surface_type, area, bbox, bbox_center, body_id, adjacent_faces. Supported: ${FACE_SELECT_FIELDS.join(', ')}.`,
     ),
 
   order_by: z
     .object({
-      by: z
-        .string()
-        .describe('Sort field: area, radius, surface_type, center_x, center_y, center_z.'),
+      by: z.enum(FACE_ORDER_FIELDS).describe(`Sort field: ${FACE_ORDER_FIELDS.join(', ')}.`),
       direction: z.enum(['asc', 'desc']).default('asc').describe('Sort direction.'),
     })
     .strict()
@@ -251,7 +238,7 @@ export const queryEdgesInputSchema = {
     .describe('Restrict to specific bodies. Omit for all bodies.'),
 
   group_by: z
-    .array(z.enum(['curve_type', 'length_range', 'radius_range', 'body_id']))
+    .array(z.enum(EDGE_GROUP_BY_FIELDS))
     .min(1)
     .max(3)
     .optional()
@@ -260,19 +247,17 @@ export const queryEdgesInputSchema = {
     ),
 
   select: z
-    .array(z.string())
+    .array(z.enum(EDGE_SELECT_FIELDS))
     .min(1)
     .max(30)
     .optional()
     .describe(
-      'Fields to return. Default: id, curve_type, length, bbox, bbox_center, body_id. Extras: radius, diameter, start_point, end_point.',
+      `Fields to return. Default: id, curve_type, length, bbox, bbox_center, body_id. Supported: ${EDGE_SELECT_FIELDS.join(', ')}.`,
     ),
 
   order_by: z
     .object({
-      by: z
-        .string()
-        .describe('Sort field: length, radius, curve_type, center_x, center_y, center_z.'),
+      by: z.enum(EDGE_ORDER_FIELDS).describe(`Sort field: ${EDGE_ORDER_FIELDS.join(', ')}.`),
       direction: z.enum(['asc', 'desc']).default('asc').describe('Sort direction.'),
     })
     .strict()
@@ -345,7 +330,7 @@ export const measureStepInputSchema = z
       .min(0)
       .max(1)
       .optional()
-      .describe('Curve parameter 0-1 (curvature_at_param).'),
+      .describe('Curve parameter 0-1. Reserved for parameterized measurement ops.'),
 
     with: faceOrEdgeIdSchema.optional().describe('Other entity for continuity check.'),
 

@@ -1,4 +1,5 @@
 import type { OcctKernel, ShapeHandle } from 'occt-wasm';
+import { EDGE_DEFAULT_SELECT_FIELDS } from '../public-contract.js';
 import { type ExtractedEdgeEntity } from '../kernel/query-entities.js';
 import { withStepModel } from '../model-store.js';
 import {
@@ -7,6 +8,7 @@ import {
   createQueryResponse,
   groupEntities,
   magnitudeBucketKey,
+  radiusBucketValue,
   DEFAULT_QUERY_LIMITS,
   type ComputedGroup,
 } from './shared.js';
@@ -96,7 +98,7 @@ function buildEdgeToFaceAdjacencies(
   paginated: ExtractedEdgeEntity[],
   fields: QueryEdgesInput['select'],
 ): Map<string, Array<{ face_id: string; surface_type: string }>> | undefined {
-  if (!fields?.includes('adjacent_faces')) return undefined;
+  if (!selectedEdgeFields(fields).includes('adjacent_faces')) return undefined;
 
   const faceShapes = kernel.getSubShapes(shape, 'face');
 
@@ -137,7 +139,7 @@ function groupEdges(
         case 'length_range':
           return magnitudeBucketKey(edge.length);
         case 'radius_range':
-          return edge.radius !== undefined ? edge.radius : null;
+          return edge.radius !== undefined ? radiusBucketValue(edge.radius) : null;
         case 'body_id':
           return edge.body_id ?? 'unknown';
         default:
@@ -263,6 +265,9 @@ export function sortEdges(
       case 'radius':
         cmp = (a.radius ?? 0) - (b.radius ?? 0);
         break;
+      case 'diameter':
+        cmp = (a.radius ?? 0) * 2 - (b.radius ?? 0) * 2;
+        break;
       case 'center_x':
         cmp = a.bbox_center[0] - b.bbox_center[0];
         break;
@@ -283,7 +288,7 @@ export function projectEdge(
   edge: ExtractedEdgeEntity,
   fields: QueryEdgesInput['select'],
 ): Record<string, unknown> {
-  const selected = fields ?? ['id', 'curve_type', 'length', 'bbox', 'bbox_center', 'body_id'];
+  const selected = selectedEdgeFields(fields);
   const result: Record<string, unknown> = {};
 
   // Always surface body_id when available.
@@ -350,6 +355,10 @@ export function projectEdge(
   }
 
   return result;
+}
+
+function selectedEdgeFields(fields: QueryEdgesInput['select']): readonly string[] {
+  return fields ?? EDGE_DEFAULT_SELECT_FIELDS;
 }
 
 function aggregateCurveTypes(edges: ExtractedEdgeEntity[]): Record<string, number> {

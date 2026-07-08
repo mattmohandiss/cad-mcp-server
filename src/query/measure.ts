@@ -19,33 +19,15 @@
  *   - edge_projection          closest point on edge + tangent + parameter
  *   - section_by_plane         planar cross-section, returns edge curves
  *   - continuity               edge smoothness between adjacent faces
- *
- * Staged (not yet implemented):
- *   - curvature_at_param
- *   - principal_directions
  */
 
 import type { OcctKernel, ShapeHandle, Vec3 } from 'occt-wasm';
+import type { MEASURE_OPS } from '../public-contract.js';
 import { resolveRayHits, queryRay } from '../kernel/ray-utils.js';
 import { parseEntityId } from '../utils/ids.js';
 import { toBoundingBox } from '../kernel/measure.js';
 
-type MeasureOpName =
-  | 'ray_test'
-  | 'ray_test_segment'
-  | 'ray_test_grid'
-  | 'distance'
-  | 'distance_extrema'
-  | 'section_by_plane'
-  | 'curvature_at_param'
-  | 'continuity'
-  | 'principal_directions'
-  | 'draft_angle'
-  | 'closest_point_on_face'
-  | 'classify_point'
-  | 'contains_point'
-  | 'surface_curvature'
-  | 'edge_projection';
+type MeasureOpName = (typeof MEASURE_OPS)[number];
 
 export interface MeasureSpec {
   op: MeasureOpName;
@@ -313,13 +295,6 @@ function runMeasure(
         return { error: 'continuity check failed' };
       }
     }
-    case 'curvature_at_param':
-    case 'principal_directions':
-      return {
-        staged: true,
-        op: spec.op,
-        message: `${spec.op} is not implemented.`,
-      };
     default:
       return { error: `unknown measure op "${spec.op}"` };
   }
@@ -341,6 +316,15 @@ function resolveOrigin(origin: number[] | string | undefined, context: MeasureCo
     if (origin === 'extent_min' && context.current_extent_min) {
       const e = context.current_extent_min;
       return { x: e[0], y: e[1], z: e[2] };
+    }
+    if (origin === 'extent_center' && context.current_extent_min && context.current_extent_max) {
+      const min = context.current_extent_min;
+      const max = context.current_extent_max;
+      return {
+        x: (min[0] + max[0]) / 2,
+        y: (min[1] + max[1]) / 2,
+        z: (min[2] + max[2]) / 2,
+      };
     }
     /* Symbolic origin without context: fall back to model origin. */
     return { x: 0, y: 0, z: 0 };
