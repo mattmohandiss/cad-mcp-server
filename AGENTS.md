@@ -141,7 +141,7 @@ Dependabot opens weekly PRs for:
 - npm production deps (grouped)
 - npm dev deps (minor + patch only, grouped)
 - cargo deps in `occt/codegen/`
-- GitHub Actions versions (SHA-pinned, Dependabot updates the SHA + version comment)
+- GitHub Actions versions (tag-pinned, e.g. `actions/checkout@v5`)
 
 Enable auto-merge for Dependabot PRs in repo settings (Settings → Code security and analysis → Dependabot → Enable auto-merge for version updates). Dependabot PRs that pass CI merge themselves.
 
