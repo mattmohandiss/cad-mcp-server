@@ -1,4 +1,4 @@
-import type { Limitation, ProviderInfo, Provenance, UnitSystem } from './schema.js';
+import type { ProviderInfo, Provenance, UnitSystem } from './geometry.js';
 
 export interface PmiSummary {
   hasPmi: boolean;
@@ -30,6 +30,5 @@ export interface SemanticModel {
   pmi: PmiSummary;
   entityCounts: Record<string, number>;
   facts: SemanticFact[];
-  limitations: Limitation[];
   provenance: Provenance[];
 }

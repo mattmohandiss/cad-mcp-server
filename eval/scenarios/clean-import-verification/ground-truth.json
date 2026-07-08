@@ -2,5 +2,5 @@
   "is_valid": true,
   "degenerate_edges": 0,
   "free_edges": 0,
-  "max_tolerance_below_001": true
+  "max_tolerance_below_01": true
 }

@@ -1,18 +1,14 @@
-"""50×30×20 mm box with 3 through-holes (same as hole-diameters)"""
+"""Box with holes in two directions (+Z and +X)."""
 import cadquery as cq, json, os
 from pathlib import Path
 
 out = Path(__file__).parent
-dest = Path(os.environ["CAD_MCP_EVAL_OUTPUT_DIR"])
-dest.mkdir(parents=True, exist_ok=True)
 
 shape = cq.Workplane("XY").box(50, 30, 20)
-for d, x in zip([5.0, 10.0, 15.0], [0, 15, -15]):
-    shape = shape.faces(">Z").workplane().pushPoints([(x, 0)]).hole(d, 20)
+shape = shape.faces(">Z").workplane().pushPoints([(-8, 0), (8, 0)]).hole(6, 20)
+shape = shape.faces(">X").workplane().pushPoints([(0, 0)]).hole(8, 30)
 
-cq.exporters.export(shape, str(dest / "box_with_3_holes.step"))
+cq.exporters.export(shape, str(out / "multidrill_block.step"))
 
-# All 3 holes are drilled from the same +Z face through the entire 20mm thickness.
-# The cylindrical faces of each hole share the same axis direction (±Z).
-# group_by axis should produce 1 unique group.
-json.dump({"unique_axes": 1}, open(out / "ground-truth.json", "w"), indent=2)
+# 2 unique drilling directions: +Z (2 holes) and +X (1 hole)
+json.dump({"unique_axes": 2}, open(out / "ground-truth.json", "w"), indent=2)

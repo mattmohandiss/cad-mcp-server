@@ -19,38 +19,21 @@
  *   - edge_projection          closest point on edge + tangent + parameter
  *   - section_by_plane         planar cross-section, returns edge curves
  *   - continuity               edge smoothness between adjacent faces
- *
- * Staged (not yet implemented):
- *   - curvature_at_param
- *   - principal_directions
  */
 
 import type { OcctKernel, ShapeHandle, Vec3 } from 'occt-wasm';
-import { resolveRayHits, queryRay } from '../kernel/ray-utils.js';
+import type { MEASURE_OPS } from '../tool-defs.js';
+import { resolveRayHits, queryRay } from '../kernel/ray.js';
 import { parseEntityId } from '../utils/ids.js';
 import { toBoundingBox } from '../kernel/measure.js';
 
-type MeasureOpName =
-  | 'ray_test'
-  | 'ray_test_segment'
-  | 'ray_test_grid'
-  | 'distance'
-  | 'distance_extrema'
-  | 'section_by_plane'
-  | 'curvature_at_param'
-  | 'continuity'
-  | 'principal_directions'
-  | 'draft_angle'
-  | 'closest_point_on_face'
-  | 'classify_point'
-  | 'contains_point'
-  | 'surface_curvature'
-  | 'edge_projection';
+type MeasureOpName = (typeof MEASURE_OPS)[number];
 
 export interface MeasureSpec {
   op: MeasureOpName;
   direction?: number[];
   direction_shortcut?: string;
+  bidirectional?: boolean;
   origin?: number[] | string;
   tmax?: number;
   spacing_mm?: number;
@@ -64,7 +47,76 @@ export interface MeasureSpec {
   detail_level?: 'aggregate' | 'summary' | 'points';
 }
 
-export type MeasureResults = Record<string, unknown>;
+export interface MeasureErrorResult {
+  error: string;
+}
+
+export type RayHit = { face_id: string; distance: number; point: [number, number, number] };
+
+export interface RayGridResult {
+  hits?: RayHit[];
+  hit_distance?: number[];
+  total_rays?: number;
+  statistics?: {
+    min_distance: number;
+    max_distance: number;
+    avg_distance: number;
+    median_distance: number;
+    hit_count: number;
+    miss_count: number;
+  };
+}
+
+export type MeasureOpResult =
+  | MeasureErrorResult
+  | RayHit[]
+  | RayGridResult
+  | number
+  | boolean
+  | 'in'
+  | 'on'
+  | 'out'
+  | {
+      draft_angle_deg: number;
+      normal: [number, number, number];
+      undercut: boolean;
+    }
+  | {
+      uv: [number, number];
+      point_on_surface: Vec3;
+    }
+  | {
+      min_curvature: number;
+      max_curvature: number;
+      gaussian_curvature: number;
+      mean_curvature: number;
+    }
+  | {
+      closest_point: number[];
+      tangent: number[];
+      parameter: number;
+    }
+  | {
+      pairs: Array<{
+        distance: number;
+        point_on_entity: [number, number, number];
+        point_on_target: [number, number, number];
+      }>;
+      pair_count: number;
+      min_distance?: number;
+      max_distance?: number;
+    }
+  | {
+      edge_count: number;
+      edges: Array<{
+        curve_type: string;
+        length: number;
+        bbox: ReturnType<typeof toBoundingBox> | null;
+      }>;
+    }
+  | { continuity: string };
+
+export type MeasureResults = Partial<Record<MeasureOpName, MeasureOpResult>>;
 
 /**
  * Dispatch all measure ops against a single entity's shape handle.
@@ -106,7 +158,7 @@ function runMeasure(
   entityHandle: ShapeHandle,
   spec: MeasureSpec,
   context: MeasureContext,
-): unknown {
+): MeasureOpResult | undefined {
   switch (spec.op) {
     case 'ray_test': {
       const origin = resolveOrigin(spec.origin, context);
@@ -132,7 +184,21 @@ function runMeasure(
        * see if rays exit the model. */
       const direction = normalizeDirection(spec.direction ?? [0, 0, 1]);
       const spacing = spec.spacing_mm ?? 2.0;
-      return runRayTestGrid(kernel, shape, entityHandle, direction, spacing);
+      const forward = runRayTestGrid(kernel, shape, entityHandle, direction, spacing);
+      if (!spec.bidirectional) return forward;
+
+      const reverse = runRayTestGrid(
+        kernel,
+        shape,
+        entityHandle,
+        { x: -direction.x, y: -direction.y, z: -direction.z },
+        spacing,
+      );
+      return {
+        hits: [...forward.hits, ...reverse.hits],
+        total_rays: forward.total_rays + reverse.total_rays,
+        hit_distance: [...forward.hit_distance, ...reverse.hit_distance],
+      };
     }
     case 'distance': {
       if (!spec.to) {
@@ -313,13 +379,6 @@ function runMeasure(
         return { error: 'continuity check failed' };
       }
     }
-    case 'curvature_at_param':
-    case 'principal_directions':
-      return {
-        staged: true,
-        op: spec.op,
-        message: `${spec.op} is not implemented.`,
-      };
     default:
       return { error: `unknown measure op "${spec.op}"` };
   }
@@ -341,6 +400,15 @@ function resolveOrigin(origin: number[] | string | undefined, context: MeasureCo
     if (origin === 'extent_min' && context.current_extent_min) {
       const e = context.current_extent_min;
       return { x: e[0], y: e[1], z: e[2] };
+    }
+    if (origin === 'extent_center' && context.current_extent_min && context.current_extent_max) {
+      const min = context.current_extent_min;
+      const max = context.current_extent_max;
+      return {
+        x: (min[0] + max[0]) / 2,
+        y: (min[1] + max[1]) / 2,
+        z: (min[2] + max[2]) / 2,
+      };
     }
     /* Symbolic origin without context: fall back to model origin. */
     return { x: 0, y: 0, z: 0 };

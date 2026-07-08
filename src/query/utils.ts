@@ -198,8 +198,6 @@ export function createQueryResponse<T extends Record<string, unknown>>(
   entities: T[],
   statistics?: Record<string, unknown>,
   groups: ComputedGroup[] = [],
-  warnings: unknown[] = [],
-  limitations: unknown[] = [],
 ): StepQueryResponse<T> {
   return {
     file_path,
@@ -218,8 +216,6 @@ export function createQueryResponse<T extends Record<string, unknown>>(
       sample_is_complete: g.sample_is_complete,
       summary: g.summary,
     })),
-    warnings,
-    limitations,
   };
 }
 

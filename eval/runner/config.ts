@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 export const DEFAULT_MODELS = [
   'anthropic/claude-sonnet-4-5',
@@ -9,7 +10,6 @@ export const DEFAULT_MODELS = [
 
 export const EVAL_ROOT = path.resolve(process.cwd(), 'eval');
 export const SCENARIOS_DIR = path.join(EVAL_ROOT, 'scenarios');
-export const EVAL_WORK_DIR = path.join(EVAL_ROOT, '.work');
 export const DEFAULT_LOG_DIR = path.resolve(EVAL_ROOT, 'runs');
 
 export function loadEvalEnv(): void {
@@ -37,8 +37,21 @@ export function assertGatewayAuth(): void {
 }
 
 export function resolvePython(): string {
-  const venvPython = path.join(EVAL_ROOT, 'generate', '.venv', 'bin', 'python3');
-  return fs.existsSync(venvPython) ? venvPython : 'python3';
+  const candidates = [process.env.PYTHON, path.join(EVAL_ROOT, '.venv', 'bin', 'python')].filter(
+    (candidate): candidate is string => Boolean(candidate),
+  );
+
+  for (const candidate of candidates) {
+    if (path.isAbsolute(candidate)) {
+      if (fs.existsSync(candidate)) return candidate;
+      continue;
+    }
+
+    const result = spawnSync(candidate, ['--version'], { stdio: 'ignore' });
+    if (!result.error && result.status === 0) return candidate;
+  }
+
+  throw new Error('Eval Python environment missing. Run `just setup-eval` before `just eval`.');
 }
 
 export function resolveServerPath(): string {

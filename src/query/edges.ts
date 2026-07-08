@@ -1,4 +1,5 @@
 import type { OcctKernel, ShapeHandle } from 'occt-wasm';
+import { EDGE_DEFAULT_SELECT_FIELDS } from '../tool-defs.js';
 import { type ExtractedEdgeEntity } from '../kernel/query-entities.js';
 import { withStepModel } from '../model-store.js';
 import {
@@ -7,9 +8,10 @@ import {
   createQueryResponse,
   groupEntities,
   magnitudeBucketKey,
+  radiusBucketValue,
   DEFAULT_QUERY_LIMITS,
   type ComputedGroup,
-} from './shared.js';
+} from './utils.js';
 import { applyAggregate } from './aggregate.js';
 
 export interface QueryEdgesInput {
@@ -20,6 +22,7 @@ export interface QueryEdgesInput {
   order_by?: { by: string; direction?: 'asc' | 'desc' };
   return_type?: 'summary' | 'entities' | 'groups';
   aggregate?: string[];
+  unique?: string[];
   limit?: number;
   offset?: number;
 }
@@ -67,7 +70,8 @@ export async function queryStepEdges(filePath: string, input: QueryEdgesInput) {
       curve_types: aggregateCurveTypes(enriched),
       length_range: getLengthRange(enriched),
     };
-    applyAggregate(baseStats, enriched as unknown as Record<string, unknown>[], input.aggregate);
+    applyAggregate(baseStats, enriched, input.aggregate);
+    applyUnique(baseStats, enriched, input.unique);
 
     return createQueryResponse(
       filePath,
@@ -81,10 +85,26 @@ export async function queryStepEdges(filePath: string, input: QueryEdgesInput) {
       entities,
       baseStats,
       groups,
-      [],
-      [],
     );
   });
+}
+
+function applyUnique(
+  stats: Record<string, unknown>,
+  records: ReadonlyArray<object>,
+  fields: string[] | undefined,
+): void {
+  if (!fields) return;
+  for (const field of fields) {
+    const values = records
+      .map((record) => (record as Record<string, unknown>)[field])
+      .filter(
+        (value): value is number | string => typeof value === 'number' || typeof value === 'string',
+      );
+    stats[`unique_${field}s`] = [...new Set(values)].sort((a, b) =>
+      typeof a === 'number' && typeof b === 'number' ? a - b : String(a).localeCompare(String(b)),
+    );
+  }
 }
 
 /**
@@ -96,7 +116,7 @@ function buildEdgeToFaceAdjacencies(
   paginated: ExtractedEdgeEntity[],
   fields: QueryEdgesInput['select'],
 ): Map<string, Array<{ face_id: string; surface_type: string }>> | undefined {
-  if (!fields?.includes('adjacent_faces')) return undefined;
+  if (!selectedEdgeFields(fields).includes('adjacent_faces')) return undefined;
 
   const faceShapes = kernel.getSubShapes(shape, 'face');
 
@@ -137,7 +157,7 @@ function groupEdges(
         case 'length_range':
           return magnitudeBucketKey(edge.length);
         case 'radius_range':
-          return edge.radius !== undefined ? edge.radius : null;
+          return edge.radius !== undefined ? radiusBucketValue(edge.radius) : null;
         case 'body_id':
           return edge.body_id ?? 'unknown';
         default:
@@ -216,7 +236,7 @@ export function sortEdgesInPlace(
 ): void {
   const direction = sort.direction === 'desc' ? -1 : 1;
   edges.sort((a, b) => {
-    let cmp = 0;
+    let cmp: number;
     switch (sort.by) {
       case 'length':
         cmp = a.length - b.length;
@@ -239,6 +259,8 @@ export function sortEdgesInPlace(
       case 'center_z':
         cmp = a.bbox_center[2] - b.bbox_center[2];
         break;
+      default:
+        throw new Error(`Unknown sort field: ${sort.by}`);
     }
     return cmp * direction;
   });
@@ -248,42 +270,16 @@ export function sortEdges(
   edges: ExtractedEdgeEntity[],
   sort: NonNullable<QueryEdgesInput['order_by']>,
 ): ExtractedEdgeEntity[] {
-  const sorted = [...edges];
-  const direction = sort.direction === 'desc' ? -1 : 1;
-
-  sorted.sort((a, b) => {
-    let cmp = 0;
-    switch (sort.by) {
-      case 'length':
-        cmp = a.length - b.length;
-        break;
-      case 'curve_type':
-        cmp = a.curve_type.localeCompare(b.curve_type);
-        break;
-      case 'radius':
-        cmp = (a.radius ?? 0) - (b.radius ?? 0);
-        break;
-      case 'center_x':
-        cmp = a.bbox_center[0] - b.bbox_center[0];
-        break;
-      case 'center_y':
-        cmp = a.bbox_center[1] - b.bbox_center[1];
-        break;
-      case 'center_z':
-        cmp = a.bbox_center[2] - b.bbox_center[2];
-        break;
-    }
-    return cmp * direction;
-  });
-
-  return sorted;
+  const enriched = edges.map((e) => enrichEdge(e));
+  sortEdgesInPlace(enriched, sort);
+  return enriched;
 }
 
 export function projectEdge(
   edge: ExtractedEdgeEntity,
   fields: QueryEdgesInput['select'],
 ): Record<string, unknown> {
-  const selected = fields ?? ['id', 'curve_type', 'length', 'bbox', 'bbox_center', 'body_id'];
+  const selected = selectedEdgeFields(fields);
   const result: Record<string, unknown> = {};
 
   // Always surface body_id when available.
@@ -350,6 +346,10 @@ export function projectEdge(
   }
 
   return result;
+}
+
+function selectedEdgeFields(fields: QueryEdgesInput['select']): readonly string[] {
+  return fields ?? EDGE_DEFAULT_SELECT_FIELDS;
 }
 
 function aggregateCurveTypes(edges: ExtractedEdgeEntity[]): Record<string, number> {

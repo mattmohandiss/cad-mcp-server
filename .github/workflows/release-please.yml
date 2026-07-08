@@ -23,7 +23,7 @@ jobs:
       # RELEASE_PLEASE_TOKEN is a classic PAT with contents:write and
       # pull_requests:write scopes.  Needed so release-please PRs trigger
       # normal CI (GITHUB_TOKEN cannot trigger downstream workflows by design).
-      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+      - uses: googleapis/release-please-action@v5
         id: release
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
@@ -31,36 +31,30 @@ jobs:
           manifest-file: .release-please-manifest.json
 
       # Once a GitHub Release is created, build WASM and publish to npm.
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@v7
         if: ${{ steps.release.outputs.release_created || github.event_name == 'workflow_dispatch' }}
 
-      - name: Sync server.json version from package.json
-        if: ${{ steps.release.outputs.release_created || github.event_name == 'workflow_dispatch' }}
-        run: |
-          PKG_VER=$(node -e "console.log(require('./package.json').version)")
-          node -e "
-            const fs = require('fs');
-            const s = JSON.parse(fs.readFileSync('server.json','utf8'));
-            s.version = '$PKG_VER';
-            s.packages[0].version = '$PKG_VER';
-            fs.writeFileSync('server.json', JSON.stringify(s, null, 2) + '\n');
-          "
-          echo "server.json synced to $PKG_VER"
-
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+      - uses: actions/setup-node@v6
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
         if: ${{ steps.release.outputs.release_created || github.event_name == 'workflow_dispatch' }}
 
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - name: Validate MCP registry metadata
+        if: ${{ steps.release.outputs.release_created || github.event_name == 'workflow_dispatch' }}
+        uses: studiomeyer-io/mcp-passport@v0.1.0
+        with:
+          path: .
+          fail-on: error
+
+      - uses: docker/setup-buildx-action@v4
         with:
           driver-opts: network=host
         if: ${{ steps.release.outputs.release_created }}
 
       - name: Build OCCT builder (cached)
         if: ${{ steps.release.outputs.release_created }}
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        uses: docker/build-push-action@v7
         with:
           context: occt
           file: occt/Dockerfile.builder
@@ -71,7 +65,7 @@ jobs:
 
       - name: Build WASM (cached)
         if: ${{ steps.release.outputs.release_created }}
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        uses: docker/build-push-action@v7
         with:
           context: occt
           file: occt/Dockerfile
@@ -98,7 +92,7 @@ jobs:
 
       - name: Install occt-wasm dev dependencies
         if: ${{ steps.release.outputs.release_created }}
-        run: cd occt/ts && npm ci
+        run: cd occt/ts && npm install
 
       - name: Build TypeScript
         if: ${{ steps.release.outputs.release_created }}
@@ -111,11 +105,12 @@ jobs:
       - name: Smoke-test packed CLI
         if: ${{ steps.release.outputs.release_created }}
         run: |
-          npm pack --pack-destination /tmp
+          PKG_NAME=$(node -p "require('./package.json').name")
+          TARBALL=$(npm pack --pack-destination /tmp --json | node -e "let data=''; process.stdin.on('data', c => data += c); process.stdin.on('end', () => console.log(JSON.parse(data)[0].filename));")
           cd /tmp && rm -rf smoke-test && mkdir smoke-test && cd smoke-test
           npm init -y > /dev/null 2>&1
-          npm install /tmp/cad-mcp-server-*.tgz
-          node -e "import('cad-mcp-server').then(()=>console.log('smoke ok')).catch(e=>{console.error(e);process.exit(1)})"
+          npm install "/tmp/$TARBALL"
+          node -e "import('$PKG_NAME').then(()=>console.log('smoke ok')).catch(e=>{console.error(e);process.exit(1)})"
 
       - name: Publish to npm
         if: ${{ steps.release.outputs.release_created }}

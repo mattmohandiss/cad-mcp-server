@@ -74,12 +74,6 @@ export class LightweightStepSemanticProvider {
       provider: {
         name: this.name,
         capabilities: [...this.capabilities],
-        limitations: [
-          'This is lightweight STEP text parsing, not full EXPRESS/OWL semantic interpretation.',
-          'PMI detection is keyword/entity presence only and does not prove semantic GD&T validity.',
-          'Assembly detection is entity-name-based and may miss nested or referenced assemblies.',
-          'Tolerance entity counting includes all occurrences of tolerance-class entities regardless of actual GD&T validity.',
-        ],
       },
       filePath,
       schema: metadata.schema,
@@ -99,13 +93,6 @@ export class LightweightStepSemanticProvider {
       },
       entityCounts: metadata.entityCounts,
       facts,
-      limitations: [
-        {
-          source: this.name,
-          message:
-            'Semantic PMI/GD&T and validation properties require a richer STEP/OWL provider.',
-        },
-      ],
       provenance: [{ provider: this.name, sourceId: 'step:header', method: 'semantic' }],
     };
   }

@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { EVAL_WORK_DIR, SCENARIOS_DIR, resolvePython } from './config.js';
+import { SCENARIOS_DIR, resolvePython } from './config.js';
 import type { ScenarioMeta } from './types.js';
 
 export function loadScenarios(): ScenarioMeta[] {
@@ -29,14 +29,9 @@ export function generateGroundTruth(
   const generatePath = path.join(scenario.dir, 'generate.py');
   if (!fs.existsSync(generatePath)) return { ok: false, error: 'generate.py missing' };
 
-  const workDir = path.join(EVAL_WORK_DIR, scenario.id);
-  fs.rmSync(workDir, { recursive: true, force: true });
-  fs.mkdirSync(workDir, { recursive: true });
-
   try {
     execFileSync(resolvePython(), ['generate.py'], {
       cwd: scenario.dir,
-      env: { ...process.env, CAD_MCP_EVAL_OUTPUT_DIR: workDir },
       stdio: 'pipe',
       timeout: 30_000,
     });
@@ -54,16 +49,16 @@ export function generateGroundTruth(
     return {
       ok: true,
       groundTruth: JSON.parse(fs.readFileSync(groundTruthPath, 'utf8')),
-      scenario: { ...scenario, prompt: buildPromptWithFiles(scenario, workDir), workDir },
+      scenario: { ...scenario, prompt: buildPromptWithFiles(scenario) },
     };
   } catch {
     return { ok: false, error: 'ground-truth.json parse error' };
   }
 }
 
-function buildPromptWithFiles(scenario: ScenarioMeta, workDir: string): string {
+function buildPromptWithFiles(scenario: ScenarioMeta): string {
   const fileLines = Object.entries(scenario.files).map(
-    ([label, filename]) => `- ${label}: ${path.join(workDir, filename)}`,
+    ([label, filename]) => `- ${label}: ${path.join(scenario.dir, filename)}`,
   );
 
   return [

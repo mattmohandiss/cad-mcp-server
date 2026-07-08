@@ -4,13 +4,13 @@ field: thinnest_hole_diameter
 tolerance: 0
 max_steps: 12
 files:
-  box_with_holes: box_with_3_holes.step
+  block: thinwall_block.step
 ---
 
 # Thin wall detection
 
-This box has three through-holes with different diameters, all through the
-full 20mm depth. A wall thickness below 2mm is a manufacturing concern.
+This box has three through-holes, all through the full 20mm depth. A
+wall thickness below 2mm is a manufacturing concern.
 
 Find the hole with the thinnest surrounding wall. Report its diameter,
 the minimum wall thickness found, and whether the part passes the 2mm

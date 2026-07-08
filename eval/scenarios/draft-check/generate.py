@@ -3,8 +3,6 @@ import cadquery as cq, json, os, math
 from pathlib import Path
 
 out = Path(__file__).parent
-dest = Path(os.environ["CAD_MCP_EVAL_OUTPUT_DIR"])
-dest.mkdir(parents=True, exist_ok=True)
 
 shape = (
     cq.Workplane("XY")
@@ -14,7 +12,7 @@ shape = (
     .loft()
 )
 
-cq.exporters.export(shape, str(dest / "tapered_pin.step"))
+cq.exporters.export(shape, str(out / "tapered_pin.step"))
 
 # Taper angle = atan((10-8)/20) = atan(0.1) ≈ 5.71°
 # Draft angle relative to +Z = 5.71° → positive → moldable from bottom

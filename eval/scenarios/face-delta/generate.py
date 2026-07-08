@@ -3,8 +3,6 @@ import cadquery as cq, json, os
 from pathlib import Path
 
 out = Path(__file__).parent
-dest = Path(os.environ["CAD_MCP_EVAL_OUTPUT_DIR"])
-dest.mkdir(parents=True, exist_ok=True)
 
 for version, holes in [(1, [(0,0),(15,0),(-15,0)]), (2, [(0,0),(15,0),(-15,0),(0,15)])]:
     shape = (

@@ -478,7 +478,7 @@ function findEnumParam(params: StepParam[], index: number): string | null {
 /*  Query-level data structures                                        */
 /* ------------------------------------------------------------------ */
 
-interface PmiQueryResult {
+export interface PmiQueryResult {
   file_path: string;
   pmi_entities: PmiExtractedEntity[];
   statistics: {

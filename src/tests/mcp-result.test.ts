@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { jsonToolResult } from '../index.js';
+import { runTool } from '../tool-helper.js';
 
 describe('MCP tool result shape', () => {
-  it('unwraps successful ToolResponse into structuredContent and text', () => {
-    const payload = { ok: true, data: { value: 42 } };
-    const result = jsonToolResult(payload);
+  it('returns structuredContent and text for success', async () => {
+    const result = await runTool(async () => ({ value: 42 }));
 
     expect(result.structuredContent).toEqual({ value: 42 });
     expect(result.content).toEqual([
@@ -13,12 +12,10 @@ describe('MCP tool result shape', () => {
     expect(result.isError).toBeUndefined();
   });
 
-  it('marks tool errors as MCP execution errors with actionable text', () => {
-    const payload = {
-      ok: false,
-      error: { type: 'file_not_found', message: 'File not found: model.step' },
-    };
-    const result = jsonToolResult(payload);
+  it('marks errors with isError and formatted text', async () => {
+    const result = await runTool(async () => {
+      throw { type: 'file_not_found', message: 'File not found: model.step' };
+    });
 
     expect(result.structuredContent).toBeUndefined();
     expect(result.content).toEqual([
@@ -27,12 +24,12 @@ describe('MCP tool result shape', () => {
     expect(result.isError).toBe(true);
   });
 
-  it('passes raw non-ToolResponse payload through unchanged', () => {
-    const payload = { some: 'data' };
-    const result = jsonToolResult(payload);
+  it('handles unknown errors gracefully', async () => {
+    const result = await runTool(async () => {
+      throw new Error('unexpected');
+    });
 
-    expect(result.structuredContent).toEqual(payload);
-    expect(result.content).toEqual([{ type: 'text', text: JSON.stringify(payload, null, 2) }]);
-    expect(result.isError).toBeUndefined();
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([{ type: 'text', text: 'unknown: unexpected' }]);
   });
 });

@@ -98,7 +98,6 @@ export interface ScenarioMeta {
   max_steps: number;
   prompt: string;
   dir: string;
-  workDir?: string;
   files: Record<string, string>;
 }
 

@@ -6,7 +6,6 @@ node_modules/
 *.tgz
 
 # Environment / secrets
-.env
 *.env
 
 # Personal config / notes
@@ -16,6 +15,7 @@ test_prompts.md
 
 # Internal planning (not for public repo)
 docs/PROPOSED_TOOLS.md
+.planning/
 
 # Editor / dev env
 .envrc
@@ -42,11 +42,6 @@ occt/build/
 occt/*.tgz
 
 # LLM eval
-eval/generate/.venv/
-eval/.work/
+eval/.venv/
 eval/runs/
-
-# Eval secrets
-eval/.env
-eval/.env.local
-.planning/
+eval/scenarios/**/*.step

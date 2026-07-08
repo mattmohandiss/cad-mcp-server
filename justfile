@@ -40,7 +40,7 @@ build-wasm:
 
 # Run the LLM eval suite against all models × scenarios. Requires
 # AI_GATEWAY_API_KEY or VERCEL_OIDC_TOKEN. Builds the server first.
-eval: _build-server
+eval: _ensure-eval-env _build-server
 	npx tsx eval/runner/index.ts
 
 # Run the integration test suite
@@ -58,13 +58,22 @@ check: fmt-check lint test
 # opening a release PR to verify the full suite passes.
 ci: check build-wasm test
 
+# Install eval Python dependencies into .venv
+setup-eval:
+	if command -v python3 >/dev/null 2>&1; then py=python3; else py=python; fi; \
+	cd eval && "$py" -m venv .venv && .venv/bin/pip install -r requirements.txt
+
+_ensure-eval-env:
+	@test -x eval/.venv/bin/python || { echo "Eval Python environment missing. Run: just setup-eval"; exit 1; }
+	@eval/.venv/bin/python -c "import cadquery" || { echo "Eval Python dependencies are not importable. Run inside nix develop if using Nix, then run: just setup-eval"; exit 1; }
+
 # Format all TypeScript source + config files
 fmt:
-	npx prettier --write "src/**/*.ts" "eval/**/*.ts" eslint.config.js tsconfig.json vitest.config.ts package.json package-lock.json release-please-config.json server.json "*.md" "docs/**/*.md" ".github/**/*.yml"
+	npx prettier --write "src/**/*.ts" "eval/**/*.ts" eslint.config.js tsconfig.json vitest.config.ts package.json package-lock.json release-please-config.json server.json "*.md" "docs/**/*.md" ".github/**/*.yml" "occt/ts/eslint.config.js" "occt/ts/tsconfig.json" "occt/ts/package.json"
 
 # Check formatting without writing
 fmt-check:
-	npx prettier --check "src/**/*.ts" "eval/**/*.ts" eslint.config.js tsconfig.json vitest.config.ts package.json package-lock.json release-please-config.json server.json "*.md" "docs/**/*.md" ".github/**/*.yml"
+	npx prettier --check "src/**/*.ts" "eval/**/*.ts" eslint.config.js tsconfig.json vitest.config.ts package.json package-lock.json release-please-config.json server.json "*.md" "docs/**/*.md" ".github/**/*.yml" "occt/ts/eslint.config.js" "occt/ts/tsconfig.json" "occt/ts/package.json"
 
 # Remove generated artifacts and installed dependencies
 clean:
@@ -135,4 +144,4 @@ _lint-ts:
 
 # Internal: lint Rust codegen package
 _lint-rs:
-	cd occt/codegen && PATH="$HOME/.cargo/bin:$PATH" cargo fmt --check && PATH="$HOME/.cargo/bin:$PATH" cargo clippy -- -D warnings
+	cd occt/codegen && cargo fmt --check && cargo clippy -- -D warnings

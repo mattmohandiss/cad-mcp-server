@@ -8,7 +8,7 @@ import {
   normalizePagination,
   sampleEntityIds,
   DEFAULT_QUERY_LIMITS,
-} from '../query/shared.js';
+} from '../query/utils.js';
 import { applyFaceFilters, sortFaces, projectFace } from '../query/faces.js';
 import { applyEdgeFilters, sortEdges, projectEdge } from '../query/edges.js';
 import type { ExtractedFaceEntity, ExtractedEdgeEntity } from '../kernel/query-entities.js';
@@ -292,10 +292,22 @@ describe('face sorting', () => {
     expect(result[0].id).toBe('face:0');
     expect(result[2].id).toBe('face:1');
   });
+
+  it('sorts by diameter', () => {
+    const result = sortFaces(
+      [makeFace({ id: 'face:0', radius: 4 }), makeFace({ id: 'face:1', radius: 2 })],
+      { by: 'diameter' },
+    );
+    expect(result.map((face) => face.id)).toEqual(['face:1', 'face:0']);
+  });
 });
 
 describe('face projection', () => {
-  const face = makeFace({ radius: 5, axis: { direction: [0, 0, 1], location: [1, 2, 3] } });
+  const face = makeFace({
+    radius: 5,
+    tolerance: 0.01,
+    axis: { direction: [0, 0, 1], location: [1, 2, 3] },
+  });
 
   it('default fields include id, surface_type, area, bbox, bbox_center, body_id', () => {
     const result = projectFace(face, undefined);
@@ -326,14 +338,9 @@ describe('face projection', () => {
     expect(result.diameter).toBe(10);
   });
 
-  it('draft_angle_deg computed when pull_direction provided', () => {
-    const result = projectFace(face, ['draft_angle_deg'], [0, 0, 1]);
-    expect(result.draft_angle_deg).toBeCloseTo(90, 0); // normal [0,0,1], pull [0,0,1] → 0° angle → 90° draft
-  });
-
-  it('draft_angle_deg not computed without pull_direction', () => {
-    const result = projectFace(face, ['draft_angle_deg']);
-    expect(result.draft_angle_deg).toBeUndefined();
+  it('projects tolerance when requested', () => {
+    const result = projectFace(face, ['tolerance']);
+    expect(result.tolerance).toBe(0.01);
   });
 });
 
@@ -411,6 +418,14 @@ describe('edge sorting', () => {
   it('sorts by radius (nulls treated as 0)', () => {
     const result = sortEdges(edges, { by: 'radius' });
     expect(result[2].id).toBe('edge:1'); // radius 5, largest
+  });
+
+  it('sorts by diameter', () => {
+    const result = sortEdges(
+      [makeEdge({ id: 'edge:0', radius: 4 }), makeEdge({ id: 'edge:1', radius: 2 })],
+      { by: 'diameter' },
+    );
+    expect(result.map((edge) => edge.id)).toEqual(['edge:1', 'edge:0']);
   });
 });
 

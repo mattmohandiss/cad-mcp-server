@@ -4,11 +4,11 @@ field: diameters
 tolerance: 0
 max_steps: 8
 files:
-  box_with_holes: box_with_3_holes.step
+  block: diameter_block.step
 ---
 
 # Hole diameters
 
-List all unique hole diameters in millimeters in the box with holes, sorted ascending.
+List all unique hole diameters in millimeters in the block with holes, sorted ascending.
 
 Return JSON: {"diameters": [number, ...]}

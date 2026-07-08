@@ -3,12 +3,7 @@ import type { OcctKernel, ShapeHandle } from 'occt-wasm';
 import type { AnalysisError } from './utils/errors.js';
 import type { BRepBody, BRepModel } from './types/brep.js';
 import type { SemanticModel } from './types/semantic.js';
-import type {
-  PmiAnnotationEntity,
-  PmiDatumEntity,
-  PmiDimensionEntity,
-  PmiToleranceEntity,
-} from './pmi/parser.js';
+import type { PmiQueryResult } from './pmi/parser.js';
 import { extractPmiEntities } from './pmi/parser.js';
 import { LightweightStepSemanticProvider } from './pmi/semantic-provider.js';
 import { getOcctKernel } from './kernel/kernel.js';
@@ -23,8 +18,6 @@ import {
   type ExtractedFaceEntity,
 } from './kernel/query-entities.js';
 import { makeId } from './utils/ids.js';
-
-type PmiEntity = PmiToleranceEntity | PmiDimensionEntity | PmiDatumEntity | PmiAnnotationEntity;
 
 interface FileKey {
   requestedPath: string;
@@ -55,7 +48,7 @@ class LoadedStepModel {
   private edgeEntities?: ExtractedEdgeEntity[];
   private brepPromise?: Promise<BRepModel>;
   private semanticPromise?: Promise<SemanticModel>;
-  private pmiPromise?: Promise<{ pmi_entities: PmiEntity[] }>;
+  private pmiPromise?: Promise<PmiQueryResult>;
 
   constructor(fileKey: FileKey) {
     this.requestedPath = fileKey.requestedPath;
@@ -114,11 +107,9 @@ class LoadedStepModel {
     return this.semanticPromise;
   }
 
-  async getPmiEntities(): Promise<{ pmi_entities: PmiEntity[] }> {
+  async getPmiEntities(): Promise<PmiQueryResult> {
     this.lastAccess = Date.now();
-    this.pmiPromise ??= extractPmiEntities(this.resolvedPath) as Promise<{
-      pmi_entities: PmiEntity[];
-    }>;
+    this.pmiPromise ??= extractPmiEntities(this.resolvedPath);
     return this.pmiPromise;
   }
 
@@ -197,7 +188,6 @@ class LoadedStepModel {
           'surface_types',
           'curve_types',
         ],
-        limitations: [],
       },
       filePath: this.requestedPath,
       units: { length: 'mm', area: 'mm^2', volume: 'mm^3' },
