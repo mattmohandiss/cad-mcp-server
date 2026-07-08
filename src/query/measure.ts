@@ -61,6 +61,7 @@ export interface RayGridResult {
     min_distance: number;
     max_distance: number;
     avg_distance: number;
+    median_distance: number;
     hit_count: number;
     miss_count: number;
   };

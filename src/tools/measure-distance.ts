@@ -126,41 +126,55 @@ async function measureDistanceSets(
 ) {
   return withStepModel(filePath, async (model) => {
     const { kernel, shape } = await model.getShapeContext('measure_geometry');
-    const pairs: DistancePairResult[] = [];
+    const wantAllPairs = summary !== 'minimum';
+    const pairs: DistancePairResult[] = wantAllPairs ? [] : [];
+    let minimum: DistancePairResult | undefined;
+    let pairCount = 0;
+
+    const shapeCache = new Map<string, ShapeHandle | undefined>();
 
     for (const sourceId of sources) {
-      const sourceShape = resolveEntityShape(kernel, shape, sourceId);
+      let sourceShape = shapeCache.get(sourceId);
+      if (sourceShape === undefined && !shapeCache.has(sourceId)) {
+        sourceShape = resolveEntityShape(kernel, shape, sourceId);
+        shapeCache.set(sourceId, sourceShape);
+      }
       if (!sourceShape) continue;
 
       for (const targetId of targets) {
-        const targetShape = resolveEntityShape(kernel, shape, targetId);
+        let targetShape = shapeCache.get(targetId);
+        if (targetShape === undefined && !shapeCache.has(targetId)) {
+          targetShape = resolveEntityShape(kernel, shape, targetId);
+          shapeCache.set(targetId, targetShape);
+        }
         if (!targetShape) continue;
 
+        pairCount++;
         const distance = kernel.distanceBetween(sourceShape, targetShape);
-        const pair: DistancePairResult = {
-          source_entity_id: sourceId,
-          target_entity_id: targetId,
-          distance,
-        };
 
-        if (includeExtrema) {
-          pair.extrema = buildExtrema(kernel, sourceShape, targetShape);
+        if (wantAllPairs || includeExtrema) {
+          const pair: DistancePairResult = {
+            source_entity_id: sourceId,
+            target_entity_id: targetId,
+            distance,
+          };
+          if (includeExtrema) {
+            pair.extrema = buildExtrema(kernel, sourceShape, targetShape);
+          }
+          if (wantAllPairs) pairs.push(pair);
         }
 
-        pairs.push(pair);
+        if (minimum === undefined || distance < minimum.distance) {
+          minimum = { source_entity_id: sourceId, target_entity_id: targetId, distance };
+        }
       }
     }
-
-    const minimum = pairs.reduce<DistancePairResult | undefined>(
-      (best, pair) => (best === undefined || pair.distance < best.distance ? pair : best),
-      undefined,
-    );
 
     return {
       file_path: filePath,
       sources,
       targets,
-      pair_count: pairs.length,
+      pair_count: pairCount,
       summary: minimum
         ? {
             min_distance: minimum.distance,
@@ -168,7 +182,7 @@ async function measureDistanceSets(
             target_entity_id: minimum.target_entity_id,
           }
         : undefined,
-      pairs: summary === 'minimum' ? undefined : pairs,
+      pairs: wantAllPairs ? pairs : undefined,
     };
   });
 }

@@ -4,9 +4,9 @@ import { runTool } from '../tool-helper.js';
 import { filePath, entityId } from '../tool-schemas.js';
 import { batchMeasure, mapDirectionMode } from './measure-helpers.js';
 
-const entitySchema = entityId.refine(
-  (id) => id.startsWith('face:') || id.startsWith('edge:') || id.startsWith('body:'),
-  'Must be a face:N, edge:N, or body:N ID from a prior find or inspect result.',
+const faceSchema = entityId.refine(
+  (id) => id.startsWith('face:'),
+  'Must be a face:N ID from a prior find_faces or inspect_step result.',
 );
 
 const point3 = z.array(z.number()).length(3);
@@ -15,7 +15,7 @@ export const schema = z
   .object({
     file_path: filePath,
     faces: z
-      .array(entitySchema)
+      .array(faceSchema)
       .min(1)
       .max(500)
       .meta({ description: 'Face IDs to measure wall thickness across.' }),

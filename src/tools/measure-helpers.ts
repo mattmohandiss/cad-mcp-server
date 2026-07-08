@@ -182,10 +182,13 @@ export function stripRawGridData(results: MeasureResults, detailLevel: string): 
   if (detailLevel === 'aggregate' && isRayGridResult(grid)) {
     if (grid.hit_distance && grid.hit_distance.length > 0) {
       const sorted = [...grid.hit_distance].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      const median = sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
       grid.statistics = {
         min_distance: sorted[0],
         max_distance: sorted[sorted.length - 1],
         avg_distance: sorted.reduce((s, v) => s + v, 0) / sorted.length,
+        median_distance: median,
         hit_count: sorted.length,
         miss_count: (grid.total_rays ?? 0) - sorted.length,
       };
@@ -207,7 +210,7 @@ export function buildHitSummary(results: MeasureResults): MeasureHitSummary | un
           min: grid.statistics.min_distance,
           max: grid.statistics.max_distance,
           avg: grid.statistics.avg_distance,
-          median: grid.statistics.avg_distance,
+          median: grid.statistics.median_distance,
         },
       };
     }

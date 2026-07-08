@@ -165,6 +165,6 @@ function mapSort(sort: Args['sort']) {
   if (sort === 'shortest') return { by: 'length' as const, direction: 'asc' as const };
   if (sort === 'largest_radius') return { by: 'radius' as const, direction: 'desc' as const };
   if (sort === 'smallest_radius') return { by: 'radius' as const, direction: 'asc' as const };
-  if (sort === 'sharpest') return { by: 'diameter' as const, direction: 'desc' as const };
+  if (sort === 'sharpest') return { by: 'radius' as const, direction: 'asc' as const };
   return undefined;
 }
