@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/mattmohandiss/cad-mcp-server/compare/cad-mcp-server-v0.6.0...cad-mcp-server-v0.6.1) (2026-07-08)
+
+
+### Bug Fixes
+
+* **docker:** remove references to deleted files ([#28](https://github.com/mattmohandiss/cad-mcp-server/issues/28)) ([d213fff](https://github.com/mattmohandiss/cad-mcp-server/commit/d213fff7687ce02f5243c1b09465cc5f17914125))
+
 ## [0.6.0](https://github.com/mattmohandiss/cad-mcp-server/compare/cad-mcp-server-v0.5.0...cad-mcp-server-v0.6.0) (2026-07-08)
 
 
