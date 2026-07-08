@@ -27,7 +27,7 @@ jobs:
         run: npm ci
 
       - name: Install occt-wasm dev dependencies
-        run: cd occt/ts && npm ci
+        run: cd occt/ts && npm install
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
