@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.0](https://github.com/mattmohandiss/cad-mcp-server/compare/cad-mcp-server-v0.5.0...cad-mcp-server-v0.6.0) (2026-07-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* redesign tool surface for LLM-friendly flat schemas ([#26](https://github.com/mattmohandiss/cad-mcp-server/issues/26))
+
+### Features
+
+* redesign tool surface for LLM-friendly flat schemas ([#26](https://github.com/mattmohandiss/cad-mcp-server/issues/26)) ([57c25f0](https://github.com/mattmohandiss/cad-mcp-server/commit/57c25f0add80b84aa65006d2a2f0c5750b4f0b7c))
+
 ## [0.5.0](https://github.com/mattmohandiss/cad-mcp-server/compare/cad-mcp-server-v0.4.4...cad-mcp-server-v0.5.0) (2026-07-07)
 
 
