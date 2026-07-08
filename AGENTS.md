@@ -61,7 +61,6 @@ See `docs/ARCHITECTURE.md` for system design, and `docs/SECURITY.md` for securit
 Key directories:
 
 - `src/` — MCP server source (tools/, query/, kernel/, pmi/, types/, tests/)
-- `samples/` — STEP test fixtures (dummy.step, NIST PMI files)
 - `occt/` — OCCT WebAssembly kernel source (facade/, codegen/Rust, ts/ bindings)
 - `eval/` — LLM eval runner and 20 prompt scenarios
 - `scripts/` — Build and validation scripts

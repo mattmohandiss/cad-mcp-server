@@ -13,6 +13,6 @@
     "declarationMap": true,
     "sourceMap": true
   },
-  "include": ["src/**/*", "eval/runner/**/*", "eval/generate/**/*", "vitest.config.ts"],
-  "exclude": ["node_modules", "dist", "eval/generate/.venv", "eval/runner/.venv", "occt"]
+  "include": ["src/**/*", "eval/runner/**/*", "vitest.config.ts"],
+  "exclude": ["node_modules", "dist", "eval/.venv", "eval/runner/.venv", "occt"]
 }

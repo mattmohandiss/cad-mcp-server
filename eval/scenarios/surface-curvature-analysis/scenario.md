@@ -9,7 +9,7 @@ files:
 
 # Minimum bend radius
 
-This sheet metal bracket has two bends. What is the tightest bend
+This U-channel bracket has two 90° bends. What is the tightest bend
 radius and the minimum curvature radius on the bent surfaces?
 
 Can a 2mm diameter tool access all surfaces? (The tool needs a

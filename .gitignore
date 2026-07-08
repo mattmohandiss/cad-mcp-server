@@ -42,6 +42,6 @@ occt/build/
 occt/*.tgz
 
 # LLM eval
-eval/generate/.venv/
-eval/.work/
+eval/.venv/
 eval/runs/
+eval/scenarios/**/*.step

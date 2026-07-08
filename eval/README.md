@@ -62,7 +62,7 @@ Claude found the answer in 1 focused call. GPT-5.5 got the data on call 1 but wa
 
 1. Create `eval/scenarios/<id>/` with `scenario.md`, `generate.py`, `ground-truth.json`
 2. `scenario.md` uses YAML frontmatter: `id`, `field`, `tolerance`, `max_steps`, `files`
-3. `generate.py` writes STEP files to `CAD_MCP_EVAL_OUTPUT_DIR`
+3. `generate.py` writes STEP files to the scenario directory (colocated with `ground-truth.json`)
 4. `ground-truth.json` contains the expected answer for the `field`
 
 Scenarios are auto-discovered from the `eval/scenarios/` directory.

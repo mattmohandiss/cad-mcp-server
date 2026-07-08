@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
-import { EVAL_WORK_DIR, resolvePython } from '../../eval/runner/config.js';
+import { resolvePython } from '../../eval/runner/config.js';
 import { generateGroundTruth, loadScenarios } from '../../eval/runner/scenarios.js';
 import { withStepModel } from '../model-store.js';
 import { isWasmAvailable } from './wasm-guard.js';
@@ -19,7 +19,7 @@ function canGenerateEvalFixtures(): boolean {
 describe.runIf(isWasmAvailable() && canGenerateEvalFixtures())(
   'source-driven eval fixtures',
   () => {
-    it('generates STEP files into eval/.work and appends file paths to the prompt', async () => {
+    it('generates STEP files into the scenario directory and appends file paths to the prompt', async () => {
       const scenario = loadScenarios().find((item) => item.id === 'basic_volume');
       expect(scenario).toBeDefined();
 
@@ -27,7 +27,7 @@ describe.runIf(isWasmAvailable() && canGenerateEvalFixtures())(
       expect(generated.ok).toBe(true);
       if (!generated.ok) return;
 
-      const stepPath = path.join(EVAL_WORK_DIR, 'basic_volume', 'box.step');
+      const stepPath = path.join(scenario!.dir, 'box.step');
       expect(fs.existsSync(stepPath)).toBe(true);
       expect(generated.scenario.prompt).toContain(stepPath);
       expect(generated.scenario.prompt).toContain('Generated STEP files:');

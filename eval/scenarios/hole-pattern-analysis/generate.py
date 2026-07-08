@@ -3,8 +3,6 @@ import cadquery as cq, json, os
 from pathlib import Path
 
 out = Path(__file__).parent
-dest = Path(os.environ["CAD_MCP_EVAL_OUTPUT_DIR"])
-dest.mkdir(parents=True, exist_ok=True)
 
 plate = cq.Workplane("XY").box(80, 60, 10)
 
@@ -22,7 +20,7 @@ plate = plate.faces(">X").workplane().pushPoints([(0, 0)]).hole(4, 15)
 # -X through-hole: 6mm
 plate = plate.faces("<X").workplane().pushPoints([(0, 0)]).hole(6, 15)
 
-cq.exporters.export(plate, str(dest / "hole_pattern_plate.step"))
+cq.exporters.export(plate, str(out / "hole_pattern_plate.step"))
 
 # Ground truth:
 # Unique sizes (by radius grouping): 4mm, 6mm, 8mm, 10mm = 4

@@ -60,7 +60,7 @@ ci: check build-wasm test
 
 # Install eval Python dependencies into .venv
 setup-eval:
-	cd eval/generate && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+	cd eval && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 # Format all TypeScript source + config files
 fmt:
@@ -72,7 +72,7 @@ fmt-check:
 
 # Remove generated artifacts and installed dependencies
 clean:
-	rm -rf dist node_modules occt/ts/node_modules occt/dist occt/build occt/ts/dist occt/*.tgz *.tgz eval/runs eval/.work
+	rm -rf dist node_modules occt/ts/node_modules occt/dist occt/build occt/ts/dist occt/*.tgz *.tgz eval/runs
 
 # Verify no build artifacts or tarballs remain (for pre-PR check)
 check-clean:

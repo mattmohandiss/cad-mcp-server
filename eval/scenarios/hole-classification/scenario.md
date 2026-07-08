@@ -4,13 +4,13 @@ field: blind_hole_diameter
 tolerance: 0
 max_steps: 15
 files:
-  box_with_blind_hole: box_with_blind_hole.step
+  box: classify_hole_box.step
 ---
 
 # Blind hole depth and wall stock
 
-A 20mm-thick box contains two holes: an 8mm through-hole and a 12mm
-blind hole, drilled 8mm deep.
+A 20mm-thick box contains two holes: a 6mm through-hole and an 8mm
+blind hole, drilled 12mm deep.
 
 What is the diameter and depth of the blind hole? Is the remaining
 wall material beneath it thicker than 2mm?

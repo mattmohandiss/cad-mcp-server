@@ -3,14 +3,12 @@ import cadquery as cq, json, os
 from pathlib import Path
 
 out = Path(__file__).parent
-dest = Path(os.environ["CAD_MCP_EVAL_OUTPUT_DIR"])
-dest.mkdir(parents=True, exist_ok=True)
 
 box = cq.Workplane("XY").box(40, 30, 20)
 box = box.edges("|Z").fillet(2)
 box = box.edges(">Z").chamfer(1)
 
-cq.exporters.export(box, str(dest / "fillet_chamfer_bracket.step"))
+cq.exporters.export(box, str(out / "fillet_chamfer_bracket.step"))
 
 # 4 vertical rounded corner features at R2. These are feature-level treatments;
 # in BRep topology each round is represented by a cylindrical face bounded by

@@ -9,7 +9,6 @@ export const DEFAULT_MODELS = [
 
 export const EVAL_ROOT = path.resolve(process.cwd(), 'eval');
 export const SCENARIOS_DIR = path.join(EVAL_ROOT, 'scenarios');
-export const EVAL_WORK_DIR = path.join(EVAL_ROOT, '.work');
 export const DEFAULT_LOG_DIR = path.resolve(EVAL_ROOT, 'runs');
 
 export function loadEvalEnv(): void {
@@ -37,7 +36,7 @@ export function assertGatewayAuth(): void {
 }
 
 export function resolvePython(): string {
-  const venvPython = path.join(EVAL_ROOT, 'generate', '.venv', 'bin', 'python3');
+  const venvPython = path.join(EVAL_ROOT, '.venv', 'bin', 'python3');
   return fs.existsSync(venvPython) ? venvPython : 'python3';
 }
 

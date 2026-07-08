@@ -4,7 +4,7 @@ field: min_clearance_mm
 tolerance: 0.1
 max_steps: 10
 files:
-  box_with_holes: box_with_3_holes.step
+  box_with_holes: clearance_box.step
 ---
 
 # Hole-to-edge clearance
