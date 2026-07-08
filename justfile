@@ -58,17 +58,21 @@ check: fmt-check lint test
 # opening a release PR to verify the full suite passes.
 ci: check build-wasm test
 
+# Install eval Python dependencies into .venv
+setup-eval:
+	cd eval/generate && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+
 # Format all TypeScript source + config files
 fmt:
-	npx prettier --write "src/**/*.ts" "eval/**/*.ts" eslint.config.js tsconfig.json vitest.config.ts package.json package-lock.json release-please-config.json server.json "*.md" "docs/**/*.md" ".github/**/*.yml"
+	npx prettier --write "src/**/*.ts" "eval/**/*.ts" eslint.config.js tsconfig.json vitest.config.ts package.json package-lock.json release-please-config.json server.json "*.md" "docs/**/*.md" ".github/**/*.yml" "occt/ts/eslint.config.js" "occt/ts/tsconfig.json" "occt/ts/package.json"
 
 # Check formatting without writing
 fmt-check:
-	npx prettier --check "src/**/*.ts" "eval/**/*.ts" eslint.config.js tsconfig.json vitest.config.ts package.json package-lock.json release-please-config.json server.json "*.md" "docs/**/*.md" ".github/**/*.yml"
+	npx prettier --check "src/**/*.ts" "eval/**/*.ts" eslint.config.js tsconfig.json vitest.config.ts package.json package-lock.json release-please-config.json server.json "*.md" "docs/**/*.md" ".github/**/*.yml" "occt/ts/eslint.config.js" "occt/ts/tsconfig.json" "occt/ts/package.json"
 
 # Remove generated artifacts and installed dependencies
 clean:
-	rm -rf dist node_modules occt/ts/node_modules occt/dist occt/build occt/ts/dist occt/*.tgz *.tgz eval/runs
+	rm -rf dist node_modules occt/ts/node_modules occt/dist occt/build occt/ts/dist occt/*.tgz *.tgz eval/runs eval/.work
 
 # Verify no build artifacts or tarballs remain (for pre-PR check)
 check-clean:
@@ -135,4 +139,4 @@ _lint-ts:
 
 # Internal: lint Rust codegen package
 _lint-rs:
-	cd occt/codegen && PATH="$HOME/.cargo/bin:$PATH" cargo fmt --check && PATH="$HOME/.cargo/bin:$PATH" cargo clippy -- -D warnings
+	cd occt/codegen && cargo fmt --check && cargo clippy -- -D warnings

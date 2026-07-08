@@ -39,21 +39,15 @@
 
         cqLibraryPath = pkgs.lib.makeLibraryPath cqLibraries;
 
-        # A python wrapper that prepends the cadquery-needed libraries
-        # to LD_LIBRARY_PATH. Uses `exec -a "$0"` so venv's shebang
-        # (which execs python) still works.
+        # Wraps python so pip-installed cadquery can find its native
+        # OCCT deps on NixOS where standard library paths don't exist.
         pythonWrapper = pkgs.writeShellScriptBin "python" ''
           export LD_LIBRARY_PATH="${cqLibraryPath}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           exec -a "$0" ${pkgs.python3}/bin/python "$@"
         '';
-
-        python3WithPip = pkgs.python3.withPackages (ps: [ps.pip ps.virtualenv]);
       in
       {
         devShells.default = pkgs.mkShell {
-          # Project-specific dependencies: runtimes, linters, formatters,
-          # test tools, and build tools.
-          # Global Neovim provides editor behavior, not language tool choices.
           buildInputs = with pkgs; [
             just
             nodejs_24
@@ -62,15 +56,14 @@
             # Rust toolchain (codegen + crate linting)
             cargo
             rustc
+            rustfmt
+            clippy
 
             # C++ formatting
             clang-tools
 
-            # Python for the LLM eval (cadquery STEP generation).
-            # Use the `python` wrapper so cadquery-ocp can find its
-            # native deps. `python3` is also on PATH for direct use.
-						uv
-            python3WithPip
+            # Python for OCCT-backed LLM eval STEP generation.
+            # pip-installed via just setup-eval into eval/generate/.venv.
             pythonWrapper
           ];
 

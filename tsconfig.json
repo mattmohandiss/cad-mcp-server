@@ -6,25 +6,13 @@
     "types": ["node"],
     "outDir": "./dist",
     "strict": true,
-    "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "moduleResolution": "nodenext",
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
-    "strictFunctionTypes": true,
-    "strictPropertyInitialization": true
+    "sourceMap": true
   },
-  "include": [
-    "src/**/*",
-    "eval/runner/**/*",
-    "eval/generate/**/*",
-    "eval/runs/**/*",
-    "vitest.config.ts"
-  ],
+  "include": ["src/**/*", "eval/runner/**/*", "eval/generate/**/*", "vitest.config.ts"],
   "exclude": ["node_modules", "dist", "eval/generate/.venv", "eval/runner/.venv", "occt"]
 }

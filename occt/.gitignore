@@ -1,5 +1,6 @@
 # Rust
 target/
+Cargo.lock
 
 # Third-party deps (copied headers for Emscripten isolation)
 3rdparty/
