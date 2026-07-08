@@ -104,30 +104,30 @@
     "url": "https://github.com/mattmohandiss/cad-mcp-server/issues"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "2.0.0-beta.1",
+    "@modelcontextprotocol/server": "2.0.0-beta.2",
     "occt-wasm": "file:./occt/ts",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@ai-sdk/gateway": "^4.0.8",
-    "@ai-sdk/mcp": "^2.0.5",
-    "@modelcontextprotocol/client": "2.0.0-beta.1",
-    "@commitlint/cli": "^21.2.0",
+    "@ai-sdk/gateway": "^4.0.14",
+    "@ai-sdk/mcp": "^2.0.9",
+    "@modelcontextprotocol/client": "2.0.0-beta.2",
+    "@commitlint/cli": "^21.2.1",
     "@commitlint/config-conventional": "^21.2.0",
     "@eslint/js": "^10.0.1",
-    "@types/node": "^26.0.1",
-    "@typescript-eslint/eslint-plugin": "^8.61.0",
-    "@typescript-eslint/parser": "^8.61.0",
-    "ai": "^7.0.11",
-    "eslint": "^10.4.1",
+    "@types/node": "^26.1.1",
+    "@typescript-eslint/eslint-plugin": "^8.63.0",
+    "@typescript-eslint/parser": "^8.63.0",
+    "ai": "^7.0.18",
+    "eslint": "^10.6.0",
     "globals": "^17.7.0",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.8",
-    "prettier": "^3.8.4",
-    "tsx": "^4.22.4",
+    "prettier": "^3.9.4",
+    "tsx": "^4.23.0",
     "typescript": "^6.0.3",
-    "typescript-language-server": "^4.3.0",
-    "vitest": "^4.1.8"
+    "typescript-language-server": "^5.3.0",
+    "vitest": "^4.1.10"
   },
   "bundleDependencies": [
     "occt-wasm"

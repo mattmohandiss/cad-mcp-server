@@ -92,7 +92,7 @@ jobs:
 
       - name: Install occt-wasm dev dependencies
         if: ${{ steps.release.outputs.release_created }}
-        run: cd occt/ts && npm ci
+        run: cd occt/ts && npm install
 
       - name: Build TypeScript
         if: ${{ steps.release.outputs.release_created }}
