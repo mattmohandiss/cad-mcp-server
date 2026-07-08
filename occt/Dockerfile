@@ -12,10 +12,8 @@ ENV EM_COMPILER_WRAPPER=ccache
 ARG ENABLE_WASM_OPT=0
 ENV ENABLE_WASM_OPT=${ENABLE_WASM_OPT}
 
-COPY rust-toolchain.toml /tmp/rust-toolchain.toml
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
-    sh -s -- -y --default-toolchain "$(grep channel /tmp/rust-toolchain.toml | cut -d'"' -f2)" \
-    && rm /tmp/rust-toolchain.toml
+    sh -s -- -y --default-toolchain stable
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 WORKDIR /workspace
@@ -31,7 +29,7 @@ RUN cd codegen && cargo build --release
 COPY facade/ facade/
 COPY scripts/ scripts/
 COPY ts/src/ ts/src/
-COPY ts/tsconfig.json ts/eslint.config.js ts/vitest.config.ts ts/
+COPY ts/tsconfig.json ts/eslint.config.js ts/
 
 RUN --mount=type=cache,target=/cache/ccache \
     cd codegen && cargo run --release \
