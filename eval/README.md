@@ -1,6 +1,6 @@
 # LLM Eval for cad-mcp-server
 
-The eval suite checks whether real LLMs can use the public CAD MCP tools (`inspect_step`, `find_faces`, `find_edges`, `measure_geometry`, `diff_step`) to answer geometry questions with known ground truth.
+The eval suite checks whether real LLMs can use the public CAD MCP tools (`inspect_step`, `find_faces`, `find_edges`, `measure_distance`, `measure_thickness`, `measure_draft`, `measure_geometry`, `diff_step`) to answer geometry questions with known ground truth.
 
 ## How It Works
 

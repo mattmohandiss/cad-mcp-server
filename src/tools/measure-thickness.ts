@@ -1,31 +1,24 @@
 import { z } from 'zod';
 import type { MeasureSpec } from '../query/measure.js';
 import { runTool } from '../tool-helper.js';
-import { filePath, entityId } from '../tool-schemas.js';
+import {
+  filePath,
+  faceEntityId,
+  entityIdArray,
+  point3,
+  directionModeSchema,
+  exclusiveFields,
+} from '../tool-schemas.js';
 import { batchMeasure, mapDirectionMode } from './measure-helpers.js';
-
-const faceSchema = entityId.refine(
-  (id) => id.startsWith('face:'),
-  'Must be a face:N ID from a prior find_faces or inspect_step result.',
-);
-
-const point3 = z.array(z.number()).length(3);
 
 export const schema = z
   .object({
     file_path: filePath,
-    faces: z
-      .array(faceSchema)
-      .min(1)
-      .max(500)
-      .meta({ description: 'Face IDs to measure wall thickness across.' }),
+    faces: entityIdArray(faceEntityId, 'Face IDs to measure wall thickness across.'),
     direction: point3
       .optional()
       .meta({ description: 'Ray direction [x,y,z]. Mutually exclusive with direction_mode.' }),
-    direction_mode: z.enum(['axis', 'normal']).optional().meta({
-      description:
-        'Direction shortcut. axis = along the face axis; normal = along the face normal.',
-    }),
+    direction_mode: directionModeSchema.optional(),
     bidirectional: z
       .boolean()
       .default(true)
@@ -43,7 +36,8 @@ export const schema = z
       .optional()
       .meta({ description: 'stats = min/max/avg only; samples = include hit coordinates.' }),
   })
-  .strict();
+  .strict()
+  .superRefine(exclusiveFields('direction', 'direction_mode'));
 
 type Args = z.output<typeof schema>;
 
@@ -59,17 +53,7 @@ export const examples = [
 
 export async function handler(args: Args) {
   return runTool(async () => {
-    const mode = mapDirectionMode(args.direction_mode);
-    const specs: MeasureSpec[] = [
-      {
-        op: 'ray_test_grid',
-        direction_shortcut: mode,
-        direction: args.direction,
-        bidirectional: args.bidirectional !== false,
-        spacing_mm: args.spacing_mm,
-        detail_level: args.detail === 'samples' ? 'points' : 'aggregate',
-      },
-    ];
+    const specs = buildMeasureSpecs(args);
     const results = await batchMeasure(args.file_path, args.faces, specs);
     return {
       file_path: args.file_path,
@@ -78,4 +62,17 @@ export async function handler(args: Args) {
       results,
     };
   });
+}
+
+export function buildMeasureSpecs(args: Args): MeasureSpec[] {
+  return [
+    {
+      op: 'ray_test_grid',
+      direction_shortcut: mapDirectionMode(args.direction_mode),
+      direction: args.direction,
+      bidirectional: args.bidirectional !== false,
+      spacing_mm: args.spacing_mm,
+      detail_level: args.detail === 'samples' ? 'points' : 'aggregate',
+    },
+  ];
 }

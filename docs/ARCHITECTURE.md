@@ -6,8 +6,8 @@ A portable, read-only MCP server for deterministic STEP inspection. The public t
 
 ```text
 MCP host
-  → src/index.ts        tool registrations (5 tools)
-  → src/tools/          thin adapters (inspect, query-faces, query-edges, measure, diff)
+  → src/index.ts        tool registrations (8 tools via TOOL_REGISTRY)
+  → src/tools/          thin adapters (inspect, query-faces, query-edges, distance, thickness, draft, geometry-analysis, diff)
   → src/query/          face/edge services + measure dispatch
   → src/model-store.ts  cached imported model (OCCT shape handle, B-rep, entities)
   → occt-wasm           Open CASCADE 8.0 kernel compiled to WebAssembly
@@ -28,17 +28,17 @@ The store uses a small LRU cache and avoids eviction of models actively used by 
 
 ## Tool Strategy
 
-5 tools. Every manufacturing inspection question can be answered with these primitives.
+8 tools across five categories. Every manufacturing inspection question can be answered with these primitives.
+
+**Overview:**
 
 1. **`inspect_step`** — cheap first-pass overview: volume, bounding box, topology, watertight status, principal axes, PMI summary. Use first.
 
-2. **`find_faces`** — find faces by task-oriented filters such as type, area, radius, normal, quality, or body. Include presets control result detail; summaries cover grouping, stats, and unique radii/diameters.
+**Discovery:** 2. **`find_faces`** — find faces by task-oriented filters such as type, area, radius, normal, quality, or body. Include presets control result detail; summaries cover grouping, stats, and unique radii/diameters. 3. **`find_edges`** — find edges by task-oriented filters such as curve type, length, radius, dihedral angle, or body. Include presets control result detail; summaries cover grouping, stats, and unique radii/diameters.
 
-3. **`find_edges`** — find edges by task-oriented filters such as curve type, length, radius, dihedral angle, or body. Include presets control result detail; summaries cover grouping, stats, and unique radii/diameters.
+**Measurement:** 4. **`measure_distance`** — distance between entity sets. Pass `sources[]` and `targets[]` for clearance checks; use `summary="minimum"` for the closest pair. 5. **`measure_thickness`** — wall thickness across faces via ray grid sampling. Returns min/max/avg per face. Configurable direction, spacing, and detail level. 6. **`measure_draft`** — draft angles of faces relative to a pull direction. Returns draft angle, normal, and undercut flag per face. 7. **`measure_geometry`** — batch geometric analysis of entity IDs from prior find/inspect results. Covers ray, ray_grid, point_analysis, section, and continuity.
 
-4. **`measure_geometry`** — batch geometric measurement. Send entity IDs from prior find/inspect results. The public schema uses a typed `measurement` request for distance, thickness, ray, ray_grid, draft_angle, point_analysis, section, and continuity.
-
-5. **`diff_step`** — compare two STEP files: volume, surface area, dimensions, face/edge/body count deltas. Deltas are comparison minus baseline.
+**Comparison:** 8. **`diff_step`** — compare two STEP files: volume, surface area, dimensions, face/edge/body count deltas. Deltas are comparison minus baseline.
 
 Face adjacency is computed via BRepGraph O(1) lookups and available through `find_faces` include presets.
 

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+const FLOAT_RELATIVE_TOLERANCE = 0.0001;
+
 export function buildAnswerSchema(
   field: string,
   value: unknown,
@@ -26,10 +28,13 @@ export function compareAnswer(extracted: unknown, expected: unknown, tolerance: 
     if (tolerance === 0) {
       // Always apply relative tolerance for float precision, even with tolerance:0.
       // 6.000000000000001 vs 6 = match within 0.01%
-      return diff / Math.max(Math.abs(extracted), Math.abs(expected), 1e-9) < 0.01;
+      return (
+        diff / Math.max(Math.abs(extracted), Math.abs(expected), 1e-9) < FLOAT_RELATIVE_TOLERANCE
+      );
     }
     return (
-      diff <= tolerance || diff / Math.max(Math.abs(extracted), Math.abs(expected), 1e-9) < 0.01
+      diff <= tolerance ||
+      diff / Math.max(Math.abs(extracted), Math.abs(expected), 1e-9) < FLOAT_RELATIVE_TOLERANCE
     );
   }
 

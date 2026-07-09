@@ -342,21 +342,25 @@ function runMeasure(
       };
       const normal = normalizeDirection(spec.plane_normal);
       const sectionShape = kernel.sectionByPlane(entityHandle, origin, normal);
-      /* Extract edges from the section result. */
-      const sectionEdges = kernel.getSubShapes(sectionShape, 'edge');
-      const edgeData = sectionEdges.map((e) => {
-        try {
-          const bbox = toBoundingBox(kernel, e);
-          return {
-            curve_type: kernel.curveType(e),
-            length: kernel.getLength(e),
-            bbox,
-          };
-        } catch {
-          return { curve_type: 'unknown', length: 0, bbox: null };
-        }
-      });
-      return { edge_count: sectionEdges.length, edges: edgeData };
+      try {
+        /* Extract edges from the section result. */
+        const sectionEdges = kernel.getSubShapes(sectionShape, 'edge');
+        const edgeData = sectionEdges.map((e) => {
+          try {
+            const bbox = toBoundingBox(kernel, e);
+            return {
+              curve_type: kernel.curveType(e),
+              length: kernel.getLength(e),
+              bbox,
+            };
+          } catch {
+            return { curve_type: 'unknown', length: 0, bbox: null };
+          }
+        });
+        return { edge_count: sectionEdges.length, edges: edgeData };
+      } finally {
+        kernel.release(sectionShape);
+      }
     }
     case 'continuity': {
       /* Resolve the two faces sharing this edge via BRepGraph. */

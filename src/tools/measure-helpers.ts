@@ -216,6 +216,13 @@ export function buildHitSummary(results: MeasureResults): MeasureHitSummary | un
     }
     if (grid.hit_distance && grid.total_rays !== undefined) {
       const hits = grid.hit_distance;
+      if (hits.length === 0) {
+        return {
+          total_rays: grid.total_rays,
+          hit_count: 0,
+          miss_count: grid.total_rays,
+        };
+      }
       const sorted = [...hits].sort((a, b) => a - b);
       return {
         total_rays: grid.total_rays,

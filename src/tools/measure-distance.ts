@@ -2,31 +2,24 @@ import { z } from 'zod';
 import type { ShapeHandle } from 'occt-wasm';
 import { withStepModel } from '../model-store.js';
 import { runTool } from '../tool-helper.js';
-import { filePath, entityId } from '../tool-schemas.js';
+import { filePath, shapeEntityId, entityIdArray } from '../tool-schemas.js';
 import { resolveEntityShape } from './measure-helpers.js';
-
-const entitySchema = entityId.refine(
-  (id) => id.startsWith('face:') || id.startsWith('edge:') || id.startsWith('body:'),
-  'Must be a face:N, edge:N, or body:N ID from a prior find or inspect result.',
-);
 
 export const schema = z
   .object({
     file_path: filePath,
-    sources: z.array(entitySchema).min(1).max(500).optional().meta({
-      description:
-        'Source entity IDs for set-based distance. Use with targets for clearance checks.',
-    }),
-    targets: z.array(entitySchema).min(1).max(500).optional().meta({
-      description: 'Target entity IDs for set-based distance.',
-    }),
-    target_entity_id: entitySchema.optional().meta({
+    sources: entityIdArray(
+      shapeEntityId,
+      'Source entity IDs for set-based distance. Use with targets for clearance checks.',
+    ).optional(),
+    targets: entityIdArray(shapeEntityId, 'Target entity IDs for set-based distance.').optional(),
+    target_entity_id: shapeEntityId.optional().meta({
       description: 'Single target entity ID. Use when sources is omitted with entity_ids.',
     }),
-    entity_ids: z.array(entitySchema).min(1).max(500).optional().meta({
-      description:
-        'Source entity IDs (legacy mode with target_entity_id). Prefer sources/targets for set mode.',
-    }),
+    entity_ids: entityIdArray(
+      shapeEntityId,
+      'Source entity IDs (legacy mode with target_entity_id). Prefer sources/targets for set mode.',
+    ).optional(),
     summary: z
       .enum(['all', 'minimum'])
       .default('all')
