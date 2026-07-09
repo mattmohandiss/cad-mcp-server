@@ -35,7 +35,7 @@ export async function handler(args: z.output<typeof schema>) {
   });
 }
 
-function filterInspectResult(
+export function filterInspectResult(
   full: Record<string, unknown>,
   include: Set<string>,
 ): Record<string, unknown> {

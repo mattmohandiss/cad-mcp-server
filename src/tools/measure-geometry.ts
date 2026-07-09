@@ -1,34 +1,32 @@
 import { z } from 'zod';
 import type { MeasureSpec } from '../query/measure.js';
 import { runTool } from '../tool-helper.js';
-import { filePath, entityId } from '../tool-schemas.js';
+import { MEASUREMENT_TYPES } from '../tool-defs.js';
+import {
+  filePath,
+  shapeEntityId,
+  entityIdArray,
+  point3,
+  directionModeSchema,
+  exclusiveFields,
+} from '../tool-schemas.js';
 import { batchMeasure, mapDirectionMode } from './measure-helpers.js';
-
-const entitySchema = entityId.refine(
-  (id) => id.startsWith('face:') || id.startsWith('edge:') || id.startsWith('body:'),
-  'Must be a face:N, edge:N, or body:N ID from a prior find or inspect result.',
-);
-
-const point3 = z.array(z.number()).length(3);
 
 export const schema = z
   .object({
     file_path: filePath,
-    measurement_type: z.enum(['ray', 'ray_grid', 'point_analysis', 'section', 'continuity']).meta({
+    measurement_type: z.enum(MEASUREMENT_TYPES).meta({
       description:
         'ray = single ray from origin in direction; ray_grid = grid of rays across entity; point_analysis = classify/project/curvature at points; section = planar cross-section; continuity = edge smoothness between adjacent faces.',
     }),
-    entity_ids: z
-      .array(entitySchema)
-      .min(1)
-      .max(500)
-      .meta({ description: 'Entity IDs from find_faces/find_edges or inspect_step bodies.' }),
+    entity_ids: entityIdArray(
+      shapeEntityId,
+      'Entity IDs from find_faces/find_edges or inspect_step bodies.',
+    ),
     direction: point3
       .optional()
       .meta({ description: 'Ray direction [x,y,z]. Used by ray, ray_grid.' }),
-    direction_mode: z.enum(['axis', 'normal']).optional().meta({
-      description: 'Direction shortcut. axis = along entity axis; normal = along entity normal.',
-    }),
+    direction_mode: directionModeSchema.optional(),
     origin: point3.optional().meta({
       description: 'Ray origin [x,y,z]. Used by ray. Mutually exclusive with origin_mode.',
     }),
@@ -80,13 +78,11 @@ export const schema = z
     plane_normal: point3
       .optional()
       .meta({ description: 'Normal of cutting plane. Required for section.' }),
-    analyze: z.enum(['edge_count', 'thickness']).optional().meta({
-      description:
-        'Section analysis mode. edge_count = count and describe edges; thickness = measure section thickness.',
-    }),
   })
   .strict()
   .superRefine((value, ctx) => {
+    exclusiveFields('direction', 'direction_mode')(value, ctx);
+    exclusiveFields('origin', 'origin_mode')(value, ctx);
     switch (value.measurement_type) {
       case 'ray':
         if (value.direction === undefined && value.direction_mode === undefined) {
@@ -174,7 +170,6 @@ export const examples = [
     entity_ids: ['body:0'],
     plane_origin: [0, 0, 0],
     plane_normal: [1, 0, 0],
-    analyze: 'edge_count',
   },
   {
     file_path: 'model.step',
@@ -196,7 +191,7 @@ export async function handler(args: Args) {
   });
 }
 
-function buildMeasureSpecs(args: Args): MeasureSpec[] {
+export function buildMeasureSpecs(args: Args): MeasureSpec[] {
   const mode = mapDirectionMode(args.direction_mode);
   const direction = args.direction;
 

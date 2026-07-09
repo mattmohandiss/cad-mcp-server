@@ -220,6 +220,13 @@ export function applyEdgeFilters(
     );
   }
 
+  const dihedralMax = where.dihedral_max_deg;
+  if (typeof dihedralMax === 'number') {
+    result = result.filter(
+      (e) => e.dihedral_angle_deg !== undefined && e.dihedral_angle_deg <= dihedralMax,
+    );
+  }
+
   return result;
 }
 

@@ -2,12 +2,10 @@ import { z } from 'zod';
 import { queryStepEdges } from '../query/edges.js';
 import { runTool } from '../tool-helper.js';
 import { CURVE_TYPES } from '../tool-defs.js';
-import { filePath, bodyId } from '../tool-schemas.js';
+import { filePath, bodyId, includePresetsSchema, summarizeUniqueSchema } from '../tool-schemas.js';
 
-const includeSchema = z.enum(['basic', 'bounds', 'geometry', 'adjacency', 'topology', 'quality']);
-const summarizeBySchema = z.enum(['type', 'body', 'length_range', 'radius_range', 'feature']);
+const summarizeBySchema = z.enum(['type', 'body', 'length_range', 'radius_range']);
 const summarizeStatsSchema = z.enum(['count', 'length', 'radius', 'diameter']);
-const summarizeUniqueSchema = z.enum(['radius', 'diameter']);
 type UniqueField = z.output<typeof summarizeUniqueSchema>;
 type StatField = z.output<typeof summarizeStatsSchema>;
 
@@ -42,7 +40,7 @@ export const schema = z
       })
       .strict()
       .optional(),
-    include: z.array(includeSchema).min(1).optional(),
+    include: z.array(includePresetsSchema).min(1).optional(),
     summarize: z
       .object({
         by: z.array(summarizeBySchema).min(1).max(3).optional(),
@@ -87,7 +85,7 @@ export async function handler(args: Args) {
   });
 }
 
-function toQuery(args: Args) {
+export function toQuery(args: Args) {
   const where: Record<string, unknown> = {};
   const filters = args.filters;
   if (filters?.type !== undefined) where.curve_type = filters.type;
@@ -99,13 +97,16 @@ function toQuery(args: Args) {
   if (filters?.dihedral_angle?.min_degrees !== undefined) {
     where.dihedral_min_deg = filters.dihedral_angle.min_degrees;
   }
+  if (filters?.dihedral_angle?.max_degrees !== undefined) {
+    where.dihedral_max_deg = filters.dihedral_angle.max_degrees;
+  }
 
   const summarize = args.summarize;
   const includeEntities = args.include !== undefined;
   return {
     where: Object.keys(where).length > 0 ? where : undefined,
     select: selectFields(args.include, summarize?.unique),
-    group_by: summarize?.by?.filter((field) => field !== 'feature').map(mapGroupBy),
+    group_by: summarize?.by?.map(mapGroupBy),
     aggregate: aggregateSpecs(summarize?.stats),
     unique: summarize?.unique,
     order_by: mapSort(args.sort),

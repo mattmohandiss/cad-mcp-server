@@ -2,11 +2,14 @@ import { z } from 'zod';
 import { queryStepFaces } from '../query/faces.js';
 import { runTool } from '../tool-helper.js';
 import { SURFACE_TYPES } from '../tool-defs.js';
-import { filePath, bodyId } from '../tool-schemas.js';
+import {
+  filePath,
+  bodyId,
+  point3,
+  includePresetsSchema,
+  summarizeUniqueSchema,
+} from '../tool-schemas.js';
 
-const point3Schema = z.array(z.number()).length(3);
-
-const includeSchema = z.enum(['basic', 'bounds', 'geometry', 'adjacency', 'topology', 'quality']);
 const summarizeBySchema = z.enum([
   'type',
   'body',
@@ -16,7 +19,6 @@ const summarizeBySchema = z.enum([
   'radius_range',
 ]);
 const summarizeStatsSchema = z.enum(['count', 'area', 'radius', 'diameter']);
-const summarizeUniqueSchema = z.enum(['radius', 'diameter']);
 type UniqueField = z.output<typeof summarizeUniqueSchema>;
 type StatField = z.output<typeof summarizeStatsSchema>;
 
@@ -45,7 +47,7 @@ export const schema = z
           .optional(),
         normal: z
           .object({
-            direction: point3Schema,
+            direction: point3,
             match: z.enum(['same_direction', 'opposite_direction', 'parallel']).default('parallel'),
             tolerance_degrees: z.number().min(0).max(180).default(10).optional(),
           })
@@ -62,7 +64,7 @@ export const schema = z
       })
       .strict()
       .optional(),
-    include: z.array(includeSchema).min(1).optional().meta({
+    include: z.array(includePresetsSchema).min(1).optional().meta({
       description:
         'Result detail presets. Omit for basic face identity, area, bounds, and adjacency.',
     }),
@@ -107,7 +109,7 @@ export async function handler(args: Args) {
   });
 }
 
-function toQuery(args: Args) {
+export function toQuery(args: Args) {
   const where: Record<string, unknown> = {};
   const filters = args.filters;
   if (filters?.type !== undefined) where.surface_type = filters.type;
