@@ -104,7 +104,7 @@
     "url": "https://github.com/mattmohandiss/cad-mcp-server/issues"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "2.0.0-beta.2",
+    "@modelcontextprotocol/server": "2.0.0-beta.3",
     "occt-wasm": "file:./occt/ts",
     "zod": "^4.4.3"
   },
