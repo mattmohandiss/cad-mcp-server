@@ -35,10 +35,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Restore built Cosmopolitan payload
+        id: cosmo-payload-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: cosmo-payload.tar.gz
+          key: ${{ runner.os }}-cosmo-payload-v1-${{ hashFiles('occt/**', 'CMakeLists.txt', 'cmake/**', 'vendor/**', 'scripts/patch_occt.py') }}
+
       - name: Install native build tools
+        if: steps.cosmo-payload-cache.outputs.cache-hit != 'true'
         run: sudo apt-get update && sudo apt-get install -y ccache cmake ninja-build g++ python3
 
       - name: Cache sidecar compiler outputs
+        if: steps.cosmo-payload-cache.outputs.cache-hit != 'true'
         uses: actions/cache@v4
         with:
           path: ~/.cache/ccache
@@ -46,9 +55,11 @@ jobs:
           restore-keys: cosmo-${{ runner.os }}-
 
       - name: Build Cosmopolitan sidecar
+        if: steps.cosmo-payload-cache.outputs.cache-hit != 'true'
         run: python3 occt/sidecar/scripts/build.py cosmo --jobs 2 --work occt/sidecar/build-work
 
       - name: Prepare Cosmopolitan payload
+        if: steps.cosmo-payload-cache.outputs.cache-hit != 'true'
         run: |
           bin=sidecar-payload/bin
           mkdir -p "$bin"
@@ -60,6 +71,13 @@ jobs:
             cp "$source" "$bin/$launcher"
           done
           tar -czf cosmo-payload.tar.gz -C sidecar-payload .
+
+      - name: Cache built Cosmopolitan payload
+        if: steps.cosmo-payload-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: cosmo-payload.tar.gz
+          key: ${{ steps.cosmo-payload-cache.outputs.cache-primary-key }}
 
       - uses: actions/upload-artifact@v4
         with:
