@@ -3,7 +3,6 @@ name: release-please
 on:
   push:
     branches: [main]
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -14,11 +13,6 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
-    services:
-      registry:
-        image: registry:3
-        ports:
-          - 5000:5000
     steps:
       # RELEASE_PLEASE_TOKEN is a classic PAT with contents:write and
       # pull_requests:write scopes.  Needed so release-please PRs trigger
@@ -30,73 +24,50 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-      # Once a GitHub Release is created, build WASM and publish to npm.
+      # Once a GitHub Release is created, build the sidecar and publish to npm.
       - uses: actions/checkout@v7
-        if: ${{ steps.release.outputs.release_created || github.event_name == 'workflow_dispatch' }}
+        if: ${{ steps.release.outputs.release_created }}
 
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
-        if: ${{ steps.release.outputs.release_created || github.event_name == 'workflow_dispatch' }}
+        if: ${{ steps.release.outputs.release_created }}
 
       - name: Validate MCP registry metadata
-        if: ${{ steps.release.outputs.release_created || github.event_name == 'workflow_dispatch' }}
+        if: ${{ steps.release.outputs.release_created }}
         uses: studiomeyer-io/mcp-passport@v0.1.0
         with:
           path: .
           fail-on: error
 
-      - uses: docker/setup-buildx-action@v4
-        with:
-          driver-opts: network=host
+      - name: Install native build tools
         if: ${{ steps.release.outputs.release_created }}
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build g++ python3
 
-      - name: Build OCCT builder (cached)
+      - name: Build OCCT sidecar
         if: ${{ steps.release.outputs.release_created }}
-        uses: docker/build-push-action@v7
-        with:
-          context: occt
-          file: occt/Dockerfile.builder
-          tags: localhost:5000/occt-wasm-builder
-          push: true
-          cache-from: type=gha,scope=occt-builder
-          cache-to: type=gha,mode=max,scope=occt-builder
-
-      - name: Build WASM (cached)
-        if: ${{ steps.release.outputs.release_created }}
-        uses: docker/build-push-action@v7
-        with:
-          context: occt
-          file: occt/Dockerfile
-          build-args: ENABLE_WASM_OPT=1
-          tags: occt-wasm
-          load: true
-          cache-from: type=gha,scope=occt-wasm
-          cache-to: type=gha,mode=max,scope=occt-wasm
-          build-contexts: |
-            occt-wasm-builder=docker-image://localhost:5000/occt-wasm-builder
-
-      - name: Extract WASM artifacts
-        if: ${{ steps.release.outputs.release_created }}
-        run: |
-          cid=$(docker create occt-wasm)
-          mkdir -p occt/dist occt/ts/dist
-          docker cp "$cid":/workspace/dist/. occt/dist/
-          docker cp "$cid":/workspace/ts/dist/. occt/ts/dist/
-          docker rm "$cid"
+        run: python3 occt/sidecar/scripts/build.py cosmo --jobs 2 --work occt/sidecar/build-work
 
       - name: Install dependencies
         if: ${{ steps.release.outputs.release_created }}
         run: npm ci
 
-      - name: Install occt-wasm dev dependencies
-        if: ${{ steps.release.outputs.release_created }}
-        run: cd occt/ts && npm install
-
       - name: Build TypeScript
         if: ${{ steps.release.outputs.release_created }}
         run: npm run build
+
+      - name: Package sidecar executable and launchers
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          bin=dist/src/sidecar/bin
+          mkdir -p "$bin"
+          cp occt/sidecar/build-work/cosmo/occt-sidecar "$bin/occt-sidecar.exe"
+          for launcher in ape-x86_64.elf ape-aarch64.elf ape-x86_64.macho ape-aarch64.macho; do
+            source=$(find occt/sidecar/build-work/cosmocc -type f -name "$launcher" -print -quit)
+            test -n "$source" || { echo "Missing Cosmopolitan launcher: $launcher"; exit 1; }
+            cp "$source" "$bin/$launcher"
+          done
 
       - name: Run tests
         if: ${{ steps.release.outputs.release_created }}
@@ -105,28 +76,30 @@ jobs:
       - name: Smoke-test packed CLI
         if: ${{ steps.release.outputs.release_created }}
         run: |
-          PKG_NAME=$(node -p "require('./package.json').name")
-          TARBALL=$(npm pack --pack-destination /tmp --json | node -e "let data=''; process.stdin.on('data', c => data += c); process.stdin.on('end', () => console.log(JSON.parse(data)[0].filename));")
-          cd /tmp && rm -rf smoke-test && mkdir smoke-test && cd smoke-test
+          TARBALL=$(npm pack --pack-destination "$RUNNER_TEMP" --json | node -e "let data=''; process.stdin.on('data', c => data += c); process.stdin.on('end', () => console.log(JSON.parse(data)[0].filename));")
+          SMOKE_DIR=$(mktemp -d "$RUNNER_TEMP/cad-mcp-smoke.XXXXXX")
+          cd "$SMOKE_DIR"
           npm init -y > /dev/null 2>&1
-          npm install "/tmp/$TARBALL"
-          node -e "import('$PKG_NAME').then(()=>console.log('smoke ok')).catch(e=>{console.error(e);process.exit(1)})"
+          npm install "$RUNNER_TEMP/$TARBALL"
+          node "$GITHUB_WORKSPACE/scripts/smoke-packed-cli.mjs" \
+            "$SMOKE_DIR/node_modules/.bin/cad-mcp-server" \
+            "$GITHUB_WORKSPACE/src/tests/fixtures/repeated-instances.step"
 
       - name: Publish to npm
         if: ${{ steps.release.outputs.release_created }}
         run: npm publish
 
       - name: Install MCP Registry publisher
-        if: ${{ steps.release.outputs.release_created || github.event_name == 'workflow_dispatch' }}
+        if: ${{ steps.release.outputs.release_created }}
         run: |
           curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
 
       - name: Authenticate to MCP Registry
-        if: ${{ steps.release.outputs.release_created || github.event_name == 'workflow_dispatch' }}
+        if: ${{ steps.release.outputs.release_created }}
         run: ./mcp-publisher login github-oidc
 
       - name: Publish to MCP Registry
-        if: ${{ steps.release.outputs.release_created || github.event_name == 'workflow_dispatch' }}
+        if: ${{ steps.release.outputs.release_created }}
         run: |
           max=5
           for n in $(seq 0 $((max - 1))); do

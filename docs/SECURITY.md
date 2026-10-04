@@ -4,7 +4,9 @@
 
 CAD files are sensitive engineering IP and should be treated as untrusted input.
 
-The current product is local-first and read-only, which reduces risk, but the server still parses complex file formats and exposes tools to an LLM host. Keep the tool surface narrow and deterministic.
+The current server is local-first and read-only, which reduces risk, but it still parses complex file formats and exposes tools to an LLM host. Keep the tool surface narrow and deterministic.
+
+`cad-mcp` is a standalone domain server. A Viewer or other host may compose its results with paid or remote capabilities. That composition must not silently change the CAD server's local-only assumptions.
 
 ## Current Local Mode
 
@@ -33,6 +35,8 @@ Tool design rules:
 - Do not expose arbitrary code execution.
 - Do not expose raw OCCT command execution.
 - Include limitations so the LLM does not overstate findings.
+- Include source file or model revision information when results are used as evidence.
+- Keep domain conclusions outside the geometry server unless a separate, explicitly scoped capability owns them.
 
 LLM behavior rules:
 
@@ -41,9 +45,9 @@ LLM behavior rules:
 - Preserve uncertainty from tool outputs.
 - Recommend engineer review for consequential decisions.
 
-## Future Hosted Mode
+## Hosted Or Composed Mode
 
-If this server becomes hosted or processes uploaded files, add a hardened intake path:
+If this server is hosted, or if a remote capability receives its artifacts, add a hardened intake path:
 
 - allowlist file extensions and supported formats
 - validate MIME hints and file signatures where practical
@@ -56,6 +60,8 @@ If this server becomes hosted or processes uploaded files, add a hardened intake
 - disable worker network access by default
 - run workers as non-root
 - keep processing libraries patched
+
+The host must show users which capabilities receive CAD data and whether processing is local or remote. A domain server must not infer consent from being connected through an MCP host.
 
 ## Future Enterprise Mode
 

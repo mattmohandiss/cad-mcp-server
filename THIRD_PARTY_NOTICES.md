@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-CAD MCP Server bundles a WebAssembly geometry kernel built from Open CASCADE Technology through the local `occt-wasm` package.
+CAD MCP Server bundles an OCCT sidecar executable built from Open CASCADE Technology.
 
 ## Open CASCADE Technology
 
@@ -8,13 +8,6 @@ CAD MCP Server bundles a WebAssembly geometry kernel built from Open CASCADE Tec
 - Website: https://dev.opencascade.org/
 - License: GNU Lesser General Public License version 2.1
 
-Open CASCADE Technology is used for STEP import and geometric/topological measurement. The bundled WebAssembly artifact is distributed as part of the `occt-wasm` runtime included in this npm package.
-
-## occt-wasm
-
-- Package: `occt-wasm`
-- License: MIT OR Apache-2.0
-
-This project uses a stripped local build of `occt-wasm` focused on read-only STEP inspection.
+Open CASCADE Technology 8.0.1 is used for STEP import and geometric/topological measurement. The packaged sidecar is built from upstream source during the release workflow; no OCCT JavaScript/WASM package is used.
 
 Review the upstream license terms before redistributing modified kernel builds or embedding this package in another commercial distribution.

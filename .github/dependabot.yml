@@ -25,9 +25,3 @@ updates:
           - 'patch'
     labels:
       - 'dependencies'
-  - package-ecosystem: 'cargo'
-    directory: '/occt/codegen'
-    schedule:
-      interval: 'weekly'
-    labels:
-      - 'dependencies'

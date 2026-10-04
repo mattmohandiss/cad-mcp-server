@@ -102,9 +102,20 @@ export async function runOne(
 export async function runAll(options: RunAllOptions = {}): Promise<BulkResult> {
   const startedAt = Date.now();
   const models = [...(options.models ?? DEFAULT_MODELS)];
-  const scenarios = loadScenarios().filter(
-    (scenario) => !options.scenarioIds || options.scenarioIds.includes(scenario.id),
-  );
+  const allScenarios = loadScenarios();
+  const scenarios = options.scenarioIds
+    ? allScenarios.filter((scenario) => options.scenarioIds?.includes(scenario.id))
+    : allScenarios;
+  if (options.scenarioIds) {
+    const knownIds = new Set(allScenarios.map((scenario) => scenario.id));
+    const missing = options.scenarioIds.filter((id) => !knownIds.has(id));
+    if (missing.length > 0) {
+      throw new Error(`Unknown scenario ID(s): ${missing.join(', ')}`);
+    }
+  }
+  if (scenarios.length === 0) {
+    throw new Error('No eval scenarios selected');
+  }
   const results: ScenarioResult[] = [];
 
   for (const modelId of models) {

@@ -71,7 +71,7 @@ function buildPromptWithFiles(scenario: ScenarioMeta): string {
   ].join('\n');
 }
 
-function parseFrontmatter(
+export function parseFrontmatter(
   raw: string,
   filePath: string,
 ): Omit<ScenarioMeta, 'prompt' | 'dir'> & { body: string } {
@@ -107,9 +107,17 @@ function parseFrontmatter(
   return {
     id: meta.id,
     field: meta.field,
-    tolerance: Number(meta.tolerance ?? 0),
-    max_steps: Number(meta.max_steps ?? 8),
+    tolerance: parseFiniteNumber(meta.tolerance ?? '0', `${filePath} tolerance`),
+    max_steps: parseFiniteNumber(meta.max_steps ?? '8', `${filePath} max_steps`),
     files,
     body: match[2],
   };
+}
+
+function parseFiniteNumber(value: string, label: string): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`${label} must be a finite number`);
+  }
+  return parsed;
 }

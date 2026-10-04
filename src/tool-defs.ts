@@ -1,14 +1,3 @@
-export const PUBLIC_TOOL_NAMES = [
-  'inspect_step',
-  'find_faces',
-  'find_edges',
-  'measure_distance',
-  'measure_thickness',
-  'measure_draft',
-  'measure_geometry',
-  'diff_step',
-] as const;
-
 export const SURFACE_TYPES = [
   'plane',
   'cylinder',
@@ -20,6 +9,14 @@ export const SURFACE_TYPES = [
 ] as const;
 
 export const CURVE_TYPES = ['line', 'circle', 'ellipse', 'bspline', 'other'] as const;
+
+export const MEASUREMENT_TYPES = [
+  'ray',
+  'ray_grid',
+  'point_analysis',
+  'section',
+  'continuity',
+] as const;
 
 export const RETURN_TYPES = ['entities', 'summary', 'groups'] as const;
 
@@ -110,6 +107,7 @@ export const EDGE_WHERE_FIELDS = [
   'radius_min',
   'radius_max',
   'dihedral_min_deg',
+  'dihedral_max_deg',
   'body_ids',
 ] as const;
 

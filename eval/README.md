@@ -1,6 +1,6 @@
 # LLM Eval for cad-mcp-server
 
-The eval suite checks whether real LLMs can use the public CAD MCP tools (`inspect_step`, `find_faces`, `find_edges`, `measure_geometry`, `diff_step`) to answer geometry questions with known ground truth.
+The eval suite checks whether real LLMs can use the public CAD MCP tools (`inspect`, `find_entities`, `measure`, `diff`) to answer geometry questions with known ground truth.
 
 ## How It Works
 
@@ -55,8 +55,8 @@ npx tsx eval/runner/index.ts -m anthropic/claude-sonnet-4-5
 
 Each run shows a `[D/M/W]` breakdown:
 
-- **D**iscovery: productive find_faces or find_edges calls
-- **M**easurement: productive measure_geometry calls
+- **D**iscovery: productive find_entities calls
+- **M**easurement: productive measure calls
 - **W**aste: irrelevant queries, wrong tools, exploration of unrelated geometry
 
 ```text
