@@ -82,7 +82,7 @@ jobs:
           npm init -y > /dev/null 2>&1
           npm install "$RUNNER_TEMP/$TARBALL"
           node "$GITHUB_WORKSPACE/scripts/smoke-packed-cli.mjs" \
-            "$SMOKE_DIR/node_modules/.bin/cad-mcp-server" \
+            "$SMOKE_DIR/node_modules/cad-mcp-server/dist/src/index.js" \
             "$GITHUB_WORKSPACE/src/tests/fixtures/repeated-instances.step"
 
       - name: Publish to npm
