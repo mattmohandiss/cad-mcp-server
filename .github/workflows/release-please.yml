@@ -5,14 +5,17 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
-  id-token: write
-  issues: write
-  pull-requests: write
+  contents: read
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
     steps:
       # RELEASE_PLEASE_TOKEN is a classic PAT with contents:write and
       # pull_requests:write scopes.  Needed so release-please PRs trigger
@@ -24,59 +27,124 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-      # Once a GitHub Release is created, build the sidecar and publish to npm.
+  build-sidecar:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
       - uses: actions/checkout@v7
-        if: ${{ steps.release.outputs.release_created }}
+
+      - name: Install native build tools
+        run: sudo apt-get update && sudo apt-get install -y ccache cmake ninja-build g++ python3
+
+      - name: Cache sidecar compiler outputs
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: cosmo-${{ runner.os }}-${{ hashFiles('occt/sidecar/**') }}
+          restore-keys: cosmo-${{ runner.os }}-
+
+      - name: Build Cosmopolitan sidecar
+        run: python3 occt/sidecar/scripts/build.py cosmo --jobs 2 --work occt/sidecar/build-work
+
+      - name: Prepare Cosmopolitan payload
+        run: |
+          bin=sidecar-payload/bin
+          mkdir -p "$bin"
+          cp occt/sidecar/build-work/cosmo/occt-sidecar "$bin/occt-sidecar.exe"
+          cp occt/sidecar/build-work/cosmocc/bin/ape-m1.c "$bin/ape-m1.c"
+          for launcher in ape-x86_64.elf ape-aarch64.elf ape-x86_64.macho; do
+            source=$(find occt/sidecar/build-work/cosmocc -type f -name "$launcher" -print -quit)
+            test -n "$source" || { echo "Missing Cosmopolitan launcher: $launcher"; exit 1; }
+            cp "$source" "$bin/$launcher"
+          done
+          tar -czf cosmo-payload.tar.gz -C sidecar-payload .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-cosmo-payload
+          path: cosmo-payload.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+  build-macos-arm-launcher:
+    needs: [release-please, build-sidecar]
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: macos-15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-cosmo-payload
+          path: payload
+
+      - name: Build Apple Silicon APE launcher
+        run: |
+          mkdir -p sidecar-payload
+          tar -xzf payload/cosmo-payload.tar.gz -C sidecar-payload
+          cc -O -o ape-aarch64.macho sidecar-payload/bin/ape-m1.c
+          tar -czf ape-macos-arm64.tar.gz ape-aarch64.macho
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-ape-macos-arm64
+          path: ape-macos-arm64.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    needs: [release-please, build-sidecar, build-macos-arm-launcher]
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
-        if: ${{ steps.release.outputs.release_created }}
 
       - name: Validate MCP registry metadata
-        if: ${{ steps.release.outputs.release_created }}
         uses: studiomeyer-io/mcp-passport@v0.1.0
         with:
           path: .
           fail-on: error
 
-      - name: Install native build tools
-        if: ${{ steps.release.outputs.release_created }}
-        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build g++ python3
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-cosmo-payload
+          path: payload
 
-      - name: Build OCCT sidecar
-        if: ${{ steps.release.outputs.release_created }}
-        run: python3 occt/sidecar/scripts/build.py cosmo --jobs 2 --work occt/sidecar/build-work
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-ape-macos-arm64
+          path: payload
 
-      - name: Install dependencies
-        if: ${{ steps.release.outputs.release_created }}
-        run: npm ci
-
-      - name: Build TypeScript
-        if: ${{ steps.release.outputs.release_created }}
-        run: npm run build
-
-      - name: Package sidecar executable and launchers
-        if: ${{ steps.release.outputs.release_created }}
+      - name: Install dependencies and package sidecar
         run: |
-          bin=dist/src/sidecar/bin
-          mkdir -p "$bin"
-          cp occt/sidecar/build-work/cosmo/occt-sidecar "$bin/occt-sidecar.exe"
-          for launcher in ape-x86_64.elf ape-aarch64.elf ape-x86_64.macho ape-aarch64.macho; do
-            source=$(find occt/sidecar/build-work/cosmocc -type f -name "$launcher" -print -quit)
-            test -n "$source" || { echo "Missing Cosmopolitan launcher: $launcher"; exit 1; }
-            cp "$source" "$bin/$launcher"
-          done
+          npm ci
+          npm run build
+          tar -xzf payload/cosmo-payload.tar.gz -C dist/src/sidecar
+          tar -xzf payload/ape-macos-arm64.tar.gz -C dist/src/sidecar/bin
+          rm dist/src/sidecar/bin/ape-m1.c
 
-      - name: Run tests
-        if: ${{ steps.release.outputs.release_created }}
-        run: npm test
+      - name: Run geometry integration tests on the Cosmopolitan sidecar
+        env:
+          CAD_MCP_SIDECAR: ${{ github.workspace }}/dist/src/sidecar/bin/occt-sidecar.exe
+          CAD_MCP_SIDECAR_LAUNCHER: ${{ github.workspace }}/dist/src/sidecar/bin/ape-x86_64.elf
+          CAD_MCP_TEST_STEP: ${{ github.workspace }}/src/tests/fixtures/repeated-instances.step
+        run: npx vitest run src/tests/sidecar-assembly.integration.test.ts src/tests/sidecar-measure.integration.test.ts
 
       - name: Smoke-test packed CLI
-        if: ${{ steps.release.outputs.release_created }}
         run: |
-          TARBALL=$(npm pack --pack-destination "$RUNNER_TEMP" --json | node -e "let data=''; process.stdin.on('data', c => data += c); process.stdin.on('end', () => console.log(JSON.parse(data)[0].filename));")
+          npm pack --pack-destination "$RUNNER_TEMP" --json > "$RUNNER_TEMP/pack.json"
+          TARBALL=$(node -e "const p=require(process.env.RUNNER_TEMP+'/pack.json')[0]; console.log(p.filename)")
+          INTEGRITY=$(node -e "const p=require(process.env.RUNNER_TEMP+'/pack.json')[0]; console.log(p.integrity)")
+          echo "PACKAGE_TARBALL=$RUNNER_TEMP/$TARBALL" >> "$GITHUB_ENV"
+          echo "PACKAGE_INTEGRITY=$INTEGRITY" >> "$GITHUB_ENV"
           SMOKE_DIR=$(mktemp -d "$RUNNER_TEMP/cad-mcp-smoke.XXXXXX")
           cd "$SMOKE_DIR"
           npm init -y > /dev/null 2>&1
@@ -86,20 +154,31 @@ jobs:
             "$GITHUB_WORKSPACE/src/tests/fixtures/repeated-instances.step"
 
       - name: Publish to npm
-        if: ${{ steps.release.outputs.release_created }}
-        run: npm publish
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          if EXISTING=$(npm view "$NAME@$VERSION" dist.integrity --json 2>/dev/null); then
+            EXISTING_INTEGRITY=$(node -e 'console.log(JSON.parse(process.argv[1]))' "$EXISTING")
+            if [ "$EXISTING_INTEGRITY" != "$PACKAGE_INTEGRITY" ]; then
+              echo "Published $NAME@$VERSION integrity does not match the tested tarball" >&2
+              exit 1
+            fi
+            echo "$NAME@$VERSION already published with the tested integrity; skipping npm publish"
+          else
+            npm publish "$PACKAGE_TARBALL"
+          fi
 
       - name: Install MCP Registry publisher
-        if: ${{ steps.release.outputs.release_created }}
         run: |
-          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          archive="$RUNNER_TEMP/mcp-publisher.tar.gz"
+          curl -fsSL -o "$archive" https://github.com/modelcontextprotocol/registry/releases/download/v1.8.1/mcp-publisher_linux_amd64.tar.gz
+          echo 'a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc  '"$archive" | sha256sum --check
+          tar xzf "$archive" mcp-publisher
 
       - name: Authenticate to MCP Registry
-        if: ${{ steps.release.outputs.release_created }}
         run: ./mcp-publisher login github-oidc
 
       - name: Publish to MCP Registry
-        if: ${{ steps.release.outputs.release_created }}
         run: |
           max=5
           for n in $(seq 0 $((max - 1))); do

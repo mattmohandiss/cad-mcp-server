@@ -3,16 +3,17 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SidecarClient } from '../sidecar/client.js';
 
 const executable = process.env['CAD_MCP_SIDECAR'];
+const launcher = process.env['CAD_MCP_SIDECAR_LAUNCHER'];
 const stepPath = process.env['CAD_MCP_TEST_STEP'];
 const enabled = Boolean(executable && stepPath && existsSync(executable) && existsSync(stepPath));
 
-describe.skipIf(!enabled)('native sidecar measurement integration', () => {
+describe.skipIf(!enabled)('sidecar measurement integration', () => {
   let client: SidecarClient | undefined;
   let modelId: number | undefined;
   let inspect: Record<string, any>;
 
   beforeAll(async () => {
-    client = new SidecarClient({ executable: executable! });
+    client = new SidecarClient({ executable: executable!, ...(launcher ? { launcher } : {}) });
     const opened = await client.request<{ modelId: number }>('open', { path: stepPath }, 600_000);
     modelId = opened.result.modelId;
     inspect = (await client.request<Record<string, any>>('inspect', { modelId })).result;

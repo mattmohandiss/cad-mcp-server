@@ -38,6 +38,23 @@ try {
   if (typeof data !== 'object' || data === null || !('size' in data)) {
     throw new Error('Packed inspect returned no structured geometry size');
   }
+  const size = data.size;
+  if (typeof size !== 'object' || size === null || !('dimensions' in size) || !('volume' in size)) {
+    throw new Error('Packed inspect returned incomplete geometry size');
+  }
+  const dimensions = size.dimensions;
+  if (
+    typeof dimensions !== 'object' ||
+    dimensions === null ||
+    ![dimensions.width, dimensions.height, dimensions.depth].every(
+      (value) => typeof value === 'number' && Number.isFinite(value) && value > 0,
+    ) ||
+    typeof size.volume !== 'number' ||
+    !Number.isFinite(size.volume) ||
+    size.volume <= 0
+  ) {
+    throw new Error('Packed inspect returned invalid geometry dimensions or volume');
+  }
   console.log('Packed CLI MCP inspect smoke test passed');
 } finally {
   await client.close();

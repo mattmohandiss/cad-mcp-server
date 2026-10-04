@@ -43,7 +43,7 @@ just setup    # or: npm install
 
 Direct npm equivalents: `npm test`, `npm run build`, `npm run lint`, `npm run typecheck`, `npx prettier --write`.
 
-Native sidecar integration tests are opt-in via `CAD_MCP_SIDECAR` and `CAD_MCP_TEST_STEP`.
+Sidecar integration tests are opt-in via `CAD_MCP_SIDECAR` and `CAD_MCP_TEST_STEP`; `CAD_MCP_SIDECAR_LAUNCHER` optionally selects a Cosmopolitan APE launcher.
 
 ## Code Conventions
 
@@ -107,7 +107,7 @@ Releases are automated through release-please and npm trusted publishing. Do not
 2. release-please opens or updates a release PR with the version bump and changelog.
 3. Release PR CI runs the same cross-platform workflow checks and registry metadata validation.
 4. Review and merge the release PR.
-5. The release workflow creates the GitHub Release, builds and packages the OCCT sidecar, smoke-tests the packed CLI, publishes to npm, and publishes to the MCP Registry (with retry for npm propagation lag).
+5. The release workflow creates the GitHub Release, then builds the OCCT sidecar and Apple Silicon launcher in separate jobs, smoke-tests the packed CLI, and publishes to npm and the MCP Registry. Rerun failed publish jobs to recover safely.
 
 **Version rules (automatic, no manual bumps):**
 
@@ -121,7 +121,7 @@ Releases are automated through release-please and npm trusted publishing. Do not
 2. **pre-push** (husky): `just check` (~30s)
 3. **PR CI** (pull request to main): unit checks + registry metadata + dep-review, followed by one Cosmopolitan sidecar build and packed-server smoke tests on Linux x64, macOS x64/arm64, and Windows x64
 4. **Release PR CI** (release-please PR): same cross-platform checks
-5. **release-please merge**: Cosmopolitan sidecar build + packed-CLI smoke + npm + MCP Registry publish.
+5. **release-please merge**: Cosmopolitan sidecar build + macOS ARM launcher + packed-CLI smoke + npm + MCP Registry publish; failed downstream jobs can be rerun independently.
 
 ## Sidecar Build Notes
 

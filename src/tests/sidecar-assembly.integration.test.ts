@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SidecarClient } from '../sidecar/client.js';
 
 const executable = process.env['CAD_MCP_SIDECAR'];
+const launcher = process.env['CAD_MCP_SIDECAR_LAUNCHER'];
 const fixture = fileURLToPath(new URL('./fixtures/repeated-instances.step', import.meta.url));
 const enabled = Boolean(executable && existsSync(executable) && existsSync(fixture));
 
@@ -12,7 +13,7 @@ describe.skipIf(!enabled)('repeated-instance assembly sidecar integration', () =
   let modelId: number | undefined;
 
   beforeAll(async () => {
-    client = new SidecarClient({ executable: executable! });
+    client = new SidecarClient({ executable: executable!, ...(launcher ? { launcher } : {}) });
     const opened = await client.request<{ modelId: number }>('open', { path: fixture });
     modelId = opened.result.modelId;
   });

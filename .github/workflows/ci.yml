@@ -47,14 +47,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
       - name: Install native build tools
         run: sudo apt-get update && sudo apt-get install -y ccache cmake ninja-build g++ python3
 
@@ -68,17 +60,92 @@ jobs:
       - name: Build Cosmopolitan sidecar
         run: python3 occt/sidecar/scripts/build.py cosmo --jobs 2 --work occt/sidecar/build-work
 
-      - name: Build and pack the server
+      - name: Prepare Cosmopolitan payload
         run: |
-          npm run build
-          bin=dist/src/sidecar/bin
+          bin=sidecar-payload/bin
           mkdir -p "$bin"
           cp occt/sidecar/build-work/cosmo/occt-sidecar "$bin/occt-sidecar.exe"
-          for launcher in ape-x86_64.elf ape-aarch64.elf ape-x86_64.macho ape-aarch64.macho; do
+          cp occt/sidecar/build-work/cosmocc/bin/ape-m1.c "$bin/ape-m1.c"
+          for launcher in ape-x86_64.elf ape-aarch64.elf ape-x86_64.macho; do
             source=$(find occt/sidecar/build-work/cosmocc -type f -name "$launcher" -print -quit)
             test -n "$source" || { echo "Missing Cosmopolitan launcher: $launcher"; exit 1; }
             cp "$source" "$bin/$launcher"
           done
+          tar -czf cosmo-payload.tar.gz -C sidecar-payload .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cosmo-payload
+          path: cosmo-payload.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  build-macos-arm-launcher:
+    needs: build-sidecar
+    runs-on: macos-15
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: cosmo-payload
+          path: payload
+
+      - name: Build Apple Silicon APE launcher
+        run: |
+          mkdir -p sidecar-payload
+          tar -xzf payload/cosmo-payload.tar.gz -C sidecar-payload
+          cc -O -o ape-aarch64.macho sidecar-payload/bin/ape-m1.c
+          tar -czf ape-macos-arm64.tar.gz -C . ape-aarch64.macho
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ape-macos-arm64
+          path: ape-macos-arm64.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  pack-server:
+    needs: [build-sidecar, build-macos-arm-launcher]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cosmo-payload
+          path: payload
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ape-macos-arm64
+          path: payload
+
+      - name: Run geometry integration tests on the Cosmopolitan sidecar
+        run: |
+          mkdir -p sidecar-payload
+          tar -xzf payload/cosmo-payload.tar.gz -C sidecar-payload
+          launcher="$PWD/sidecar-payload/bin/ape-x86_64.elf"
+          test -x "$launcher"
+          CAD_MCP_SIDECAR="$PWD/sidecar-payload/bin/occt-sidecar.exe" \
+          CAD_MCP_SIDECAR_LAUNCHER="$launcher" \
+          CAD_MCP_TEST_STEP="$PWD/src/tests/fixtures/repeated-instances.step" \
+          npx vitest run src/tests/sidecar-assembly.integration.test.ts src/tests/sidecar-measure.integration.test.ts
+
+      - name: Build and pack server
+        run: |
+          npm run build
+          bin=dist/src/sidecar/bin
+          mkdir -p "$bin"
+          cp -a sidecar-payload/bin/. "$bin/"
+          tar -xzf payload/ape-macos-arm64.tar.gz -C "$bin"
+          rm "$bin/ape-m1.c"
           npm pack --pack-destination "$RUNNER_TEMP" --json > "$RUNNER_TEMP/pack.json"
           node -e "const fs=require('node:fs');const p=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+'/pack.json','utf8'))[0].filename;fs.copyFileSync(process.env.RUNNER_TEMP+'/'+p,'package.tgz')"
 
@@ -90,7 +157,7 @@ jobs:
           retention-days: 1
 
   platform-smoke:
-    needs: build-sidecar
+    needs: pack-server
     name: smoke (${{ matrix.target }})
     timeout-minutes: 20
     strategy:
