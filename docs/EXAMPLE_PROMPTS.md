@@ -1,42 +1,56 @@
 # Example Prompts
 
-These are natural engineering questions you can ask your AI assistant when CAD MCP Server is connected. The assistant will use the right tools automatically — you just describe the problem.
+These prompts are useful when `cad-mcp` is connected to an MCP host. The server returns deterministic geometry facts. A separate domain capability may interpret those facts as DFM, materials, FEA, or commercial recommendations.
 
-## Design Review
+## Model Overview
 
-> Review VortexParts.step like a mechanical lead before release. What are the top design or manufacturing risks I should resolve before sending this out?
+> Inspect this STEP file and report its dimensions, volume, body/face/edge counts, validity, topology, and available PMI information.
 
-> Find opportunities to reduce manufacturing cost without changing the product intent. Focus on geometry that increases machining time or supplier risk.
+## Face And Edge Discovery
 
-## Injection Molding
+> Find all cylindrical faces and report their radii, areas, axes, and body IDs.
 
-> Check if this part can eject cleanly from a two-part +Z mold. Flag any face with negative draft or less than 1 degree. Check minimum wall thickness around all holes — must be above 1.5mm.
+> Find the smallest fillet radius and return the affected edge IDs with measurements.
 
-## CNC Machining
+## Measurement
 
-> Build a first-pass CNC plan: likely setups, drilling directions, tooling constraints, and features that drive cost.
+> Find the thinnest wall section around these faces and report the measured values in millimeters.
 
-## 3D Printing
+> Measure the clearance between these holes and the nearest wall. Return the closest pair and the measured distance.
 
-> Can these parts fit on a 200×200×300mm printer? What needs splitting or reorientation? Are there fragile features under 0.6mm?
+> Measure draft relative to the +Z direction and identify faces with negative draft.
+
+## Geometry Analysis
+
+> Run a ray test from this face in the +Z direction and return the hit distances.
+
+> Analyze this point against the selected face and return whether it is inside, on, or outside the face.
+
+> Create a cross-section through this body using the supplied plane.
 
 ## Revision Comparison
 
-> Compare revision A and revision B. What changed, what risks does the change introduce, and what should be rechecked before tooling?
+> Compare these two STEP revisions and report changes in dimensions, volume, surface area, and topology counts.
 
-## Supplier Handoff
+## Host And Domain Composition
 
-> Prepare an RFQ summary from VortexParts.step: part count, size envelope, complexity drivers, and questions the supplier will ask.
+The following questions require a host or a specialized domain capability in addition to `cad-mcp`:
 
-## Inspection Planning
+> Review this part for injection molding and explain whether the measured draft and wall thickness satisfy our process rules.
 
-> Create a first-pass inspection plan. What should QC measure? Which features are likely critical? What's missing from the model?
+> Prepare a CNC quote-readiness review using the geometry facts, machine limits, tooling rules, and material information.
 
-## Good Responses
+> Compare this model against the supplied drawing and identify dimensional or requirement mismatches.
 
-A good assistant response should:
+> Prepare a supplier handoff using the measured complexity drivers and open questions.
 
-- Reference specific measurements from the model (dimensions, radii, face counts)
-- Separate measured facts from engineering judgment
-- Flag when the STEP file lacks material, tolerance, or process information
-- Never invent tolerances, materials, or manufacturing certifications
+## Response Requirements
+
+A good host response should:
+
+- Reference measured values and entity subjects.
+- Separate geometry facts from engineering judgment.
+- Preserve units and coordinate-system information.
+- Identify model revision or source file.
+- State when material, tolerance, process, drawing, or requirement information is missing.
+- Never claim manufacturability, compliance, or safety from geometry alone.

@@ -1,4 +1,4 @@
-import { readStepText } from '../kernel/import.js';
+import { readStepText } from '../utils/step-text.js';
 
 export interface ParsedStepMetadata {
   schema?: string;

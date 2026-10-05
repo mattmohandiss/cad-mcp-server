@@ -1,7 +1,7 @@
-import { createMCPClient, type MCPClient } from '@ai-sdk/mcp';
+import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import type { GatewayProviderOptions } from '@ai-sdk/gateway';
-import { generateText, gateway, isStepCount } from 'ai';
+import { generateText, gateway, isStepCount, jsonSchema } from 'ai';
 import { resolveServerPath } from './config.js';
 import type { EvalSpan, EvalSpanChecks, EvalTrace, ScenarioMeta, StepType } from './types.js';
 import { type z } from 'zod';
@@ -29,20 +29,36 @@ export async function runModelWithMcp(
   scenario: ScenarioMeta,
   schema: z.ZodType,
 ): Promise<ModelRunResult> {
-  let mcpClient: MCPClient | undefined;
+  let mcpClient: Client | undefined;
   const start = Date.now();
 
   try {
-    mcpClient = await createMCPClient({
-      clientName: 'cad-mcp-eval-runner',
-      transport: new StdioClientTransport({
-        command: 'node',
-        args: [resolveServerPath()],
-        stderr: 'ignore',
-      }),
+    const transport = new StdioClientTransport({
+      command: 'node',
+      args: [resolveServerPath()],
+      stderr: 'ignore',
     });
+    mcpClient = new Client(
+      { name: 'cad-mcp-eval-runner', version: '1.0.0' },
+      { versionNegotiation: { mode: { pin: '2026-07-28' } } },
+    );
+    await mcpClient.connect(transport);
 
-    const tools = await mcpClient.tools();
+    const definitions = await mcpClient.listTools();
+    const tools = Object.fromEntries(
+      definitions.tools.map((definition) => [
+        definition.name,
+        {
+          description: definition.description,
+          inputSchema: jsonSchema(definition.inputSchema as Parameters<typeof jsonSchema>[0]),
+          execute: (input: unknown) =>
+            mcpClient!.callTool({
+              name: definition.name,
+              arguments: input as Record<string, unknown>,
+            }),
+        },
+      ]),
+    );
     const result = await generateText({
       model: gateway(modelId),
       tools,

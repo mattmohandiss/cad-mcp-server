@@ -1,12 +1,6 @@
 dist/
 node_modules/
-occt/dist/
-occt/ts/src/
-occt/ts/dist/
-occt/ts/node_modules/
-occt/ts/eslint.config.js
-occt/build/
-occt/codegen/target/
-occt/facade/generated/
+occt/sidecar/build/
+occt/sidecar/build-work/
 *.tgz
 CHANGELOG.md

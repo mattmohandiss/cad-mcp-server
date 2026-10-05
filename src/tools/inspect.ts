@@ -1,13 +1,14 @@
 import { z } from 'zod';
-import { handleInspectStepFile } from '../domain/step-file.js';
 import { runTool } from '../tool-helper.js';
+import { sidecarModels } from '../sidecar/models.js';
 import { filePath } from '../tool-schemas.js';
 
 const includeSchema = z
-  .array(z.enum(['size', 'counts', 'health', 'bodies', 'quality', 'pmi', 'inertia', 'topology']))
+  .array(z.enum(['size', 'counts', 'health']))
   .optional()
   .meta({
-    description: 'Detail presets. Default: size, counts, health. Add more for detailed analysis.',
+    description:
+      'Sections to include: size, counts, health. Default: all three. Example: ["size", "health"].',
   });
 
 export const schema = z
@@ -19,23 +20,61 @@ export const schema = z
 
 export const examples = [
   { file_path: 'model.step' },
-  {
-    file_path: 'model.step',
-    include: ['size', 'counts', 'health', 'bodies', 'quality', 'topology'],
-  },
+  { file_path: 'model.step', include: ['size', 'health'] },
 ];
 
 const DEFAULT_INCLUDE = new Set(['size', 'counts', 'health']);
 
 export async function handler(args: z.output<typeof schema>) {
   return runTool(async () => {
-    const full = await handleInspectStepFile(args.file_path);
     const include = args.include ? new Set(args.include) : DEFAULT_INCLUDE;
-    return filterInspectResult(full, include);
+    return sidecarModels.withModel(args.file_path, async (client, modelId, filePath) => {
+      const { result } = await client.request<{
+        solids: number;
+        faces: number;
+        edges: number;
+        vertices: number;
+        volume: number;
+        surfaceArea: number;
+        valid: boolean;
+        bounds: { min: number[]; max: number[] };
+        xcaf?: {
+          roots: number;
+          rootAssemblies: number;
+          components: number;
+          occurrenceIds: string[];
+        };
+      }>('inspect', { modelId });
+      const dimensions = result.bounds.min.map((min, axis) => result.bounds.max[axis]! - min);
+      const full: Record<string, unknown> = {
+        file_path: filePath,
+        size: {
+          bounding_box: { min: result.bounds.min, max: result.bounds.max },
+          dimensions: { width: dimensions[0], height: dimensions[1], depth: dimensions[2] },
+          volume: result.volume,
+          surface_area: result.surfaceArea,
+          units: 'mm',
+        },
+        structure: {
+          body_count: result.solids,
+          is_assembly: (result.xcaf?.rootAssemblies ?? 0) > 0,
+          component_occurrences: result.xcaf?.occurrenceIds ?? [],
+        },
+        health: {
+          is_valid: result.valid,
+          complexity: {
+            body_count: result.solids,
+            face_count: result.faces,
+            edge_count: result.edges,
+          },
+        },
+      };
+      return filterInspectResult(full, include);
+    });
   });
 }
 
-function filterInspectResult(
+export function filterInspectResult(
   full: Record<string, unknown>,
   include: Set<string>,
 ): Record<string, unknown> {
@@ -48,18 +87,5 @@ function filterInspectResult(
   if (include.has('health')) {
     result.health = full.health;
   }
-  if (include.has('bodies')) result.bodies = full.bodies;
-  if (include.has('quality')) result.quality = full.quality;
-  if (include.has('pmi')) result.pmi = full.pmi;
-  if (include.has('inertia')) {
-    result.principal_axes = full.principal_axes;
-    result.inertia_matrix = full.inertia_matrix;
-    result.bounding_box_obb = full.bounding_box_obb;
-  }
-  if (include.has('topology')) {
-    result.topology_summary = full.topology_summary;
-    result.geometry_extremes = full.geometry_extremes;
-  }
-
   return result;
 }

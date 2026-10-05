@@ -1,4 +1,4 @@
-import { readStepText } from '../kernel/import.js';
+import { readStepText } from '../utils/step-text.js';
 
 /* ------------------------------------------------------------------ */
 /*  STEP entity parser (lightweight, PMI-focused)                     */

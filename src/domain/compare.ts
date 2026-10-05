@@ -1,45 +1,24 @@
-import { withStepModel } from '../model-store.js';
+import type { ParsedStepMetadata } from '../pmi/metadata.js';
 
-export async function compareStepFiles(fileA: string, fileB: string) {
-  return withStepModel(fileA, async (modelA) =>
-    withStepModel(fileB, async (modelB) => {
-      const [brepA, brepB, semanticA, semanticB] = await Promise.all([
-        modelA.getBRepModel(),
-        modelB.getBRepModel(),
-        modelA.getSemanticModel(),
-        modelB.getSemanticModel(),
-      ]);
-
-      return {
-        files: { a: fileA, b: fileB },
-        deltas: {
-          dimensions: {
-            width: brepB.dimensions.width - brepA.dimensions.width,
-            height: brepB.dimensions.height - brepA.dimensions.height,
-            depth: brepB.dimensions.depth - brepA.dimensions.depth,
-          },
-          volume: brepB.volume - brepA.volume,
-          surfaceArea: brepB.surfaceArea - brepA.surfaceArea,
-          bodyCount: brepB.bodyCount - brepA.bodyCount,
-          faceCount:
-            brepB.faceCount !== undefined && brepA.faceCount !== undefined
-              ? brepB.faceCount - brepA.faceCount
-              : undefined,
-          edgeCount:
-            brepB.edgeStatistics && brepA.edgeStatistics
-              ? brepB.edgeStatistics.count - brepA.edgeStatistics.count
-              : undefined,
-        },
-        exchange: {
-          schemaChanged: semanticA.schema !== semanticB.schema,
-          productNamesA: semanticA.productNames,
-          productNamesB: semanticB.productNames,
-        },
-        providers: {
-          a: [brepA.provider, semanticA.provider],
-          b: [brepB.provider, semanticB.provider],
-        },
-      };
-    }),
-  );
+/** Compare parsed STEP document facts without inferring engineering intent. */
+export function compareStepMetadata(a: ParsedStepMetadata, b: ParsedStepMetadata) {
+  const namesA = new Set(a.productNames);
+  const namesB = new Set(b.productNames);
+  return {
+    schema_changed: a.schema !== b.schema,
+    schema_a: a.schema,
+    schema_b: b.schema,
+    product_names_added: b.productNames.filter((name) => !namesA.has(name)),
+    product_names_removed: a.productNames.filter((name) => !namesB.has(name)),
+    product_count_delta: b.productCount - a.productCount,
+    assembly_status_changed: a.hasAssembly !== b.hasAssembly,
+    has_assembly_a: a.hasAssembly,
+    has_assembly_b: b.hasAssembly,
+    authoring_system_changed: a.authoringSystem !== b.authoringSystem,
+    authoring_system_a: a.authoringSystem,
+    authoring_system_b: b.authoringSystem,
+    organization_changed: a.organizationName !== b.organizationName,
+    organization_a: a.organizationName,
+    organization_b: b.organizationName,
+  };
 }

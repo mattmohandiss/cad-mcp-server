@@ -25,8 +25,11 @@ docs/PROPOSED_TOOLS.md
 .vscode/
 .idea/
 
-# Generated codegen output
-occt/facade/generated/
+# OCCT sidecar build artifacts
+occt/sidecar/build/
+occt/sidecar/build-work/
+occt/target/
+occt/Cargo.lock
 
 # Reference PDFs (accompany NIST samples but not used by code)
 samples/**/PDF/
@@ -35,13 +38,9 @@ samples/**/PDF/
 *.stp
 *.STEP
 
-# occt-wasm build artifacts (rebuild via just build, not committed)
-occt/dist/
-occt/ts/dist/
-occt/build/
-occt/*.tgz
-
 # LLM eval
 eval/.venv/
 eval/runs/
 eval/scenarios/**/*.step
+eval/scenarios/**/*.db
+*.db

@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+"""Expand CMake response files before invoking cosmocc's archiver."""
+import shlex
+import subprocess
+import sys
+
+args = []
+for arg in sys.argv[1:]:
+    if arg.startswith("@"):
+        with open(arg[1:], encoding="utf-8") as response_file:
+            args.extend(shlex.split(response_file.read()))
+    else:
+        args.append(arg)
+
+raise SystemExit(subprocess.run(["@COSMO_AR@", *args], check=False).returncode)

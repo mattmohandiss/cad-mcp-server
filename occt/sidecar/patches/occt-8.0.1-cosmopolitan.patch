@@ -1,0 +1,659 @@
+--- a/src/FoundationClasses/TKernel/OSD/OSD_Error.cxx
++++ b/src/FoundationClasses/TKernel/OSD/OSD_Error.cxx
+@@ -56,6 +56,150 @@
+   return (extCode);
+ }
+ 
++
++// Cosmopolitan host errno numbers are not C++ constant expressions.
++#if defined(__COSMOPOLITAN__)
++#define OCCT_PORTABLE_ERRNO_EBADF 1
++#define OCCT_PORTABLE_ERRNO_EBADMSG 2
++#define OCCT_PORTABLE_ERRNO_EINVAL 3
++#define OCCT_PORTABLE_ERRNO_EDQUOT 4
++#define OCCT_PORTABLE_ERRNO_EDEADLK 5
++#define OCCT_PORTABLE_ERRNO_ENOLCK 6
++#define OCCT_PORTABLE_ERRNO_EOPNOTSUPP 7
++#define OCCT_PORTABLE_ERRNO_EACCES 8
++#define OCCT_PORTABLE_ERRNO_EBUSY 9
++#define OCCT_PORTABLE_ERRNO_ERANGE 10
++#define OCCT_PORTABLE_ERRNO_EPERM 11
++#define OCCT_PORTABLE_ERRNO_EROFS 12
++#define OCCT_PORTABLE_ERRNO_ENXIO 13
++#define OCCT_PORTABLE_ERRNO_EIO 14
++#define OCCT_PORTABLE_ERRNO_EISDIR 15
++#define OCCT_PORTABLE_ERRNO_EWOULDBLOCK 16
++#define OCCT_PORTABLE_ERRNO_EAGAIN 17
++#define OCCT_PORTABLE_ERRNO_ENOTDIR 18
++#define OCCT_PORTABLE_ERRNO_EMLINK 19
++#define OCCT_PORTABLE_ERRNO_ELOOP 20
++#define OCCT_PORTABLE_ERRNO_EFAULT 21
++#define OCCT_PORTABLE_ERRNO_EFBIG 22
++#define OCCT_PORTABLE_ERRNO_EINTR 23
++#define OCCT_PORTABLE_ERRNO_ENOMEM 24
++#define OCCT_PORTABLE_ERRNO_EMFILE 25
++#define OCCT_PORTABLE_ERRNO_ENAMETOOLONG 26
++#define OCCT_PORTABLE_ERRNO_ENFILE 27
++#define OCCT_PORTABLE_ERRNO_EXDEV 28
++#define OCCT_PORTABLE_ERRNO_ENOENT 29
++#define OCCT_PORTABLE_ERRNO_ENOSPC 30
++#define OCCT_PORTABLE_ERRNO_ENOTEMPTY 31
++#define OCCT_PORTABLE_ERRNO_EEXIST 32
++#define OCCT_PORTABLE_ERRNO_E2BIG 33
++#define OCCT_PORTABLE_ERRNO(x) OCCT_PORTABLE_ERRNO_##x
++static int OCCT_PortableErrno(int value) {
++#ifdef EBADF
++  if (value == EBADF) return 1;
++#endif
++#ifdef EBADMSG
++  if (value == EBADMSG) return 2;
++#endif
++#ifdef EINVAL
++  if (value == EINVAL) return 3;
++#endif
++#ifdef EDQUOT
++  if (value == EDQUOT) return 4;
++#endif
++#ifdef EDEADLK
++  if (value == EDEADLK) return 5;
++#endif
++#ifdef ENOLCK
++  if (value == ENOLCK) return 6;
++#endif
++#ifdef EOPNOTSUPP
++  if (value == EOPNOTSUPP) return 7;
++#endif
++#ifdef EACCES
++  if (value == EACCES) return 8;
++#endif
++#ifdef EBUSY
++  if (value == EBUSY) return 9;
++#endif
++#ifdef ERANGE
++  if (value == ERANGE) return 10;
++#endif
++#ifdef EPERM
++  if (value == EPERM) return 11;
++#endif
++#ifdef EROFS
++  if (value == EROFS) return 12;
++#endif
++#ifdef ENXIO
++  if (value == ENXIO) return 13;
++#endif
++#ifdef EIO
++  if (value == EIO) return 14;
++#endif
++#ifdef EISDIR
++  if (value == EISDIR) return 15;
++#endif
++#if defined(EWOULDBLOCK) && (defined(SUN) || defined(IRIX4))
++  if (value == EWOULDBLOCK) return 16;
++#endif
++#ifdef EAGAIN
++  if (value == EAGAIN) return 17;
++#endif
++#ifdef ENOTDIR
++  if (value == ENOTDIR) return 18;
++#endif
++#ifdef EMLINK
++  if (value == EMLINK) return 19;
++#endif
++#ifdef ELOOP
++  if (value == ELOOP) return 20;
++#endif
++#ifdef EFAULT
++  if (value == EFAULT) return 21;
++#endif
++#ifdef EFBIG
++  if (value == EFBIG) return 22;
++#endif
++#ifdef EINTR
++  if (value == EINTR) return 23;
++#endif
++#ifdef ENOMEM
++  if (value == ENOMEM) return 24;
++#endif
++#ifdef EMFILE
++  if (value == EMFILE) return 25;
++#endif
++#ifdef ENAMETOOLONG
++  if (value == ENAMETOOLONG) return 26;
++#endif
++#ifdef ENFILE
++  if (value == ENFILE) return 27;
++#endif
++#ifdef EXDEV
++  if (value == EXDEV) return 28;
++#endif
++#ifdef ENOENT
++  if (value == ENOENT) return 29;
++#endif
++#ifdef ENOSPC
++  if (value == ENOSPC) return 30;
++#endif
++#ifdef ENOTEMPTY
++  if (value == ENOTEMPTY) return 31;
++#endif
++#ifdef EEXIST
++  if (value == EEXIST) return 32;
++#endif
++#ifdef E2BIG
++  if (value == E2BIG) return 33;
++#endif
++  return -1;
++}
++#else
++#define OCCT_PORTABLE_ERRNO(x) x
++static int OCCT_PortableErrno(int value) { return value; }
++#endif
++
+ void OSD_Error::Perror()
+ {
+   TCollection_AsciiString buffer;
+@@ -68,9 +212,9 @@
+   buffer += " :\n ";
+   extCode = ERR_SURPRISE;
+ 
+-  switch (myErrno)
++  switch (OCCT_PortableErrno(myErrno))
+   {
+-    case EBADF:
++    case OCCT_PORTABLE_ERRNO(EBADF):
+       switch (myCode)
+       {
+         case OSD_WFile:
+@@ -83,7 +227,7 @@
+       break;
+ 
+   #ifdef SUN
+-    case EBADMSG:
++    case OCCT_PORTABLE_ERRNO(EBADMSG):
+       switch (myCode)
+       {
+         case OSD_WFile:
+@@ -96,7 +240,7 @@
+       break;
+   #endif
+ 
+-    case EINVAL:
++    case OCCT_PORTABLE_ERRNO(EINVAL):
+       switch (myCode)
+       {
+         case OSD_WFileNode:
+@@ -114,7 +258,7 @@
+       }
+       break;
+   #if !defined(sun) && !defined(SOLARIS)
+-    case EDQUOT:
++    case OCCT_PORTABLE_ERRNO(EDQUOT):
+       switch (myCode)
+       {
+         case OSD_WDirectory:
+@@ -130,7 +274,7 @@
+   #endif
+ 
+   #ifdef SUN
+-    case EDEADLK:
++    case OCCT_PORTABLE_ERRNO(EDEADLK):
+       switch (myCode)
+       {
+         case OSD_WFile:
+@@ -143,7 +287,7 @@
+       break;
+   #endif
+ 
+-    case ENOLCK:
++    case OCCT_PORTABLE_ERRNO(ENOLCK):
+       switch (myCode)
+       {
+         case OSD_WFile:
+@@ -154,7 +298,7 @@
+           break;
+       }
+       break;
+-    case EOPNOTSUPP:
++    case OCCT_PORTABLE_ERRNO(EOPNOTSUPP):
+       switch (myCode)
+       {
+         case OSD_WFile:
+@@ -165,11 +309,11 @@
+           break;
+       }
+       break;
+-    case EACCES:
++    case OCCT_PORTABLE_ERRNO(EACCES):
+       buffer += "Permission denied";
+       extCode = ERR_ACCESS;
+       break;
+-    case EBUSY:
++    case OCCT_PORTABLE_ERRNO(EBUSY):
+       switch (myCode)
+       {
+         case OSD_WFileNode:
+@@ -180,7 +324,7 @@
+           break;
+       }
+       break;
+-    case ERANGE:
++    case OCCT_PORTABLE_ERRNO(ERANGE):
+       switch (myCode)
+       {
+         case OSD_WFile:
+@@ -191,7 +335,7 @@
+           break;
+       }
+       break;
+-    case EPERM:
++    case OCCT_PORTABLE_ERRNO(EPERM):
+       switch (myCode)
+       {
+         case OSD_WPackage:
+@@ -208,7 +352,7 @@
+           break;
+       }
+       break;
+-    case EROFS:
++    case OCCT_PORTABLE_ERRNO(EROFS):
+       switch (myCode)
+       {
+         case OSD_WFileNode:
+@@ -220,8 +364,8 @@
+           break;
+       }
+       break;
+-    case ENXIO:
+-    case EIO:
++    case OCCT_PORTABLE_ERRNO(ENXIO):
++    case OCCT_PORTABLE_ERRNO(EIO):
+       switch (myCode)
+       {
+         case OSD_WDirectory:
+@@ -237,7 +381,7 @@
+           break;
+       }
+       break;
+-    case EISDIR:
++    case OCCT_PORTABLE_ERRNO(EISDIR):
+       switch (myCode)
+       {
+         case OSD_WFileNode:
+@@ -251,7 +395,7 @@
+       break;
+ 
+   #ifdef SUN
+-    case EWOULDBLOCK:
++    case OCCT_PORTABLE_ERRNO(EWOULDBLOCK):
+       switch (myCode)
+       {
+         case OSD_WFile:
+@@ -265,7 +409,7 @@
+   #endif
+ 
+   #ifdef IRIX4
+-    case EWOULDBLOCK:
++    case OCCT_PORTABLE_ERRNO(EWOULDBLOCK):
+       switch (myCode)
+       {
+         case OSD_WFile:
+@@ -278,7 +422,7 @@
+       break;
+   #endif
+ 
+-    case EAGAIN:
++    case OCCT_PORTABLE_ERRNO(EAGAIN):
+       switch (myCode)
+       {
+         case OSD_WFile:
+@@ -289,7 +433,7 @@
+           break;
+       }
+       break;
+-    case ENOTDIR:
++    case OCCT_PORTABLE_ERRNO(ENOTDIR):
+       switch (myCode)
+       {
+         case OSD_WDirectory:
+@@ -302,7 +446,7 @@
+           break;
+       }
+       break;
+-    case EMLINK:
++    case OCCT_PORTABLE_ERRNO(EMLINK):
+       switch (myCode)
+       {
+         case OSD_WDirectory:
+@@ -313,7 +457,7 @@
+           break;
+       }
+       break;
+-    case ELOOP:
++    case OCCT_PORTABLE_ERRNO(ELOOP):
+       switch (myCode)
+       {
+         case OSD_WDirectory:
+@@ -325,11 +469,11 @@
+           break;
+       }
+       break;
+-    case EFAULT:
++    case OCCT_PORTABLE_ERRNO(EFAULT):
+       buffer += "User error : arguments point to an illegal address";
+       extCode = ERR_FAULT;
+       break;
+-    case EFBIG:
++    case OCCT_PORTABLE_ERRNO(EFBIG):
+       switch (myCode)
+       {
+         case OSD_WFile:
+@@ -340,15 +484,15 @@
+           break;
+       }
+       break;
+-    case EINTR:
++    case OCCT_PORTABLE_ERRNO(EINTR):
+       buffer += "operation broken by a signal";
+       extCode = ERR_INTR;
+       break;
+-    case ENOMEM:
++    case OCCT_PORTABLE_ERRNO(ENOMEM):
+       buffer += "Not enough memory";
+       extCode = ERR_NOMEM;
+       break;
+-    case EMFILE:
++    case OCCT_PORTABLE_ERRNO(EMFILE):
+       switch (myCode)
+       {
+         case OSD_WFile:
+@@ -359,11 +503,11 @@
+           break;
+       }
+       break;
+-    case ENAMETOOLONG:
++    case OCCT_PORTABLE_ERRNO(ENAMETOOLONG):
+       buffer += "File name too long";
+       extCode = ERR_NAMETOOLONG;
+       break;
+-    case ENFILE:
++    case OCCT_PORTABLE_ERRNO(ENFILE):
+       switch (myCode)
+       {
+         case OSD_WFile:
+@@ -374,7 +518,7 @@
+           break;
+       }
+       break;
+-    case EXDEV:
++    case OCCT_PORTABLE_ERRNO(EXDEV):
+       switch (myCode)
+       {
+         case OSD_WFileNode:
+@@ -386,7 +530,7 @@
+           break;
+       }
+       break;
+-    case ENOENT:
++    case OCCT_PORTABLE_ERRNO(ENOENT):
+       switch (myCode)
+       {
+         case OSD_WFileNode:
+@@ -406,7 +550,7 @@
+           break;
+       }
+       break;
+-    case ENOSPC: {
++    case OCCT_PORTABLE_ERRNO(ENOSPC): {
+       switch (myCode)
+       {
+         case OSD_WDirectory:
+@@ -425,7 +569,7 @@
+   // the EEXIST case block.
+   //
+   #if (!defined(_AIX)) && (!defined(AIX))
+-    case ENOTEMPTY:
++    case OCCT_PORTABLE_ERRNO(ENOTEMPTY):
+       switch (myCode)
+       {
+         case OSD_WFileNode:
+@@ -438,7 +582,7 @@
+       break;
+   #endif
+ 
+-    case EEXIST:
++    case OCCT_PORTABLE_ERRNO(EEXIST):
+       switch (myCode)
+       {
+         case OSD_WFileNode:
+@@ -455,7 +599,7 @@
+           break;
+       }
+       break;
+-    case E2BIG:
++    case OCCT_PORTABLE_ERRNO(E2BIG):
+       buffer += "Too many Semaphore/Shared memory for a process.";
+       buffer += "Reconfigure Kernel with greater values";
+       extCode = ERR_TOOBIG;
+--- a/src/FoundationClasses/TKernel/OSD/OSD_Path.cxx
++++ b/src/FoundationClasses/TKernel/OSD/OSD_Path.cxx
+@@ -1,3 +1,7 @@
++#if defined(__COSMOPOLITAN__)
++// Cosmopolitan provides uname through POSIX headers.
++#include <sys/utsname.h>
++#endif
+ // Copyright (c) 1998-1999 Matra Datavision
+ // Copyright (c) 1999-2014 OPEN CASCADE SAS
+ //
+@@ -34,6 +38,9 @@
+   return OSD_WindowsNT;
+ #elif defined(vax) || defined(__vms)
+   return OSD_VMS;
++#elif defined(__COSMOPOLITAN__)
++  // Cosmopolitan exposes a POSIX filesystem API on every host.
++  return OSD_UnixBSD;
+ #elif defined(__linux__) || defined(__linux)
+   return OSD_LinuxREDHAT;
+ #elif defined(__EMSCRIPTEN__)
+--- a/src/FoundationClasses/TKernel/OSD/OSD_Chronometer.cxx
++++ b/src/FoundationClasses/TKernel/OSD/OSD_Chronometer.cxx
+@@ -52,7 +52,7 @@
+ 
+ void OSD_Chronometer::GetProcessCPU(double& theUserSeconds, double& theSystemSeconds)
+ {
+-  #if defined(__linux__) || defined(__FreeBSD__) || defined(__ANDROID__) || defined(__QNX__)       \
++  #if defined(__linux__) || defined(__FreeBSD__) || defined(__ANDROID__) || defined(__QNX__) || defined(__COSMOPOLITAN__)       \
+     || defined(__EMSCRIPTEN__)
+   static const long aCLK_TCK = sysconf(_SC_CLK_TCK);
+   #else
+@@ -86,7 +86,7 @@
+       double(aTaskInfo.system_time.seconds) + 0.000001 * aTaskInfo.system_time.microseconds;
+   }
+   #elif (defined(_POSIX_TIMERS) && defined(_POSIX_THREAD_CPUTIME)) || defined(__ANDROID__)         \
+-    || defined(__QNX__)
++    || defined(__QNX__) || defined(__COSMOPOLITAN__)
+   // on Linux, only user times are available for threads via clock_gettime()
+   struct timespec t;
+   if (!clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t))
+--- a/src/FoundationClasses/TKernel/OSD/OSD_signal.cxx
++++ b/src/FoundationClasses/TKernel/OSD/OSD_signal.cxx
+@@ -28,6 +28,53 @@
+ static std::atomic<OSD_SignalMode> OSD_WasSetSignal{OSD_SignalMode_AsIs};
+ static std::atomic<int>            OSD_SignalStackTraceLength{0};
+ 
++
++#if defined(__COSMOPOLITAN__)
++#define OCCT_PORTABLE_SIGNAL_SIGFPE 1
++#define OCCT_PORTABLE_SIGNAL_SIGSEGV 2
++#define OCCT_PORTABLE_SIGNAL_SIGILL 3
++#define OCCT_PORTABLE_SIGNAL_SIGHUP 4
++#define OCCT_PORTABLE_SIGNAL_SIGINT 5
++#define OCCT_PORTABLE_SIGNAL_SIGQUIT 6
++#define OCCT_PORTABLE_SIGNAL_SIGKILL 7
++#define OCCT_PORTABLE_SIGNAL_SIGBUS 8
++#define OCCT_PORTABLE_SIGNAL_SIGSYS 9
++#define OCCT_PORTABLE_SIGNAL(x) OCCT_PORTABLE_SIGNAL_##x
++static int OCCT_PortableSignal(int value) {
++#ifdef SIGFPE
++  if(value == SIGFPE) return 1;
++#endif
++#ifdef SIGSEGV
++  if(value == SIGSEGV) return 2;
++#endif
++#ifdef SIGILL
++  if(value == SIGILL) return 3;
++#endif
++#ifdef SIGHUP
++  if(value == SIGHUP) return 4;
++#endif
++#ifdef SIGINT
++  if(value == SIGINT) return 5;
++#endif
++#ifdef SIGQUIT
++  if(value == SIGQUIT) return 6;
++#endif
++#ifdef SIGKILL
++  if(value == SIGKILL) return 7;
++#endif
++#ifdef SIGBUS
++  if(value == SIGBUS) return 8;
++#endif
++#ifdef SIGSYS
++  if(value == SIGSYS) return 9;
++#endif
++  return -1;
++}
++#else
++#define OCCT_PORTABLE_SIGNAL(x) x
++static int OCCT_PortableSignal(int value) { return value; }
++#endif
++
+ //=================================================================================================
+ 
+ OSD_SignalMode OSD::SignalMode()
+@@ -316,9 +363,9 @@
+   // lock the mutex to prevent simultaneous handling
+   std::lock_guard<std::mutex> aLock(THE_SIGNAL_MUTEX);
+ 
+-  switch (signum)
+-  {
+-    case SIGFPE:
++  switch (OCCT_PortableSignal(signum))
++  {
++    case OCCT_PORTABLE_SIGNAL(SIGFPE):
+       if (signal(signum, (void (*)(int))SIGWntHandler) == SIG_ERR)
+         std::cout << "signal error" << std::endl;
+       switch (sub_code)
+@@ -349,12 +396,12 @@
+           break;
+       }
+       break;
+-    case SIGSEGV:
++    case OCCT_PORTABLE_SIGNAL(SIGSEGV):
+       if (signal(signum, (void (*)(int))SIGWntHandler) == SIG_ERR)
+         std::cout << "signal error" << std::endl;
+       CallHandler(EXCEPTION_ACCESS_VIOLATION, NULL);
+       break;
+-    case SIGILL:
++    case OCCT_PORTABLE_SIGNAL(SIGILL):
+       if (signal(signum, (void (*)(int))SIGWntHandler) == SIG_ERR)
+         std::cout << "signal error" << std::endl;
+       CallHandler(EXCEPTION_ILLEGAL_INSTRUCTION, NULL);
+@@ -821,48 +868,48 @@
+ 
+   sigset_t set;
+   sigemptyset(&set);
+-  switch (theSignal)
+-  {
+-    case SIGHUP:
++  switch (OCCT_PortableSignal(theSignal))
++  {
++    case OCCT_PORTABLE_SIGNAL(SIGHUP):
+       Standard_ErrorHandler::Abort(OSD_SIGHUP("SIGHUP 'hangup' detected."));
+       exit(SIGHUP);
+       break;
+-    case SIGINT:
++    case OCCT_PORTABLE_SIGNAL(SIGINT):
+       // For safe handling of Control-C as stop event, arm a variable but do not
+       // generate longjump (we are out of context anyway)
+       fCtrlBrk = true;
+       // Standard_ErrorHandler::Abort(OSD_SIGINT("SIGINT 'interrupt' detected."));
+       // exit(SIGINT);
+       break;
+-    case SIGQUIT:
++    case OCCT_PORTABLE_SIGNAL(SIGQUIT):
+       Standard_ErrorHandler::Abort(OSD_SIGQUIT("SIGQUIT 'quit' detected."));
+       exit(SIGQUIT);
+       break;
+-    case SIGILL:
++    case OCCT_PORTABLE_SIGNAL(SIGILL):
+       Standard_ErrorHandler::Abort(OSD_SIGILL("SIGILL 'illegal instruction' detected."));
+       exit(SIGILL);
+       break;
+-    case SIGKILL:
++    case OCCT_PORTABLE_SIGNAL(SIGKILL):
+       Standard_ErrorHandler::Abort(OSD_SIGKILL("SIGKILL 'kill' detected."));
+       exit(SIGKILL);
+       break;
+-    case SIGBUS:
++    case OCCT_PORTABLE_SIGNAL(SIGBUS):
+       sigaddset(&set, SIGBUS);
+       sigprocmask(SIG_UNBLOCK, &set, nullptr);
+       Standard_ErrorHandler::Abort(OSD_SIGBUS("SIGBUS 'bus error' detected."));
+       exit(SIGBUS);
+       break;
+-    case SIGSEGV:
++    case OCCT_PORTABLE_SIGNAL(SIGSEGV):
+       Standard_ErrorHandler::Abort(OSD_SIGSEGV("SIGSEGV 'segmentation violation' detected."));
+       exit(SIGSEGV);
+       break;
+   #ifdef SIGSYS
+-    case SIGSYS:
++    case OCCT_PORTABLE_SIGNAL(SIGSYS):
+       Standard_ErrorHandler::Abort(OSD_SIGSYS("SIGSYS 'bad argument to system call' detected."));
+       exit(SIGSYS);
+       break;
+   #endif
+-    case SIGFPE:
++    case OCCT_PORTABLE_SIGNAL(SIGFPE):
+       sigaddset(&set, SIGFPE);
+       sigprocmask(SIG_UNBLOCK, &set, nullptr);
+   #ifdef __linux__
+--- a/src/FoundationClasses/TKernel/Standard/Standard_StackTrace.cxx
++++ b/src/FoundationClasses/TKernel/Standard/Standard_StackTrace.cxx
+@@ -28,7 +28,7 @@
+   #include <emscripten/emscripten.h>
+ #elif defined(__ANDROID__)
+ // #include <unwind.h>
+-#elif defined(__QNX__)
++#elif (defined(__QNX__) || defined(__COSMOPOLITAN__))
+ // #include <backtrace.h> // requires linking to libbacktrace
+ #elif !defined(_WIN32) && !(defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE)
+   #include <execinfo.h>
+@@ -202,7 +202,7 @@
+ #elif defined(__ANDROID__)
+   Message::SendTrace("Standard::StackTrace() is not implemented for this platform");
+   return false;
+-#elif defined(__QNX__)
++#elif (defined(__QNX__) || defined(__COSMOPOLITAN__))
+   // bt_get_backtrace()
+   Message::SendTrace("Standard::StackTrace() is not implemented for this platform");
+   return false;
+--- a/src/FoundationClasses/TKernel/NCollection/NCollection_IncAllocator.cxx
++++ b/src/FoundationClasses/TKernel/NCollection/NCollection_IncAllocator.cxx
+@@ -14,6 +14,7 @@
+ #include <NCollection_IncAllocator.hxx>
+ 
+ #include <Standard_OutOfMemory.hxx>
++#include <mutex>
+ 
+ #include <cmath>
+ 
+--- a/src/Visualization/TKService/Aspect/Aspect_VKeySet.cxx
++++ b/src/Visualization/TKService/Aspect/Aspect_VKeySet.cxx
+@@ -12,6 +12,7 @@
+ // commercial license or contractual agreement.
+ 
+ #include "Aspect_VKeySet.hxx"
++#include <mutex>
+ 
+ IMPLEMENT_STANDARD_RTTIEXT(Aspect_VKeySet, Standard_Transient)
+ 

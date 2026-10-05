@@ -46,13 +46,9 @@
           buildInputs = with pkgs; [
             just
             nodejs_24
-            podman
-
-            # Rust toolchain (codegen + crate linting)
-            cargo
-            rustc
-            rustfmt
-            clippy
+            cmake
+            ninja
+            ccache
 
             # C++ formatting
             clang-tools
