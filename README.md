@@ -66,6 +66,7 @@ See [docs/EXAMPLE_PROMPTS.md](docs/EXAMPLE_PROMPTS.md) for more.
 ## Requirements
 
 - Node.js 24+
+- Supported platforms: Linux x64, macOS x64/arm64, and Windows x64
 - STEP files (export from SolidWorks, FreeCAD, Fusion 360, CATIA, or any CAD system)
 
 ## License

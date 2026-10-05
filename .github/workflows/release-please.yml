@@ -7,8 +7,25 @@ on:
 permissions:
   contents: read
 
+# Serialize main-branch release processing; never cancel an active publish.
+concurrency:
+  group: release-please-main
+  cancel-in-progress: false
+
 jobs:
+  warm-sidecar-cache:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Restore or build Cosmopolitan payload
+        uses: ./.github/actions/cosmopolitan-payload
+        with:
+          cache-key: ${{ runner.os }}-cosmo-payload-v1-${{ hashFiles('occt/**', 'CMakeLists.txt', 'cmake/**', 'vendor/**', 'scripts/patch_occt.py', '.github/actions/cosmopolitan-payload/action.yml') }}
+
   release-please:
+    needs: warm-sidecar-cache
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -17,9 +34,15 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
     steps:
+      - uses: actions/checkout@v7
+
+      - name: Restore or build Cosmopolitan payload
+        uses: ./.github/actions/cosmopolitan-payload
+        with:
+          cache-key: ${{ runner.os }}-cosmo-payload-v1-${{ hashFiles('occt/**', 'CMakeLists.txt', 'cmake/**', 'vendor/**', 'scripts/patch_occt.py', '.github/actions/cosmopolitan-payload/action.yml') }}
+
       # RELEASE_PLEASE_TOKEN is a classic PAT with contents:write and
-      # pull_requests:write scopes.  Needed so release-please PRs trigger
-      # normal CI (GITHUB_TOKEN cannot trigger downstream workflows by design).
+      # pull_requests:write scopes. Needed so release-please PRs trigger CI.
       - uses: googleapis/release-please-action@v5
         id: release
         with:
@@ -35,51 +58,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Restore built Cosmopolitan payload
-        id: cosmo-payload-cache
-        uses: actions/cache/restore@v4
+      - name: Restore or build Cosmopolitan payload
+        uses: ./.github/actions/cosmopolitan-payload
         with:
-          path: cosmo-payload.tar.gz
-          key: ${{ runner.os }}-cosmo-payload-v1-${{ hashFiles('occt/**', 'CMakeLists.txt', 'cmake/**', 'vendor/**', 'scripts/patch_occt.py') }}
+          cache-key: ${{ runner.os }}-cosmo-payload-v1-${{ hashFiles('occt/**', 'CMakeLists.txt', 'cmake/**', 'vendor/**', 'scripts/patch_occt.py', '.github/actions/cosmopolitan-payload/action.yml') }}
 
-      - name: Install native build tools
-        if: steps.cosmo-payload-cache.outputs.cache-hit != 'true'
-        run: sudo apt-get update && sudo apt-get install -y ccache cmake ninja-build g++ python3
-
-      - name: Cache sidecar compiler outputs
-        if: steps.cosmo-payload-cache.outputs.cache-hit != 'true'
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ccache
-          key: cosmo-${{ runner.os }}-${{ hashFiles('occt/sidecar/**') }}
-          restore-keys: cosmo-${{ runner.os }}-
-
-      - name: Build Cosmopolitan sidecar
-        if: steps.cosmo-payload-cache.outputs.cache-hit != 'true'
-        run: python3 occt/sidecar/scripts/build.py cosmo --jobs 2 --work occt/sidecar/build-work
-
-      - name: Prepare Cosmopolitan payload
-        if: steps.cosmo-payload-cache.outputs.cache-hit != 'true'
-        run: |
-          bin=sidecar-payload/bin
-          mkdir -p "$bin"
-          cp occt/sidecar/build-work/cosmo/occt-sidecar "$bin/occt-sidecar.exe"
-          cp occt/sidecar/build-work/cosmocc/bin/ape-m1.c "$bin/ape-m1.c"
-          for launcher in ape-x86_64.elf ape-aarch64.elf ape-x86_64.macho; do
-            source=$(find occt/sidecar/build-work/cosmocc -type f -name "$launcher" -print -quit)
-            test -n "$source" || { echo "Missing Cosmopolitan launcher: $launcher"; exit 1; }
-            cp "$source" "$bin/$launcher"
-          done
-          tar -czf cosmo-payload.tar.gz -C sidecar-payload .
-
-      - name: Cache built Cosmopolitan payload
-        if: steps.cosmo-payload-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: cosmo-payload.tar.gz
-          key: ${{ steps.cosmo-payload-cache.outputs.cache-primary-key }}
-
-      - uses: actions/upload-artifact@v4
+      - name: Upload release sidecar payload
+        uses: actions/upload-artifact@v4
         with:
           name: release-cosmo-payload
           path: cosmo-payload.tar.gz
@@ -111,7 +96,7 @@ jobs:
           retention-days: 30
 
   publish:
-    needs: [release-please, build-sidecar, build-macos-arm-launcher]
+    needs: [release-please, build-macos-arm-launcher]
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
     runs-on: ubuntu-latest
     permissions:

@@ -103,11 +103,11 @@ The optional viewer artifact API is embedded in the MCP server with `just dev --
 
 Releases are automated through release-please and npm trusted publishing. Do not manually bump versions, edit changelog entries, or run `npm publish` for normal releases.
 
-1. Merge feature and fix PRs into `main` (CI runs fast checks, registry metadata validation, dependency review, then a Cosmopolitan build and cross-platform MCP smoke tests).
-2. release-please opens or updates a release PR with the version bump and changelog.
+1. PR CI validates changes before merge (fast checks, registry metadata, dependency review, Cosmopolitan build, and cross-platform MCP smoke tests).
+2. On each push to `main`, the trusted release workflow restores or seeds the Cosmopolitan payload cache before release-please opens or updates its release PR.
 3. Release PR CI runs the same cross-platform workflow checks and registry metadata validation.
 4. Review and merge the release PR.
-5. The release workflow creates the GitHub Release, then builds the OCCT sidecar and Apple Silicon launcher in separate jobs, smoke-tests the packed CLI, and publishes to npm and the MCP Registry. Rerun failed publish jobs to recover safely.
+5. Merging the release PR creates the GitHub Release/tag before downstream publication completes. The workflow reuses the cached sidecar, builds the Apple Silicon launcher, smoke-tests the packed CLI, then publishes to npm and the MCP Registry. If a downstream job fails, the GitHub Release/tag may already exist; rerun the failed job after resolving the cause.
 
 **Version rules (automatic, no manual bumps):**
 
@@ -119,9 +119,10 @@ Releases are automated through release-please and npm trusted publishing. Do not
 
 1. **pre-commit** (lint-staged): prettier + oxlint on staged files (~1s)
 2. **pre-push** (husky): `just check` (~30s)
-3. **PR CI** (pull request to main): unit checks + registry metadata + dep-review, followed by one Cosmopolitan sidecar build and packed-server smoke tests on Linux x64, macOS x64/arm64, and Windows x64
-4. **Release PR CI** (release-please PR): same cross-platform checks
-5. **release-please merge**: Cosmopolitan sidecar build + macOS ARM launcher + packed-CLI smoke + npm + MCP Registry publish; failed downstream jobs can be rerun independently.
+3. **PR CI**: unit checks + registry metadata + dep-review, then build the Cosmopolitan sidecar once and smoke-test the packed server on Linux x64, macOS x64/arm64, and Windows x64
+4. **Main push**: restore/build and save the trusted payload cache before release-please runs; later release PR checks can restore it
+5. **Release PR CI**: repeat cross-platform package checks using the main-scoped cached payload
+6. **Release PR merge**: create GitHub Release/tag, reuse cached sidecar, smoke-test and publish to npm/MCP Registry; failed downstream jobs are rerunnable
 
 ## Sidecar Build Notes
 
@@ -140,7 +141,7 @@ Dependabot opens weekly PRs for:
 
 - npm production deps (grouped)
 - npm dev deps (minor + patch only, grouped)
-- GitHub Actions versions (tag-pinned, e.g. `actions/checkout@v5`)
+- GitHub Actions versions (tag-pinned)
 
 Enable auto-merge for Dependabot PRs in repo settings (Settings → Code security and analysis → Dependabot → Enable auto-merge for version updates). Dependabot PRs that pass CI merge themselves.
 
@@ -153,4 +154,4 @@ The npm package (`cad-mcp-server`) should stay minimal. Include only:
 
 Do not include test files, source maps, or development configuration in the package.
 
-The current release metadata limits npm installs to Linux x64 while other advertised runtime targets await cross-platform validation.
+The official runtime support matrix is Linux x64, macOS x64/arm64, and Windows x64. npm's independent `os` and `cpu` allowlists cannot encode that exact matrix, so support is documented here and verified by CI rather than approximated with overly broad package metadata.
