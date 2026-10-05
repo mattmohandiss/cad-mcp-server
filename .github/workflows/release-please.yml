@@ -111,6 +111,7 @@ jobs:
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
 
       - name: Validate MCP registry metadata
         uses: studiomeyer-io/mcp-passport@v0.1.0
@@ -180,23 +181,33 @@ jobs:
           echo 'a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc  '"$archive" | sha256sum --check
           tar xzf "$archive" mcp-publisher
 
-      - name: Authenticate to MCP Registry
-        run: ./mcp-publisher login github-oidc
-
       - name: Publish to MCP Registry
         run: |
           max=5
           for n in $(seq 0 $((max - 1))); do
             if [ "$n" -gt 0 ]; then
-              wait=$((2 ** n * 15))
+              wait=$((2 ** (n - 1) * 15))
               echo "Retry $n/$((max - 1)) in ${wait}s..."
               sleep "$wait"
             fi
             echo "MCP Registry publish attempt $((n + 1))/$max..."
-            if ./mcp-publisher publish; then
+            ./mcp-publisher login github-oidc
+            if output=$(./mcp-publisher publish 2>&1); then
+              printf '%s\n' "$output"
               echo "MCP Registry publish succeeded"
               exit 0
+            else
+              status=$?
             fi
+
+            printf '%s\n' "$output"
+            if [[ "$output" == *"was not found"* || "$output" == *"server returned status 429"* || "$output" == *"server returned status 5"* ]]; then
+              echo "Publish failed with a retryable registry error (exit $status)."
+              continue
+            fi
+
+            echo "Publish failed with a non-retryable error (exit $status)."
+            exit "$status"
           done
           echo "MCP Registry publish failed after $max attempts"
           exit 1
