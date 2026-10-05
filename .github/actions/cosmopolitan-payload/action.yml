@@ -2,7 +2,7 @@ name: Restore or build Cosmopolitan payload
 description: Restore an exact-key sidecar payload cache or build and save it on a miss
 inputs:
   cache-key:
-    description: Exact cache key derived from all sidecar build inputs
+    description: Exact key from build and packaging inputs
     required: true
 runs:
   using: composite
@@ -29,8 +29,10 @@ runs:
       uses: actions/cache@v6.1.0
       with:
         path: ~/.cache/ccache
-        key: cosmo-${{ runner.os }}-${{ hashFiles('occt/sidecar/**') }}
-        restore-keys: cosmo-${{ runner.os }}-
+        key: cosmo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('occt/sidecar/CMakeLists.txt', 'occt/sidecar/cpp/**', 'occt/sidecar/cmake/**', 'occt/sidecar/scripts/build.py', 'occt/sidecar/scripts/patch_occt.py') }}
+        restore-keys: |
+          cosmo-${{ runner.os }}-${{ runner.arch }}-
+          cosmo-${{ runner.os }}-
 
     - name: Build Cosmopolitan sidecar
       if: steps.payload-cache.outputs.cache-hit != 'true'
@@ -40,17 +42,7 @@ runs:
     - name: Prepare Cosmopolitan payload
       if: steps.payload-cache.outputs.cache-hit != 'true'
       shell: bash
-      run: |
-        bin=sidecar-payload/bin
-        mkdir -p "$bin"
-        cp occt/sidecar/build-work/cosmo/occt-sidecar "$bin/occt-sidecar.exe"
-        cp occt/sidecar/build-work/cosmocc/bin/ape-m1.c "$bin/ape-m1.c"
-        for launcher in ape-x86_64.elf ape-aarch64.elf ape-x86_64.macho; do
-          source=$(find occt/sidecar/build-work/cosmocc -type f -name "$launcher" -print -quit)
-          test -n "$source" || { echo "Missing Cosmopolitan launcher: $launcher"; exit 1; }
-          cp "$source" "$bin/$launcher"
-        done
-        tar -czf cosmo-payload.tar.gz -C sidecar-payload .
+      run: python3 occt/sidecar/scripts/package_cosmopolitan_payload.py --work occt/sidecar/build-work --output cosmo-payload.tar.gz
 
     - name: Cache built Cosmopolitan payload
       if: steps.payload-cache.outputs.cache-hit != 'true'

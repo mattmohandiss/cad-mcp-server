@@ -127,6 +127,8 @@ Releases are automated through release-please and npm trusted publishing. Do not
 ## Sidecar Build Notes
 
 - `occt/sidecar/scripts/build.py` builds against pinned OCCT 8.0.1 and Cosmopolitan inputs.
+- The sidecar payload cache hashes `occt/sidecar/**`, including the payload packaging script; ccache is the fallback when the finished-payload cache misses.
+- `package_cosmopolitan_payload.py` assembles the cacheable runtime payload; the macOS ARM launcher is built separately from that payload.
 - Sidecar build outputs under `occt/sidecar/build*` are generated artifacts — do not commit.
 
 ## Trusted Publishing
