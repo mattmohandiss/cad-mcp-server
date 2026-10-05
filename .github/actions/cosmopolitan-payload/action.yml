@@ -9,7 +9,7 @@ runs:
   steps:
     - name: Restore built Cosmopolitan payload
       id: payload-cache
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v6
       with:
         path: cosmo-payload.tar.gz
         key: ${{ inputs.cache-key }}
@@ -26,7 +26,7 @@ runs:
 
     - name: Cache sidecar compiler outputs
       if: steps.payload-cache.outputs.cache-hit != 'true'
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~/.cache/ccache
         key: cosmo-${{ runner.os }}-${{ hashFiles('occt/sidecar/**') }}
@@ -54,7 +54,7 @@ runs:
 
     - name: Cache built Cosmopolitan payload
       if: steps.payload-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v6
       with:
         path: cosmo-payload.tar.gz
         key: ${{ inputs.cache-key }}
