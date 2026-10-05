@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/mattmohandiss/cad-mcp-server/compare/cad-mcp-server-v0.7.0...cad-mcp-server-v0.7.1) (2026-10-05)
+
+
+### Bug Fixes
+
+* refresh MCP registry auth on publish retries ([d1cf574](https://github.com/mattmohandiss/cad-mcp-server/commit/d1cf5748cdc9cf87b8342e40ba2e906f2e6a95fa))
+
 ## [0.7.0](https://github.com/mattmohandiss/cad-mcp-server/compare/cad-mcp-server-v0.6.1...cad-mcp-server-v0.7.0) (2026-10-05)
 
 
