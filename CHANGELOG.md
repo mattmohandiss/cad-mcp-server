@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.0](https://github.com/mattmohandiss/cad-mcp-server/compare/cad-mcp-server-v0.6.1...cad-mcp-server-v0.7.0) (2026-10-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* replace WASM kernel with Cosmopolitan sidecar ([#52](https://github.com/mattmohandiss/cad-mcp-server/issues/52))
+
+### Features
+
+* officially support major desktop platforms ([#56](https://github.com/mattmohandiss/cad-mcp-server/issues/56)) ([b33e096](https://github.com/mattmohandiss/cad-mcp-server/commit/b33e096f30493255c015a35785092c7a3f09805d))
+* replace WASM kernel with Cosmopolitan sidecar ([#52](https://github.com/mattmohandiss/cad-mcp-server/issues/52)) ([724c716](https://github.com/mattmohandiss/cad-mcp-server/commit/724c71652f2c4bb48cd298d03f7568c73c7be4bd))
+
 ## [0.6.1](https://github.com/mattmohandiss/cad-mcp-server/compare/cad-mcp-server-v0.6.0...cad-mcp-server-v0.6.1) (2026-07-08)
 
 
