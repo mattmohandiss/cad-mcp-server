@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: 'npm'
@@ -49,7 +49,7 @@ jobs:
 
       - name: Restore built Cosmopolitan payload
         id: cosmo-payload-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: cosmo-payload.tar.gz
           key: ${{ runner.os }}-cosmo-payload-v1-${{ hashFiles('occt/**', 'CMakeLists.txt', 'cmake/**', 'vendor/**', 'scripts/patch_occt.py') }}
@@ -60,7 +60,7 @@ jobs:
 
       - name: Cache sidecar compiler outputs
         if: steps.cosmo-payload-cache.outputs.cache-hit != 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ccache
           key: cosmo-${{ runner.os }}-${{ hashFiles('occt/sidecar/**') }}
@@ -86,12 +86,12 @@ jobs:
 
       - name: Cache built Cosmopolitan payload
         if: steps.cosmo-payload-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: cosmo-payload.tar.gz
           key: ${{ steps.cosmo-payload-cache.outputs.cache-primary-key }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cosmo-payload
           path: cosmo-payload.tar.gz
@@ -102,7 +102,7 @@ jobs:
     needs: build-sidecar
     runs-on: macos-15
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: cosmo-payload
           path: payload
@@ -114,7 +114,7 @@ jobs:
           cc -O -o ape-aarch64.macho sidecar-payload/bin/ape-m1.c
           tar -czf ape-macos-arm64.tar.gz -C . ape-aarch64.macho
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ape-macos-arm64
           path: ape-macos-arm64.tar.gz
@@ -127,7 +127,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: 'npm'
@@ -135,12 +135,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: cosmo-payload
           path: payload
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: ape-macos-arm64
           path: payload
@@ -167,7 +167,7 @@ jobs:
           npm pack --pack-destination "$RUNNER_TEMP" --json > "$RUNNER_TEMP/pack.json"
           node -e "const fs=require('node:fs');const p=JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP+'/pack.json','utf8'))[0].filename;fs.copyFileSync(process.env.RUNNER_TEMP+'/'+p,'package.tgz')"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: packed-cad-mcp
           path: package.tgz
@@ -194,7 +194,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: 'npm'
@@ -202,7 +202,7 @@ jobs:
       - name: Install smoke-test client
         run: npm ci --force
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: packed-cad-mcp
           path: package
