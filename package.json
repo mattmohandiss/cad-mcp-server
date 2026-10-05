@@ -29,12 +29,6 @@
   "engines": {
     "node": ">=24"
   },
-  "cpu": [
-    "x64"
-  ],
-  "os": [
-    "linux"
-  ],
   "preferUnplugged": true,
   "scripts": {
     "build": "rm -rf dist && tsc",
