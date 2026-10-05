@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -42,7 +42,7 @@ jobs:
 
   build-sidecar:
     needs: check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v7
@@ -63,6 +63,8 @@ jobs:
     needs: build-sidecar
     runs-on: macos-15
     steps:
+      - uses: actions/checkout@v7
+
       - uses: actions/download-artifact@v8
         with:
           name: cosmo-payload
@@ -84,7 +86,7 @@ jobs:
 
   pack-server:
     needs: [build-sidecar, build-macos-arm-launcher]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 
@@ -143,7 +145,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             target: linux-x64
           - os: macos-15-intel
             target: macos-x64
@@ -184,7 +186,7 @@ jobs:
   # Catches typosquatted packages, known-bad transitive deps, etc.
   dependency-review:
     if: ${{ !startsWith(github.head_ref, 'release-please--') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/dependency-review-action@v5
