@@ -1,4 +1,5 @@
-export type AnalysisErrorType = 'file_not_found' | 'invalid_format' | 'invalid_input' | 'unknown';
+export type AnalysisErrorType =
+  'file_not_found' | 'invalid_format' | 'invalid_input' | 'stale_reference' | 'unknown';
 
 export interface AnalysisError {
   type: AnalysisErrorType;

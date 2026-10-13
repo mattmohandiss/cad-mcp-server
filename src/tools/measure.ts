@@ -1,7 +1,15 @@
 import { z } from 'zod';
 import { runTool } from '../tool-helper.js';
 import { sidecarModels } from '../sidecar/models.js';
-import { directionModeSchema, entityId, filePath, point3, shapeEntityId } from '../tool-schemas.js';
+import { directionModeSchema, entityId, point3, shapeEntityId } from '../tool-schemas.js';
+import {
+  artifactPath,
+  artifactReference,
+  artifactReferenceSchema,
+  ENTITY_ID_SCHEME,
+  STEP_MODEL_FRAME,
+  subjectReference,
+} from '../domain/artifact-reference.js';
 import { parseEntityId } from '../utils/ids.js';
 
 export const MEASURE_KINDS = [
@@ -17,7 +25,7 @@ export const MEASURE_KINDS = [
 
 export const schema = z
   .object({
-    file_path: filePath,
+    artifact: artifactReferenceSchema,
     kind: z.enum(MEASURE_KINDS),
     sources: z.array(shapeEntityId).min(1).max(1000).optional(),
     targets: z.array(shapeEntityId).min(1).max(1000).optional(),
@@ -187,25 +195,37 @@ export const schema = z
     }
   });
 
+const exampleArtifact = {
+  revision: `sha256:${'0'.repeat(64)}`,
+  uri: 'file:///work/model.step',
+  format: 'step' as const,
+  units: 'mm' as const,
+};
+
 export const examples = [
   {
-    file_path: 'model.step',
+    artifact: exampleArtifact,
     kind: 'distance',
     sources: ['face:2'],
     targets: ['face:5'],
     summary: 'minimum',
   },
-  { file_path: 'model.step', kind: 'thickness', entity_ids: ['face:6'], direction_mode: 'normal' },
-  { file_path: 'model.step', kind: 'draft', entity_ids: ['face:1'], pull_direction: [0, 0, 1] },
   {
-    file_path: 'model.step',
+    artifact: exampleArtifact,
+    kind: 'thickness',
+    entity_ids: ['face:6'],
+    direction_mode: 'normal',
+  },
+  { artifact: exampleArtifact, kind: 'draft', entity_ids: ['face:1'], pull_direction: [0, 0, 1] },
+  {
+    artifact: exampleArtifact,
     kind: 'ray_grid',
     entity_ids: ['face:6'],
     direction_mode: 'normal',
     spacing_mm: 2,
   },
   {
-    file_path: 'model.step',
+    artifact: exampleArtifact,
     kind: 'section',
     entity_ids: ['body:0'],
     plane_origin: [0, 0, 0],
@@ -215,62 +235,80 @@ export const examples = [
 
 export async function handler(args: z.output<typeof schema>) {
   return runTool(() =>
-    sidecarModels.withModel(args.file_path, async (client, modelId, filePath) => {
-      if (args.kind === 'distance') {
-        const { result } = await client.request<{
-          pair_count: number;
-          pairs: Array<{ source_entity_id: string; target_entity_id: string; distance: number }>;
-          minimum: { source_entity_id: string; target_entity_id: string; distance: number } | null;
-        }>('measureEntityDistances', {
-          modelId,
-          sources: args.sources,
-          targets: args.targets,
-          summary: args.summary,
-        });
+    sidecarModels.withModel(
+      artifactPath(args.artifact.uri),
+      async (client, modelId, filePath, revision) => {
+        if (args.kind === 'distance') {
+          const { result } = await client.request<{
+            pair_count: number;
+            pairs: Array<{ source_entity_id: string; target_entity_id: string; distance: number }>;
+            minimum: {
+              source_entity_id: string;
+              target_entity_id: string;
+              distance: number;
+            } | null;
+          }>('measureEntityDistances', {
+            modelId,
+            sources: args.sources,
+            targets: args.targets,
+            summary: args.summary,
+          });
+          return {
+            artifact: artifactReference(filePath, revision),
+            entity_id_scheme: ENTITY_ID_SCHEME,
+            coordinate_frame: STEP_MODEL_FRAME,
+            subjects: [...(args.sources ?? []), ...(args.targets ?? [])].map((id) =>
+              subjectReference(artifactReference(filePath, revision), id),
+            ),
+            kind: args.kind,
+            units: { length: 'mm' },
+            pair_count: result.pair_count,
+            min_distance: result.minimum?.distance,
+            closest_source: result.minimum?.source_entity_id,
+            closest_target: result.minimum?.target_entity_id,
+            pairs: result.pairs,
+          };
+        }
+        const { result } = await client.request<{ results: Array<Record<string, unknown>> }>(
+          'measureGeometry',
+          {
+            modelId,
+            kind: args.kind,
+            entityIds: args.entity_ids,
+            direction: args.kind === 'draft' ? args.pull_direction : args.direction,
+            directionMode:
+              args.kind === 'draft'
+                ? args.pull_direction_mode
+                : args.kind === 'thickness' && args.direction_mode === 'normal'
+                  ? 'inward_normal'
+                  : args.direction_mode,
+            origin: args.origin,
+            originMode: args.origin_mode,
+            bidirectional: args.bidirectional,
+            spacingMm: args.spacing_mm,
+            maxDistance: args.max_distance,
+            points: args.points,
+            checks: args.checks,
+            tolerance: args.tolerance,
+            planeOrigin: args.plane_origin,
+            planeNormal: args.plane_normal,
+            detail: args.detail,
+          },
+        );
         return {
-          file_path: filePath,
+          artifact: artifactReference(filePath, revision),
+          entity_id_scheme: ENTITY_ID_SCHEME,
+          coordinate_frame: STEP_MODEL_FRAME,
+          subjects: (args.entity_ids ?? []).map((id) =>
+            subjectReference(artifactReference(filePath, revision), id),
+          ),
           kind: args.kind,
-          units: { length: 'mm' },
-          pair_count: result.pair_count,
-          min_distance: result.minimum?.distance,
-          closest_source: result.minimum?.source_entity_id,
-          closest_target: result.minimum?.target_entity_id,
-          pairs: result.pairs,
+          units: { length: 'mm', angle: 'deg', curvature: 'mm-1' },
+          entity_count: args.entity_ids?.length ?? 0,
+          results: result.results,
         };
-      }
-      const { result } = await client.request<{ results: Array<Record<string, unknown>> }>(
-        'measureGeometry',
-        {
-          modelId,
-          kind: args.kind,
-          entityIds: args.entity_ids,
-          direction: args.kind === 'draft' ? args.pull_direction : args.direction,
-          directionMode:
-            args.kind === 'draft'
-              ? args.pull_direction_mode
-              : args.kind === 'thickness' && args.direction_mode === 'normal'
-                ? 'inward_normal'
-                : args.direction_mode,
-          origin: args.origin,
-          originMode: args.origin_mode,
-          bidirectional: args.bidirectional,
-          spacingMm: args.spacing_mm,
-          maxDistance: args.max_distance,
-          points: args.points,
-          checks: args.checks,
-          tolerance: args.tolerance,
-          planeOrigin: args.plane_origin,
-          planeNormal: args.plane_normal,
-          detail: args.detail,
-        },
-      );
-      return {
-        file_path: filePath,
-        kind: args.kind,
-        units: { length: 'mm', angle: 'deg', curvature: '1/mm' },
-        entity_count: args.entity_ids?.length ?? 0,
-        results: result.results,
-      };
-    }),
+      },
+      args.artifact.revision,
+    ),
   );
 }

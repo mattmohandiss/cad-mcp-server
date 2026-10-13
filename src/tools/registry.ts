@@ -9,7 +9,7 @@ export const TOOL_REGISTRY = [
     name: 'inspect',
     title: 'Inspect Model Overview',
     description:
-      'Get dimensions, bounding box, volume, surface area, solid/face/edge counts, and B-rep validity for a STEP model. Call this first to ground follow-up queries. ' +
+      'Inspect a local STEP artifact by URI. Returns its content revision with dimensions, counts, and B-rep validity. Call this first; use the returned artifact reference for entity searches and measurements. ' +
       'Use include to request only size, counts, and/or health sections.',
     purpose: 'Overview: dimensions, counts, and B-rep validity.',
     schema: inspectTool.schema,
@@ -21,7 +21,7 @@ export const TOOL_REGISTRY = [
     name: 'find_entities',
     title: 'Find Model Entities',
     description:
-      'Find faces, edges, vertices, or solid bodies, optionally scoped to an assembly component_name from inspect.component_occurrences. ' +
+      'Find faces, edges, vertices, or solid bodies in the revision-bound artifact returned by inspect, optionally scoped to an assembly component_name. ' +
       'Faces support surface type, area, and radius filters; edges support curve type, length, and radius. Vertices return coordinates and bodies return volume. ' +
       'Occurrence IDs distinguish repeated component instances; copy returned IDs into measure sources/targets.',
     purpose: 'Find whole-model or occurrence-scoped entities for measurement.',
@@ -34,7 +34,7 @@ export const TOOL_REGISTRY = [
     name: 'measure',
     title: 'Measure Geometry',
     description:
-      'Measure distance, wall thickness, draft, rays/ray grids, point geometry, planar sections, or edge continuity. Use find_entities first to obtain model-local IDs. ' +
+      'Measure distance, wall thickness, draft, rays/ray grids, point geometry, planar sections, or edge continuity. Use the artifact reference and entity IDs from the same find_entities result. ' +
       'Returns geometric measurements only, not engineering acceptance or design recommendations. Requests are bounded; geometry and OCCT handles remain in the sidecar.',
     purpose: 'Distance, thickness, draft, ray, point, section, and continuity measurements.',
     schema: measureTool.schema,
@@ -46,7 +46,7 @@ export const TOOL_REGISTRY = [
     name: 'diff',
     title: 'Compare Step Versions',
     description:
-      'Compare two STEP files. Returns geometry deltas and parsed document facts: schema, product names/count, assembly flag, authoring system, and organization. ' +
+      'Compare baseline and candidate STEP artifact URIs. Returns both content revisions, geometry deltas, and parsed document facts: schema, product names/count, assembly flag, authoring system, and organization. ' +
       'These are file-level facts; they do not explain design intent.',
     purpose: 'Compare geometric measurements and STEP document metadata.',
     schema: diffTool.schema,

@@ -28,7 +28,7 @@ const CAD_CAPABILITY_MANIFEST = {
   workflows: ['inspect', 'find_entities', 'measure', 'diff'],
   subjects: ['geometry', 'assembly'],
   resultKinds: ['facts', 'comparison'],
-  requiredInputs: ['file_path'],
+  requiredInputs: ['uri'],
   sideEffects: [],
   dataHandling: { processing: 'local' },
   // This server is read-only and understands geometry only. The companion

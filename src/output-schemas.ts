@@ -1,7 +1,16 @@
 import { z } from 'zod';
+import { artifactReferenceSchema, subjectReferenceSchema } from './domain/artifact-reference.js';
 
 const record = z.record(z.string(), z.unknown());
 const vector3 = z.array(z.number()).length(3);
+const entityIdScheme = z.object({ authority: z.string(), idScheme: z.string() });
+const coordinateFrame = z.object({
+  id: z.string(),
+  origin: vector3,
+  axes: z.array(vector3).length(3),
+  handedness: z.string(),
+  units: z.string(),
+});
 
 const pagination = z.object({
   limit: z.number(),
@@ -23,14 +32,15 @@ const group = z.object({
 
 export const inspect = z
   .object({
-    file_path: z.string(),
+    artifact: artifactReferenceSchema,
+    coordinate_frame: coordinateFrame,
     size: z
       .object({
         bounding_box: z.object({ min: vector3, max: vector3 }),
         dimensions: z.object({ width: z.number(), height: z.number(), depth: z.number() }),
         volume: z.number(),
         surface_area: z.number(),
-        units: z.string(),
+        units: z.object({ length: z.string(), area: z.string(), volume: z.string() }),
       })
       .optional(),
     structure: z
@@ -53,52 +63,46 @@ export const inspect = z
   })
   .passthrough();
 
-export const modelReference = z.object({
-  source: z.string(),
-  revision: z.string(),
-  units: z.string().optional(),
-});
-
 export const query = z.object({
-  file_path: z.string(),
+  artifact: artifactReferenceSchema,
+  entity_id_scheme: entityIdScheme,
+  coordinate_frame: coordinateFrame,
   units: z.object({
     length: z.string(),
     area: z.string(),
     volume: z.string(),
     angle: z.string(),
   }),
-  coordinate_system: z.object({
-    origin: z.string(),
-    axes: z.string(),
-    handedness: z.string(),
-  }),
   query: record,
   statistics: record,
   pagination,
   entities: z.array(record),
   groups: z.array(group),
-  model_reference: modelReference.optional(),
 });
 
 export const distance = z.object({
-  file_path: z.string(),
-  sources: z.array(z.string()),
-  targets: z.array(z.string()),
+  artifact: artifactReferenceSchema,
+  entity_id_scheme: entityIdScheme,
+  coordinate_frame: coordinateFrame,
+  subjects: z.array(subjectReferenceSchema),
   pair_count: z.number(),
   summary: record.optional(),
   pairs: z.array(record).optional(),
 });
 
-// Unified measure tool output. Kind-specific fields are dynamic, so keep it permissive.
 export const measure = z
   .object({
-    file_path: z.string(),
+    artifact: artifactReferenceSchema,
+    entity_id_scheme: entityIdScheme,
+    coordinate_frame: coordinateFrame,
+    subjects: z.array(subjectReferenceSchema),
     kind: z.string(),
+    units: z.record(z.string(), z.string()),
   })
   .passthrough();
 
 const batchMeasure = z.object({
-  file_path: z.string(),
+  artifact: artifactReferenceSchema,
   faces: z.array(z.string()),
   face_count: z.number(),
   results: z.array(record),
@@ -108,18 +112,18 @@ export const thickness = batchMeasure;
 export const draft = batchMeasure;
 
 export const geometry = z.object({
-  file_path: z.string(),
+  artifact: artifactReferenceSchema,
   measurement_type: z.string(),
   entity_count: z.number(),
   results: z.array(record),
 });
 
 export const diff = z.object({
-  files: z.object({ a: z.string(), b: z.string() }),
+  inputs: z.array(z.object({ role: z.string(), artifact: artifactReferenceSchema })).length(2),
+  units: z.object({ length: z.string(), area: z.string(), volume: z.string() }),
   deltas: record,
   exchange: record.optional(),
   providers: record,
 });
 
-// Kept exported for future schema refinements of dynamic CAD entity fields.
 export { vector3 };

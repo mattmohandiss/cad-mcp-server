@@ -15,7 +15,6 @@
   "files": [
     "dist",
     "!dist/**/*.map",
-    "!dist/eval",
     "!dist/src/tests",
     "!dist/vitest.config.*",
     "README.md",
@@ -39,11 +38,11 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "fmt": "prettier --write src/",
-    "lint": "oxlint src/ eval/",
+    "lint": "oxlint src/",
     "prepare": "husky"
   },
   "lint-staged": {
-    "{src,eval}/**/*.{ts,tsx}": [
+    "src/**/*.{ts,tsx}": [
       "oxlint --fix",
       "prettier --write"
     ],

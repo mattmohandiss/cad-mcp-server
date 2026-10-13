@@ -27,12 +27,12 @@ function buildHelpDocument() {
     description:
       'CAD MCP returns parsed STEP facts and geometric measurements. It does not determine manufacturability, compliance, safety, or design intent. Other MCP servers or the host may provide interpretation workflows.',
     rules: [
-      'Start with inspect for dimensions, bounds, counts, and B-rep validity.',
-      'Use find_entities with entity_type=face, edge, vertex, or body. Set component_name from inspect.structure.component_occurrences. A base name selects all repeated instances; a full occurrence name such as RepeatedPart#0 selects one. Returned IDs distinguish instances, e.g. component:RepeatedPart#0/body:0; pass an exact returned ID to measure. Faces support surface_type/area/radius filters; edges support curve_type/length/radius. Vertices return coordinates; bodies return volume.',
+      'Start with inspect using a file: URI. It returns an artifact reference with a SHA-256 revision.',
+      'Pass the exact artifact reference from inspect to find_entities. Use entity_type=face, edge, vertex, or body. Set component_name from the result component_occurrences. Returned IDs are scoped to that artifact revision and id scheme; copy them exactly.',
       'Use limit/offset for bounded pagination (default limit=100, maximum 1000).',
       'Use measure with one kind: distance, thickness, draft, ray, ray_grid, point_analysis, section, or continuity. Follow that kind’s required parameters in the schema.',
-      'Entity IDs are model-local and occurrence-aware; copy them from find_entities and use them only with the same STEP revision.',
-      'Use diff to compare geometry and parsed STEP schema/product/authoring metadata between revisions.',
+      'Pass the same artifact reference and IDs from find_entities to measure. A changed file revision is rejected as stale instead of reusing old IDs.',
+      'Use diff with baseline and candidate file: URIs; its output identifies both input revisions.',
       'Treat measurements as geometry facts. Apply process limits, tolerances, material data, drawings, and requirements separately before making engineering judgments.',
       'Entity IDs must come from a prior tool result; never invent them.',
       'Omit optional fields entirely. Do not send empty arrays or zero bounds as placeholders.',

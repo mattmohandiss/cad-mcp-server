@@ -38,9 +38,4 @@ samples/**/PDF/
 *.stp
 *.STEP
 
-# LLM eval
-eval/.venv/
-eval/runs/
-eval/scenarios/**/*.step
-eval/scenarios/**/*.db
 *.db
