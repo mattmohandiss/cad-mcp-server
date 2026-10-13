@@ -23,10 +23,10 @@ check: fmt-check lint test
 ci: fmt-check lint sidecar-native-ci test
 
 fmt:
-	npx prettier --write "src/**/*.ts" .oxlintrc.json tsconfig.json vitest.config.ts package.json package-lock.json release-please-config.json server.json "*.md" "docs/**/*.md" ".github/**/*.yml"
+  npx prettier --write "src/**/*.ts" "scripts/**/*.mjs" .oxlintrc.json tsconfig.json vitest.config.ts package.json package-lock.json release-please-config.json server.json "*.md" "docs/**/*.md" ".github/**/*.yml"
 
 fmt-check:
-	npx prettier --check "src/**/*.ts" .oxlintrc.json tsconfig.json vitest.config.ts package.json package-lock.json release-please-config.json server.json "*.md" "docs/**/*.md" ".github/**/*.yml"
+  npx prettier --check "src/**/*.ts" "scripts/**/*.mjs" .oxlintrc.json tsconfig.json vitest.config.ts package.json package-lock.json release-please-config.json server.json "*.md" "docs/**/*.md" ".github/**/*.yml"
 
 sidecar-native:
 	python3 occt/sidecar/scripts/build.py native --jobs 8 --work occt/sidecar/build-work

@@ -128,6 +128,40 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  smoke-packaged:
+    needs: pack-server
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x64
+            runner: ubuntu-24.04
+          - name: macOS ARM64
+            runner: macos-14
+          - name: Windows x64
+            runner: windows-2022
+    name: Packaged runtime (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: packed-cad-mcp
+          path: packed
+
+      - name: Install packed npm artifact
+        run: npm install --prefix smoke --no-save --ignore-scripts ./packed/package.tgz @modelcontextprotocol/client@2.3.1
+
+      - name: Launch packaged sidecar and inspect STEP fixture
+        run: node scripts/smoke-packed-cli.mjs
+
   # Fails the PR if a new dep adds a critical-severity vulnerability.
   # Catches typosquatted packages, known-bad transitive deps, etc.
   dependency-review:

@@ -11,6 +11,8 @@ Use its geometry measurements as evidence alongside drawings, tolerances, materi
 
 ## Quick Start
 
+Platforms: **Windows x64, macOS ARM64 (Apple Silicon), and Linux x64**
+
 ```bash
 npx -y cad-mcp-server
 ```

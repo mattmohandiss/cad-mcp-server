@@ -79,8 +79,10 @@ Npm authentication uses OIDC trusted publishing configured for
 secret used to create release PRs that trigger CI. Never commit token values.
 Dependabot maintains npm and GitHub Actions dependency updates.
 
-The intended runtime platform matrix is Linux x64, macOS x64/arm64, and Windows
-x64. Keep supported-platform claims distinct from the coverage actually executed.
+The runtime target matrix, shared with Simulation MCP, is Windows x64,
+macOS ARM64 (Apple Silicon), and Linux x64. Intel macOS, Linux ARM64, and
+Windows ARM64 are outside the distribution targets. Keep supported-platform
+claims distinct from the coverage actually executed.
 
 ## Distribution
 
