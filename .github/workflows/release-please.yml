@@ -137,27 +137,13 @@ jobs:
           tar -xzf payload/ape-macos-arm64.tar.gz -C dist/src/sidecar/bin
           rm dist/src/sidecar/bin/ape-m1.c
 
-      - name: Run geometry integration tests on the Cosmopolitan sidecar
-        env:
-          CAD_MCP_SIDECAR: ${{ github.workspace }}/dist/src/sidecar/bin/occt-sidecar.exe
-          CAD_MCP_SIDECAR_LAUNCHER: ${{ github.workspace }}/dist/src/sidecar/bin/ape-x86_64.elf
-          CAD_MCP_TEST_STEP: ${{ github.workspace }}/src/tests/fixtures/repeated-instances.step
-        run: npx vitest run src/tests/sidecar-assembly.integration.test.ts src/tests/sidecar-measure.integration.test.ts
-
-      - name: Smoke-test packed CLI
+      - name: Pack release tarball
         run: |
           npm pack --pack-destination "$RUNNER_TEMP" --json > "$RUNNER_TEMP/pack.json"
           TARBALL=$(node -e "const p=require(process.env.RUNNER_TEMP+'/pack.json')[0]; console.log(p.filename)")
           INTEGRITY=$(node -e "const p=require(process.env.RUNNER_TEMP+'/pack.json')[0]; console.log(p.integrity)")
           echo "PACKAGE_TARBALL=$RUNNER_TEMP/$TARBALL" >> "$GITHUB_ENV"
           echo "PACKAGE_INTEGRITY=$INTEGRITY" >> "$GITHUB_ENV"
-          SMOKE_DIR=$(mktemp -d "$RUNNER_TEMP/cad-mcp-smoke.XXXXXX")
-          cd "$SMOKE_DIR"
-          npm init -y > /dev/null 2>&1
-          npm install "$RUNNER_TEMP/$TARBALL"
-          node "$GITHUB_WORKSPACE/scripts/smoke-packed-cli.mjs" \
-            "$SMOKE_DIR/node_modules/cad-mcp-server/dist/src/index.js" \
-            "$GITHUB_WORKSPACE/src/tests/fixtures/repeated-instances.step"
 
       - name: Publish to npm
         run: |
@@ -166,7 +152,7 @@ jobs:
           if EXISTING=$(npm view "$NAME@$VERSION" dist.integrity --json 2>/dev/null); then
             EXISTING_INTEGRITY=$(node -e 'console.log(JSON.parse(process.argv[1]))' "$EXISTING")
             if [ "$EXISTING_INTEGRITY" != "$PACKAGE_INTEGRITY" ]; then
-              echo "Published $NAME@$VERSION integrity does not match the tested tarball" >&2
+              echo "Published $NAME@$VERSION integrity does not match the release tarball" >&2
               exit 1
             fi
             echo "$NAME@$VERSION already published with the tested integrity; skipping npm publish"

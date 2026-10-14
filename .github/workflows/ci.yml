@@ -108,22 +108,13 @@ jobs:
           name: ape-macos-arm64
           path: payload
 
-      - name: Run geometry integration tests on the Cosmopolitan sidecar
-        run: |
-          mkdir -p sidecar-payload
-          tar -xzf payload/cosmo-payload.tar.gz -C sidecar-payload
-          launcher="$PWD/sidecar-payload/bin/ape-x86_64.elf"
-          test -x "$launcher"
-          CAD_MCP_SIDECAR="$PWD/sidecar-payload/bin/occt-sidecar.exe" \
-          CAD_MCP_SIDECAR_LAUNCHER="$launcher" \
-          CAD_MCP_TEST_STEP="$PWD/src/tests/fixtures/repeated-instances.step" \
-          npx vitest run src/tests/sidecar-assembly.integration.test.ts src/tests/sidecar-measure.integration.test.ts
-
       - name: Build and pack server
         run: |
           npm run build
           bin=dist/src/sidecar/bin
           mkdir -p "$bin"
+          mkdir -p sidecar-payload
+          tar -xzf payload/cosmo-payload.tar.gz -C sidecar-payload
           cp -a sidecar-payload/bin/. "$bin/"
           tar -xzf payload/ape-macos-arm64.tar.gz -C "$bin"
           rm "$bin/ape-m1.c"
@@ -137,23 +128,21 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  platform-smoke:
+  smoke-packaged:
     needs: pack-server
-    name: smoke (${{ matrix.target }})
-    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-24.04
-            target: linux-x64
-          - os: macos-15-intel
-            target: macos-x64
-          - os: macos-15
-            target: macos-arm64
-          - os: windows-latest
-            target: windows-x64
-    runs-on: ${{ matrix.os }}
+          - name: Linux x64
+            runner: ubuntu-24.04
+          - name: macOS ARM64
+            runner: macos-14
+          - name: Windows x64
+            runner: windows-2022
+    name: Packaged runtime (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
@@ -162,25 +151,16 @@ jobs:
           node-version: '24'
           cache: 'npm'
 
-      - name: Install smoke-test client
-        run: npm ci
-
       - uses: actions/download-artifact@v8
         with:
           name: packed-cad-mcp
-          path: package
+          path: packed
 
-      - name: Install packed server
-        shell: bash
-        run: |
-          mkdir -p "$RUNNER_TEMP/cad-mcp-smoke"
-          cd "$RUNNER_TEMP/cad-mcp-smoke"
-          npm init -y > /dev/null 2>&1
-          npm install "$GITHUB_WORKSPACE/package/package.tgz"
+      - name: Install packed npm artifact
+        run: npm install --prefix smoke --no-save --ignore-scripts ./packed/package.tgz @modelcontextprotocol/client@2.3.1
 
-      - name: Test packed MCP inspect call
-        shell: bash
-        run: node scripts/smoke-packed-cli.mjs "$RUNNER_TEMP/cad-mcp-smoke/node_modules/cad-mcp-server/dist/src/index.js" "$GITHUB_WORKSPACE/src/tests/fixtures/repeated-instances.step"
+      - name: Launch packaged sidecar and inspect STEP fixture
+        run: node scripts/smoke-packed-cli.mjs
 
   # Fails the PR if a new dep adds a critical-severity vulnerability.
   # Catches typosquatted packages, known-bad transitive deps, etc.

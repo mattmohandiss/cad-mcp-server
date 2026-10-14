@@ -10,14 +10,13 @@
     , flake-utils
     ,
     }:
-    flake-utils.lib.eachDefaultSystem (
+    flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-darwin" ] (
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
 
-        # Libraries that cadquery-ocp (the OCP/wheel) links against and
-        # that NixOS Python can't find via its store rpath. The dev shell
-        # exports these so the repo-local eval venv can import cadquery.
+        # Libraries used by CadQuery/OCP development tooling that NixOS Python
+        # cannot find through the wheel's store rpath.
         cqLibraries = with pkgs; [
           stdenv.cc.cc.lib
           libGL
@@ -53,8 +52,7 @@
             # C++ formatting
             clang-tools
 
-            # Python for OCCT-backed LLM eval STEP generation.
-            # pip-installed via just setup-eval into eval/.venv.
+            # Python 3 for sidecar build and packaging tools.
             python3
           ];
 

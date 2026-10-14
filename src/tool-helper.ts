@@ -4,7 +4,10 @@ function normalizeError(error: unknown): AnalysisError {
   if (typeof error === 'object' && error !== null && 'type' in error && 'message' in error) {
     const raw = error as { type?: unknown; message?: unknown };
     const type: AnalysisErrorType =
-      raw.type === 'file_not_found' || raw.type === 'invalid_format' || raw.type === 'invalid_input'
+      raw.type === 'file_not_found' ||
+      raw.type === 'invalid_format' ||
+      raw.type === 'invalid_input' ||
+      raw.type === 'stale_reference'
         ? raw.type
         : 'unknown';
     return { type, message: String(raw.message ?? '') };

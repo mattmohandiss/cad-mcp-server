@@ -23,7 +23,7 @@ with tempfile.TemporaryDirectory(prefix="cosmo-payload-", dir=work) as temporary
     bin_dir.mkdir()
     shutil.copy2(binary, bin_dir / "occt-sidecar.exe")
     shutil.copy2(toolchain_bin / "ape-m1.c", bin_dir / "ape-m1.c")
-    for name in ("ape-x86_64.elf", "ape-aarch64.elf", "ape-x86_64.macho"):
+    for name in ("ape-x86_64.elf",):
         matches = list((work / "cosmocc").rglob(name))
         if not matches:
             raise SystemExit(f"Missing Cosmopolitan launcher: {name}")

@@ -1,7 +1,13 @@
 import { z } from 'zod';
 import { runTool } from '../tool-helper.js';
 import { sidecarModels } from '../sidecar/models.js';
-import { filePath } from '../tool-schemas.js';
+import {
+  artifactPath,
+  artifactReferenceSchema,
+  artifactReference,
+  ENTITY_ID_SCHEME,
+  STEP_MODEL_FRAME,
+} from '../domain/artifact-reference.js';
 import { CURVE_TYPES, SURFACE_TYPES } from '../tool-defs.js';
 import { parseEntityId } from '../utils/ids.js';
 
@@ -17,7 +23,7 @@ const bodyId = z.string().refine((id) => parseEntityId(id)?.type === 'body');
 export const schema = z.discriminatedUnion('entity_type', [
   z
     .object({
-      file_path: filePath,
+      artifact: artifactReferenceSchema,
       entity_type: z.literal('face'),
       component_name: z.string().min(1).max(256).optional().meta({
         description:
@@ -56,7 +62,7 @@ export const schema = z.discriminatedUnion('entity_type', [
     }),
   z
     .object({
-      file_path: filePath,
+      artifact: artifactReferenceSchema,
       entity_type: z.literal('edge'),
       component_name: z.string().min(1).max(256).optional().meta({
         description:
@@ -95,7 +101,7 @@ export const schema = z.discriminatedUnion('entity_type', [
     }),
   z
     .object({
-      file_path: filePath,
+      artifact: artifactReferenceSchema,
       entity_type: z.literal('vertex'),
       component_name: z.string().min(1).max(256).optional().meta({
         description:
@@ -107,7 +113,7 @@ export const schema = z.discriminatedUnion('entity_type', [
     .strict(),
   z
     .object({
-      file_path: filePath,
+      artifact: artifactReferenceSchema,
       entity_type: z.literal('body'),
       component_name: z.string().min(1).max(256).optional().meta({
         description:
@@ -119,73 +125,80 @@ export const schema = z.discriminatedUnion('entity_type', [
     .strict(),
 ]);
 
+const exampleArtifact = {
+  revision: `sha256:${'0'.repeat(64)}`,
+  uri: 'file:///work/model.step',
+  format: 'step' as const,
+  units: 'mm' as const,
+};
+
 export const examples = [
-  { file_path: 'model.step', entity_type: 'face', surface_type: 'cylinder', min_area: 100 },
-  { file_path: 'model.step', entity_type: 'edge', curve_type: 'circle', min_length: 20 },
-  { file_path: 'model.step', entity_type: 'vertex', limit: 20 },
-  { file_path: 'model.step', entity_type: 'body' },
+  { artifact: exampleArtifact, entity_type: 'face', surface_type: 'cylinder', min_area: 100 },
+  { artifact: exampleArtifact, entity_type: 'edge', curve_type: 'circle', min_length: 20 },
+  { artifact: exampleArtifact, entity_type: 'vertex', limit: 20 },
+  { artifact: exampleArtifact, entity_type: 'body' },
 ];
 
 export async function handler(args: z.output<typeof schema>) {
   return runTool(() =>
-    sidecarModels.withModel(args.file_path, async (client, modelId, filePath) => {
-      const filters =
-        args.entity_type === 'face'
-          ? {
-              surface_type: args.surface_type,
-              min_area: args.min_area,
-              max_area: args.max_area,
-              min_radius: args.min_radius,
-              max_radius: args.max_radius,
-            }
-          : args.entity_type === 'edge'
+    sidecarModels.withModel(
+      artifactPath(args.artifact.uri),
+      async (client, modelId, filePath, revision) => {
+        const filters =
+          args.entity_type === 'face'
             ? {
-                curve_type: args.curve_type,
-                min_length: args.min_length,
-                max_length: args.max_length,
+                surface_type: args.surface_type,
+                min_area: args.min_area,
+                max_area: args.max_area,
                 min_radius: args.min_radius,
                 max_radius: args.max_radius,
               }
-            : {};
-      const { result } = await client.request<{
-        entities: Array<Record<string, unknown>>;
-        total_matched: number;
-      }>('findEntities', {
-        modelId,
-        entityType: args.entity_type,
-        componentName: args.component_name,
-        entityIds: args.entity_ids,
-        filters,
-        limit: args.limit,
-        offset: args.offset,
-      });
-      const { file_path: _file, entity_type, entity_ids, limit, offset, ...where } = args;
-      const compactFilters = Object.fromEntries(
-        Object.entries(where).filter(
-          ([key, value]) => !['limit', 'offset'].includes(key) && value !== undefined,
-        ),
-      );
-      return {
-        file_path: filePath,
-        units: { length: 'mm', area: 'mm^2', volume: 'mm^3', angle: 'deg' },
-        coordinate_system: {
-          origin: 'STEP model origin',
-          axes: 'model coordinates',
-          handedness: 'right',
-        },
-        query: { entity_type, filters: compactFilters, ...(entity_ids ? { entity_ids } : {}) },
-        statistics: { total_entities: result.total_matched },
-        pagination: {
-          limit,
-          offset,
-          returned: result.entities.length,
-          total_matched: result.total_matched,
-          has_more: offset + result.entities.length < result.total_matched,
-        },
-        entities: result.entities,
-        groups: [],
-        model_reference: { source: filePath, revision: 'current', units: 'mm' },
-      };
-    }),
+            : args.entity_type === 'edge'
+              ? {
+                  curve_type: args.curve_type,
+                  min_length: args.min_length,
+                  max_length: args.max_length,
+                  min_radius: args.min_radius,
+                  max_radius: args.max_radius,
+                }
+              : {};
+        const { result } = await client.request<{
+          entities: Array<Record<string, unknown>>;
+          total_matched: number;
+        }>('findEntities', {
+          modelId,
+          entityType: args.entity_type,
+          componentName: args.component_name,
+          entityIds: args.entity_ids,
+          filters,
+          limit: args.limit,
+          offset: args.offset,
+        });
+        const { artifact: _artifact, entity_type, entity_ids, limit, offset, ...where } = args;
+        const compactFilters = Object.fromEntries(
+          Object.entries(where).filter(
+            ([key, value]) => !['limit', 'offset'].includes(key) && value !== undefined,
+          ),
+        );
+        return {
+          artifact: artifactReference(filePath, revision),
+          entity_id_scheme: ENTITY_ID_SCHEME,
+          units: { length: 'mm', area: 'mm2', volume: 'mm3', angle: 'deg' },
+          coordinate_frame: STEP_MODEL_FRAME,
+          query: { entity_type, filters: compactFilters, ...(entity_ids ? { entity_ids } : {}) },
+          statistics: { total_entities: result.total_matched },
+          pagination: {
+            limit,
+            offset,
+            returned: result.entities.length,
+            total_matched: result.total_matched,
+            has_more: offset + result.entities.length < result.total_matched,
+          },
+          entities: result.entities,
+          groups: [],
+        };
+      },
+      args.artifact.revision,
+    ),
   );
 }

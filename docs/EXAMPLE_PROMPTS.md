@@ -4,19 +4,19 @@ These prompts are useful when `cad-mcp` is connected to an MCP host. The server 
 
 ## Model Overview
 
-> Inspect this STEP file and report its dimensions, volume, body/face/edge counts, validity, topology, and available PMI information.
+> Inspect this STEP file and report its bounding-box dimensions, volume, surface area, body count, B-rep validity, and face/edge counts.
 
 ## Face And Edge Discovery
 
-> Find all cylindrical faces and report their radii, areas, axes, and body IDs.
+> Find cylindrical faces in this STEP file and report their IDs, radii, and areas.
 
-> Find the smallest fillet radius and return the affected edge IDs with measurements.
+> Find circular edges with the smallest radius and return their IDs and measured radii.
 
 ## Measurement
 
-> Find the thinnest wall section around these faces and report the measured values in millimeters.
+> Find the faces I identify as the walls around these openings. Then measure thickness on those faces and report the values in millimeters. Do not decide whether the values meet a manufacturing requirement.
 
-> Measure the clearance between these holes and the nearest wall. Return the closest pair and the measured distance.
+> Measure the minimum distance between these selected hole faces and wall faces. Return the closest entity pair and distance in millimeters.
 
 > Measure draft relative to the +Z direction and identify faces with negative draft.
 
@@ -30,7 +30,7 @@ These prompts are useful when `cad-mcp` is connected to an MCP host. The server 
 
 ## Revision Comparison
 
-> Compare these two STEP revisions and report changes in dimensions, volume, surface area, and topology counts.
+> Compare these two STEP revisions. Report changes in overall dimensions, volume, surface area, and body/face/edge counts, plus any parsed STEP metadata differences. Do not infer design intent from the deltas.
 
 ## Host And Domain Composition
 

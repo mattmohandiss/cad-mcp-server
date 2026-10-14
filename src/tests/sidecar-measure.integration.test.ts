@@ -1,11 +1,14 @@
 import { existsSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { fileURLToPath } from 'node:url';
 import { SidecarClient } from '../sidecar/client.js';
 
 const executable = process.env['CAD_MCP_SIDECAR'];
 const launcher = process.env['CAD_MCP_SIDECAR_LAUNCHER'];
-const stepPath = process.env['CAD_MCP_TEST_STEP'];
-const enabled = Boolean(executable && stepPath && existsSync(executable) && existsSync(stepPath));
+const stepPath =
+  process.env['CAD_MCP_TEST_STEP'] ??
+  fileURLToPath(new URL('./fixtures/repeated-instances.step', import.meta.url));
+const enabled = Boolean(executable && existsSync(executable) && existsSync(stepPath));
 
 describe.skipIf(!enabled)('sidecar measurement integration', () => {
   let client: SidecarClient | undefined;
