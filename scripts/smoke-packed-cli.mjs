@@ -18,7 +18,10 @@ delete process.env.OCCT_LAUNCHER;
 
 const { Client } = require('@modelcontextprotocol/client');
 const { StdioClientTransport } = require('@modelcontextprotocol/client/stdio');
-const client = new Client({ name: 'cad-mcp-pack-smoke', version: '1.0.0' });
+const client = new Client(
+  { name: 'cad-mcp-pack-smoke', version: '1.0.0' },
+  { versionNegotiation: { mode: { pin: '2026-07-28' } } },
+);
 const transport = new StdioClientTransport({
   command: process.execPath,
   args: [server],
@@ -27,6 +30,7 @@ const transport = new StdioClientTransport({
 });
 try {
   await client.connect(transport);
+  assert.equal(client.getNegotiatedProtocolVersion(), '2026-07-28');
   const result = await client.callTool({
     name: 'inspect',
     arguments: { uri: pathToFileURL(fixture).href },
