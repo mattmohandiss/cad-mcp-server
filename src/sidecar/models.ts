@@ -20,7 +20,7 @@ type ModelOperation<T> = (
 
 /** One resident model bounds sidecar memory; requests are serialized by the OCCT process. */
 export class SidecarModelStore {
-  private cached?: CachedModel;
+  private cached: CachedModel | undefined;
   private queue: Promise<unknown> = Promise.resolve();
 
   withModel<T>(
@@ -87,7 +87,7 @@ export class SidecarModelStore {
     }
 
     await this.releaseCachedModel(client);
-    const opened = await client.request<{ modelId: number }>('open', { path: filePath }, 600_000);
+    const opened = await client.request('open', { path: filePath }, 600_000);
     if (!Number.isInteger(opened.result.modelId) || opened.result.modelId < 1) {
       throw new Error('OCCT sidecar returned an invalid model handle');
     }

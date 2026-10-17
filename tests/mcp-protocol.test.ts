@@ -10,7 +10,7 @@ it('serves discovery and tools over the modern MCP protocol', async () => {
   );
   const transport = new StdioClientTransport({
     command: process.execPath,
-    args: ['--import', 'tsx', fileURLToPath(new URL('../index.ts', import.meta.url))],
+    args: ['--import', 'tsx', fileURLToPath(new URL('../src/index.ts', import.meta.url))],
     stderr: 'pipe',
   });
   try {

@@ -9,10 +9,10 @@ const { getSidecarClient, stopSidecar, request } = vi.hoisted(() => ({
   request: vi.fn(),
 }));
 
-vi.mock('../sidecar/runtime.js', () => ({ getSidecarClient, stopSidecar }));
+vi.mock('../src/sidecar/runtime.js', () => ({ getSidecarClient, stopSidecar }));
 
-import { SidecarModelStore } from '../sidecar/models.js';
-import { fileRevision } from '../utils/hash.js';
+import { SidecarModelStore } from '../src/sidecar/models.js';
+import { fileRevision } from '../src/utils/hash.js';
 
 describe('artifact revision checks', () => {
   let directory: string | undefined;

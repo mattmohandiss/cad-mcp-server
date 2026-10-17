@@ -8,6 +8,8 @@
   existing Prettier/oxlint conventions.
 - Prefer `just` recipes. Run `just check` for source changes; use `just ci` and
   configured native tests for sidecar-sensitive changes.
+- `.envrc` activates the flake; run `direnv allow` after changing it. Server logs
+  go to stderr as pino JSON; `MCP_LOG_LEVEL` and `MCP_LOG_FORMAT` tune them.
 - Keep tests, fixtures, build inputs, and required documentation server-local.
 - Use conventional commits; do not manually bump release-managed versions,
   edit generated changelog history, or publish outside the release workflow.

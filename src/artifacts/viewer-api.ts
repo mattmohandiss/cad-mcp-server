@@ -4,6 +4,7 @@ import { basename } from 'node:path';
 import { stat } from 'node:fs/promises';
 import type { AddressInfo } from 'node:net';
 import { sidecarModels } from '../sidecar/models.js';
+import type { SidecarEntity, SidecarInspect, Vec3 } from '../sidecar/operations.js';
 
 const FACES_PER_CHUNK = 96;
 const timingEnabled = process.env.CAD_MCP_TIMING === '1';
@@ -19,9 +20,9 @@ type ModelRecord = {
   artifactId: string;
   filePath: string;
   cacheKey: string;
-  summary?: Record<string, any>;
-  faces?: Array<Record<string, any>>;
-  bodies?: Array<Record<string, any>>;
+  summary?: SidecarInspect;
+  faces?: SidecarEntity[];
+  bodies?: SidecarEntity[];
   chunks?: MeshChunkDescriptor[];
 };
 
@@ -190,16 +191,10 @@ async function openModel(filePath: string) {
     const details = { filePath: resolvedPath };
     const [{ result: summary }, { result: faces }, { result: bodies }] = await Promise.all([
       timed('cad_mcp.viewer.open_model.summary', details, () =>
-        client.request<Record<string, any>>('inspect', { modelId }),
+        client.request('inspect', { modelId }),
       ),
-      client.request<{ entities: Array<Record<string, any>>; total_matched: number }>(
-        'findEntities',
-        { modelId, entityType: 'face', limit: 1000, offset: 0 },
-      ),
-      client.request<{ entities: Array<Record<string, any>>; total_matched: number }>(
-        'findEntities',
-        { modelId, entityType: 'body', limit: 1000, offset: 0 },
-      ),
+      client.request('findEntities', { modelId, entityType: 'face', limit: 1000, offset: 0 }),
+      client.request('findEntities', { modelId, entityType: 'body', limit: 1000, offset: 0 }),
     ]);
     if (faces.total_matched > 1000 || summary.faces > 1000)
       throw new Error('Viewer artifact currently supports models with at most 1000 faces');
@@ -244,7 +239,7 @@ async function getEntities(record: ModelRecord, includeEdges: boolean) {
     const faces =
       record.faces ??
       (
-        await client.request<{ entities: Array<Record<string, any>> }>('findEntities', {
+        await client.request('findEntities', {
           modelId,
           entityType: 'face',
           limit: 1000,
@@ -255,7 +250,7 @@ async function getEntities(record: ModelRecord, includeEdges: boolean) {
     const bodies =
       record.bodies ??
       (
-        await client.request<{ entities: Array<Record<string, any>> }>('findEntities', {
+        await client.request('findEntities', {
           modelId,
           entityType: 'body',
           limit: 1000,
@@ -265,7 +260,7 @@ async function getEntities(record: ModelRecord, includeEdges: boolean) {
     record.bodies = bodies;
     const edges = includeEdges
       ? (
-          await client.request<{ entities: Array<Record<string, any>> }>('findEntities', {
+          await client.request('findEntities', {
             modelId,
             entityType: 'edge',
             limit: 1000,
@@ -278,7 +273,7 @@ async function getEntities(record: ModelRecord, includeEdges: boolean) {
         externalId: body.id,
         kind: 'body',
         label: `Body ${index}`,
-        bbox: [...body.bbox.min, ...body.bbox.max],
+        bbox: entityBounds(body),
         centroid: body.bbox_center,
         ref: entityRef(record.artifactId, body.id, 'body'),
       })),
@@ -286,7 +281,7 @@ async function getEntities(record: ModelRecord, includeEdges: boolean) {
         externalId: face.id,
         kind: 'face',
         label: `Face ${index}`,
-        bbox: [...face.bbox.min, ...face.bbox.max],
+        bbox: entityBounds(face),
         centroid: face.bbox_center,
         surfaceType: face.surface_type,
         area: face.area,
@@ -298,7 +293,7 @@ async function getEntities(record: ModelRecord, includeEdges: boolean) {
         externalId: edge.id,
         kind: 'edge',
         label: `Edge ${index}`,
-        bbox: [...edge.bbox.min, ...edge.bbox.max],
+        bbox: entityBounds(edge),
         centroid: edge.bbox_center,
         curveType: edge.curve_type,
         length: edge.length,
@@ -311,12 +306,11 @@ async function getEntities(record: ModelRecord, includeEdges: boolean) {
 
 async function getManifest(record: ModelRecord) {
   return sidecarModels.withModel(record.filePath, async (client, modelId) => {
-    const summary =
-      record.summary ?? (await client.request<Record<string, any>>('inspect', { modelId })).result;
+    const summary = record.summary ?? (await client.request('inspect', { modelId })).result;
     const faces =
       record.faces ??
       (
-        await client.request<{ entities: Array<Record<string, any>> }>('findEntities', {
+        await client.request('findEntities', {
           modelId,
           entityType: 'face',
           limit: 1000,
@@ -344,8 +338,20 @@ async function getManifest(record: ModelRecord) {
   });
 }
 
-function buildChunkDescriptors(faces: Array<Record<string, any>>): MeshChunkDescriptor[] {
-  const byBody = new Map<string, Array<Record<string, any>>>();
+/** Face bounds as returned by the sidecar; the rest of the entity is opaque. */
+function entityBbox(entity: SidecarEntity): { min: Vec3; max: Vec3 } {
+  if (!entity.bbox) throw new Error(`sidecar entity ${entity.id} is missing a bounding box`);
+  return entity.bbox;
+}
+
+/** An entity's 6-element bounds, as the viewer expects them. */
+function entityBounds(entity: SidecarEntity): Bbox {
+  const box = entityBbox(entity);
+  return [...box.min, ...box.max] as Bbox;
+}
+
+function buildChunkDescriptors(faces: SidecarEntity[]): MeshChunkDescriptor[] {
+  const byBody = new Map<string, SidecarEntity[]>();
   for (const face of faces) {
     const bodyId = 'body:0';
     const bodyFaces = byBody.get(bodyId) ?? [];
@@ -361,7 +367,7 @@ function buildChunkDescriptors(faces: Array<Record<string, any>>): MeshChunkDesc
         chunkId: `${bodyExternalId}:chunk:${Math.floor(start / FACES_PER_CHUNK)}`,
         bodyExternalId,
         faceExternalIds: batch.map((face) => face.id),
-        bbox: unionBboxes(batch.map((face) => [...face.bbox.min, ...face.bbox.max] as Bbox)),
+        bbox: unionBboxes(batch.map(entityBounds)),
         priority: chunks.length,
         lods: [{ level: 'preview', status: 'ready' }],
       });
@@ -378,7 +384,7 @@ async function getMeshChunk(record: ModelRecord, chunkId: string) {
       record.faces ??
       (
         await timed('cad_mcp.viewer.chunk.faces', details, () =>
-          client.request<{ entities: Array<Record<string, any>> }>('findEntities', {
+          client.request('findEntities', {
             modelId,
             entityType: 'face',
             limit: 1000,
@@ -417,8 +423,9 @@ function createArtifactId(input: string): string {
 }
 
 function unionBboxes(boxes: Bbox[]): Bbox {
-  if (!boxes.length) return [0, 0, 0, 0, 0, 0];
-  return boxes.reduce<Bbox>(
+  const [first, ...rest] = boxes;
+  if (first === undefined) return [0, 0, 0, 0, 0, 0];
+  return rest.reduce<Bbox>(
     (acc, box) => [
       Math.min(acc[0], box[0]),
       Math.min(acc[1], box[1]),
@@ -427,7 +434,7 @@ function unionBboxes(boxes: Bbox[]): Bbox {
       Math.max(acc[4], box[4]),
       Math.max(acc[5], box[5]),
     ],
-    boxes[0],
+    first,
   );
 }
 

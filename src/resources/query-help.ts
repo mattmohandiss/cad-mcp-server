@@ -3,7 +3,7 @@ import { TOOL_REGISTRY } from '../tools/registry.js';
 import { MEASURE_KINDS } from '../tools/measure.js';
 import pkg from '../../package.json' with { type: 'json' };
 
-export const QUERY_HELP_URI = 'cad-mcp://query-help';
+export const QUERY_HELP_URI = 'cad://help';
 
 interface ResourceContent {
   uri: string;

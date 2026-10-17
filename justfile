@@ -13,20 +13,26 @@ build:
 test:
 	npm test
 
+# Native sidecar integration tests (require a configured CAD_MCP_SIDECAR).
+test-integration:
+	npm run test:integration
+
+typecheck:
+	npm run typecheck
+
 lint:
 	npm run lint
-	npx tsc --noEmit
-
-check: fmt-check lint test
-
-# Full Linux local path: compile the native OCCT sidecar and run server checks.
-ci: fmt-check lint sidecar-native-ci test
 
 fmt:
-  npx prettier --write "src/**/*.ts" "scripts/**/*.mjs" .oxlintrc.json tsconfig.json vitest.config.ts package.json package-lock.json release-please-config.json server.json "*.md" "docs/**/*.md" ".github/**/*.yml"
+	npm run fmt
 
 fmt-check:
-  npx prettier --check "src/**/*.ts" "scripts/**/*.mjs" .oxlintrc.json tsconfig.json vitest.config.ts package.json package-lock.json release-please-config.json server.json "*.md" "docs/**/*.md" ".github/**/*.yml"
+	npm run fmt:check
+
+check: fmt-check lint typecheck test
+
+# Full Linux local path: compile the native OCCT sidecar and run all checks.
+ci: fmt-check lint typecheck sidecar-native-ci test test-integration
 
 sidecar-native:
 	python3 occt/sidecar/scripts/build.py native --jobs 8 --work occt/sidecar/build-work

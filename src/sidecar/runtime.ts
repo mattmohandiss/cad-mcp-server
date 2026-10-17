@@ -20,7 +20,7 @@ export async function getSidecarClient(): Promise<SidecarClient> {
   const started = new SidecarClient({ executable, launcher });
   client = started;
   try {
-    const hello = await started.request<{ protocol: number; occt: string }>('hello', {}, 10_000);
+    const hello = await started.request('hello', {}, 10_000);
     if (hello.result.protocol !== 2) {
       throw new Error(`Unsupported sidecar protocol: ${hello.result.protocol}`);
     }

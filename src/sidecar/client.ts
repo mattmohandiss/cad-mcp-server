@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { SidecarFrameDecoder, encodeJsonFrame, parseJsonFrame } from './protocol.js';
 import type { SidecarFrame } from './protocol.js';
+import type { SidecarOps, SidecarResults } from './operations.js';
 
 interface SidecarEnvelope<T> {
   ok: boolean;
@@ -81,17 +82,17 @@ export class SidecarClient {
     return !this.exited && !this.stopping && !this.failed;
   }
 
-  request<T>(
-    operation: string,
-    args: Record<string, unknown> = {},
+  request<K extends keyof SidecarOps, T = SidecarResults[K]>(
+    operation: K,
+    args: SidecarOps[K],
     timeoutMs = 120_000,
   ): Promise<{ result: T; kernelMs: number }> {
     return this.send<{ result: T; kernelMs: number }>('json', operation, args, timeoutMs);
   }
 
-  requestBinary(
-    operation: string,
-    args: Record<string, unknown> = {},
+  requestBinary<K extends keyof SidecarOps>(
+    operation: K,
+    args: SidecarOps[K],
     timeoutMs = 120_000,
   ): Promise<Buffer> {
     return this.send<Buffer>('binary', operation, args, timeoutMs);
@@ -99,8 +100,8 @@ export class SidecarClient {
 
   private send<T>(
     kind: Pending['kind'],
-    operation: string,
-    args: Record<string, unknown>,
+    operation: keyof SidecarOps,
+    args: SidecarOps[keyof SidecarOps],
     timeoutMs: number,
   ): Promise<T> {
     if (this.exited || this.stopping) return Promise.reject(new Error('OCCT sidecar is closed'));

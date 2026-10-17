@@ -18,7 +18,6 @@ docs/PROPOSED_TOOLS.md
 .planning/
 
 # Editor / dev env
-.envrc
 .nvim.lua
 
 # Editor

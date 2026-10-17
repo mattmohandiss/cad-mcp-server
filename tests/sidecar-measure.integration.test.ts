@@ -1,7 +1,8 @@
 import { existsSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
-import { SidecarClient } from '../sidecar/client.js';
+import { SidecarClient } from '../src/sidecar/client.js';
+import type { SidecarInspect, SidecarOps } from '../src/sidecar/operations.js';
 
 const executable = process.env['CAD_MCP_SIDECAR'];
 const launcher = process.env['CAD_MCP_SIDECAR_LAUNCHER'];
@@ -13,13 +14,13 @@ const enabled = Boolean(executable && existsSync(executable) && existsSync(stepP
 describe.skipIf(!enabled)('sidecar measurement integration', () => {
   let client: SidecarClient | undefined;
   let modelId: number | undefined;
-  let inspect: Record<string, any>;
+  let inspect: SidecarInspect;
 
   beforeAll(async () => {
     client = new SidecarClient({ executable: executable!, ...(launcher ? { launcher } : {}) });
-    const opened = await client.request<{ modelId: number }>('open', { path: stepPath }, 600_000);
+    const opened = await client.request('open', { path: stepPath }, 600_000);
     modelId = opened.result.modelId;
-    inspect = (await client.request<Record<string, any>>('inspect', { modelId })).result;
+    inspect = (await client.request('inspect', { modelId })).result;
   }, 600_000);
 
   afterAll(async () => {
@@ -29,12 +30,12 @@ describe.skipIf(!enabled)('sidecar measurement integration', () => {
     }
   });
 
-  const measure = async (args: Record<string, unknown>) =>
+  const measure = async (args: Omit<SidecarOps['measureGeometry'], 'modelId'>) =>
     (
-      await client!.request<{ results: Array<{ results: Record<string, any> }> }>(
-        'measureGeometry',
-        { modelId, ...args },
-      )
+      await client!.request('measureGeometry', {
+        modelId: modelId!,
+        ...args,
+      })
     ).result.results[0]!.results;
 
   it('returns results for thickness, draft, rays, points, sections and continuity', async () => {

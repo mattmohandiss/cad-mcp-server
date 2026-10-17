@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { queryHelpResourceHandler } from '../resources/query-help.js';
-import { schema as diffSchema } from '../tools/diff.js';
-import { schema as findEntitiesSchema } from '../tools/find-entities.js';
-import { schema as inspectSchema } from '../tools/inspect.js';
-import { schema as measureSchema } from '../tools/measure.js';
-import * as outputSchemas from '../output-schemas.js';
-import { PUBLIC_TOOL_NAMES, TOOL_REGISTRY } from '../tools/registry.js';
+import { queryHelpResourceHandler } from '../src/resources/query-help.js';
+import { schema as diffSchema } from '../src/tools/diff.js';
+import { schema as findEntitiesSchema } from '../src/tools/find-entities.js';
+import { schema as inspectSchema } from '../src/tools/inspect.js';
+import { schema as measureSchema } from '../src/tools/measure.js';
+import * as outputSchemas from '../src/output-schemas.js';
+import { PUBLIC_TOOL_NAMES, TOOL_REGISTRY } from '../src/tools/registry.js';
 
 const artifact = {
   revision: `sha256:${'0'.repeat(64)}`,
@@ -62,7 +62,7 @@ describe('tool contracts', () => {
     for (const tool of TOOL_REGISTRY) {
       for (const example of tool.examples) {
         expect(
-          tool.schema.safeParse(example).success,
+          tool.inputSchema.safeParse(example).success,
           `${tool.name}: ${JSON.stringify(example)}`,
         ).toBe(true);
       }

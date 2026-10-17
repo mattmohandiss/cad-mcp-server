@@ -3,7 +3,9 @@
 ## Environment and commands
 
 Requires Node.js 24+ and npm. Native sidecar builds also need Python 3, CMake,
-Ninja, and a C++ compiler. A Nix development shell is available via `nix develop`.
+Ninja, and a C++ compiler. A Nix flake provides the toolchain: `.envrc` runs
+`use flake` (run `direnv allow` after changes), `nix develop` is the full shell,
+and `nix develop .#checks` is the lightweight shell without the native toolchain.
 
 ```sh
 git clone https://github.com/mattmohandiss/cad-mcp-server.git
@@ -21,20 +23,27 @@ just sidecar-native
 CAD_MCP_SIDECAR=occt/sidecar/build-work/native/occt-sidecar just dev
 ```
 
-| Recipe                                 | Purpose                                                      |
-| -------------------------------------- | ------------------------------------------------------------ |
-| `setup`                                | Install npm dependencies.                                    |
-| `build`                                | Compile TypeScript into `dist/`.                             |
-| `test`                                 | Run server tests; native tests require a configured sidecar. |
-| `lint`                                 | Oxlint and TypeScript checking.                              |
-| `fmt` / `fmt-check`                    | Rewrite / check formatting.                                  |
-| `check`                                | Formatting, lint/typecheck, and tests.                       |
-| `ci`                                   | Formatting/lint, native sidecar build, and server tests.     |
-| `sidecar-native` / `sidecar-native-ci` | Native OCCT build variants.                                  |
-| `clean` / `check-clean`                | Remove generated artifacts / check cleanup.                  |
+| Recipe                                 | Purpose                                                         |
+| -------------------------------------- | --------------------------------------------------------------- |
+| `setup`                                | Install npm dependencies.                                       |
+| `dev`                                  | Run the TypeScript stdio server (no sidecar compile).           |
+| `build`                                | Compile TypeScript into `dist/`.                                |
+| `test`                                 | Run unit tests (native integration tests are excluded).         |
+| `test-integration`                     | Run native sidecar integration tests (needs `CAD_MCP_SIDECAR`). |
+| `lint`                                 | Oxlint.                                                         |
+| `typecheck`                            | TypeScript checking (`tsc --noEmit`).                           |
+| `fmt` / `fmt-check`                    | Rewrite / verify Prettier formatting.                           |
+| `check`                                | Formatting, lint, typecheck, and tests.                         |
+| `ci`                                   | Full check: lint/format, native sidecar build, and all tests.   |
+| `sidecar-native` / `sidecar-native-ci` | Native OCCT build variants.                                     |
+| `clean` / `check-clean`                | Remove generated artifacts / check cleanup.                     |
 
 Direct equivalents include `npm test`, `npm run build`, `npm run lint`, and
 `npm run typecheck`. Check `just --list` for the current recipe surface.
+
+Server logs are newline-delimited pino JSON on stderr. `MCP_LOG_LEVEL`
+(`debug`|`info`|`warn`|`error`), `MCP_LOG_FORMAT=human`, and `MCP_TRACE_ID` tune
+them; secret-like fields are redacted.
 
 Native integration tests use `CAD_MCP_SIDECAR`. `CAD_MCP_SIDECAR_LAUNCHER`
 optionally specifies an APE launcher, and the measurement test supports
@@ -45,7 +54,7 @@ optionally specifies an APE launcher, and the measurement test supports
 - `src/tools/`: public tool implementations.
 - `src/domain/`: artifact/subject references.
 - `src/sidecar/`: sidecar protocol and model lifecycle.
-- `src/tests/`: server-owned correctness and native integration checks.
+- `tests/`: server-owned correctness and native integration checks.
 - `occt/sidecar/`: C++ source and native/Cosmopolitan build scripts.
 
 The optional viewer artifact API is enabled with `--viewer-api=http` when

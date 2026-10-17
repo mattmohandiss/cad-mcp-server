@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { compareStepMetadata } from '../domain/compare.js';
-import type { ParsedStepMetadata } from '../pmi/metadata.js';
+import { compareStepMetadata } from '../src/domain/compare.js';
+import type { ParsedStepMetadata } from '../src/pmi/metadata.js';
 
 const metadata = (overrides: Partial<ParsedStepMetadata> = {}): ParsedStepMetadata => ({
   schema: 'AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF',

@@ -1,23 +1,20 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    flake-utils.url = "github:numtide/flake-utils";
+    nixpkgs.url = "github:NixOS/nixpkgs/331800de5053fcebacf6813adb5db9c9dca22a0c";
   };
 
   outputs =
-    { self
-    , nixpkgs
-    , flake-utils
-    ,
-    }:
-    flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-darwin" ] (
-      system:
-      let
-        pkgs = nixpkgs.legacyPackages.${system};
+    { nixpkgs, ... }:
+    let
+      systems = [ "x86_64-linux" "aarch64-darwin" ];
+      eachSystem = nixpkgs.lib.genAttrs systems;
 
-        # Libraries used by CadQuery/OCP development tooling that NixOS Python
-        # cannot find through the wheel's store rpath.
-        cqLibraries = with pkgs; [
+      # Libraries used by CadQuery/OCP development tooling that NixOS Python
+      # cannot find through the wheel's store rpath.
+      cqLibraries =
+        pkgs:
+        with pkgs;
+        [
           stdenv.cc.cc.lib
           libGL
           libGLU
@@ -36,31 +33,43 @@
           readline
           sqlite
         ];
+    in
+    {
+      devShells = eachSystem (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+          cqLibraryPath = pkgs.lib.makeLibraryPath (cqLibraries pkgs);
+        in
+        {
+          # Fast checks: Node and just only, no native toolchain.
+          checks = pkgs.mkShell {
+            packages = with pkgs; [
+              just
+              nodejs_24
+            ];
+            shellHook = ''
+              export PATH="$PWD/node_modules/.bin:$PATH"
+            '';
+          };
 
-        cqLibraryPath = pkgs.lib.makeLibraryPath cqLibraries;
-
-      in
-      {
-        devShells.default = pkgs.mkShell {
-          buildInputs = with pkgs; [
-            just
-            nodejs_24
-            cmake
-            ninja
-            ccache
-
-            # C++ formatting
-            clang-tools
-
-            # Python 3 for sidecar build and packaging tools.
-            python3
-          ];
-
-          shellHook = ''
-            export PATH="$PWD/node_modules/.bin:$PATH"
-            export LD_LIBRARY_PATH="${cqLibraryPath}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-          '';
-        };
-      }
-    );
+          # Full shell: adds the OCCT sidecar build toolchain.
+          default = pkgs.mkShell {
+            buildInputs = with pkgs; [
+              just
+              nodejs_24
+              cmake
+              ninja
+              ccache
+              clang-tools
+              python3
+            ];
+            shellHook = ''
+              export PATH="$PWD/node_modules/.bin:$PATH"
+              export LD_LIBRARY_PATH="${cqLibraryPath}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+            '';
+          };
+        }
+      );
+    };
 }

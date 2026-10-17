@@ -5,7 +5,7 @@ import {
   parseJsonFrame,
   SidecarFrameDecoder,
   type SidecarFrame,
-} from '../sidecar/protocol.js';
+} from '../src/sidecar/protocol.js';
 
 describe('sidecar binary framing', () => {
   it('decodes correlated JSON and binary frames across arbitrary pipe chunks', () => {

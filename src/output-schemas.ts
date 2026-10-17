@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { artifactReferenceSchema, subjectReferenceSchema } from './domain/artifact-reference.js';
 
 const record = z.record(z.string(), z.unknown());
-const vector3 = z.array(z.number()).length(3);
+const vector3 = z.tuple([z.number(), z.number(), z.number()]);
 const entityIdScheme = z.object({ authority: z.string(), idScheme: z.string() });
 const coordinateFrame = z.object({
   id: z.string(),

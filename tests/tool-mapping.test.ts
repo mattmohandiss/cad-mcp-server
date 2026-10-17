@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { schema as findEntitiesSchema } from '../tools/find-entities.js';
-import { filterInspectResult } from '../tools/inspect.js';
-import { schema as measureSchema } from '../tools/measure.js';
+import { schema as findEntitiesSchema } from '../src/tools/find-entities.js';
+import { filterInspectResult, type InspectResult } from '../src/tools/inspect.js';
+import { schema as measureSchema } from '../src/tools/measure.js';
+import { STEP_MODEL_FRAME } from '../src/domain/artifact-reference.js';
 
 const artifact = {
   revision: `sha256:${'0'.repeat(64)}`,
@@ -12,22 +13,21 @@ const artifact = {
 
 describe('four-tool artifact surface', () => {
   it('filters inspect output while retaining artifact identity', () => {
-    const input = {
+    const input: InspectResult = {
       artifact,
-      coordinate_frame: {
-        id: 'step-model',
-        origin: [0, 0, 0],
-        axes: [
-          [1, 0, 0],
-          [0, 1, 0],
-          [0, 0, 1],
-        ],
-        handedness: 'right',
-        units: 'mm',
+      coordinate_frame: STEP_MODEL_FRAME,
+      size: {
+        bounding_box: { min: [0, 0, 0], max: [1, 2, 3] },
+        dimensions: { width: 1, height: 2, depth: 3 },
+        volume: 6,
+        surface_area: 22,
+        units: { length: 'mm', area: 'mm2', volume: 'mm3' },
       },
-      size: { units: 'mm' },
-      structure: { face_count: 2 },
-      health: { valid: true },
+      structure: { body_count: 1, is_assembly: false, component_occurrences: [] },
+      health: {
+        is_valid: true,
+        complexity: { body_count: 1, face_count: 6, edge_count: 12 },
+      },
     };
     expect(filterInspectResult(input, new Set(['size', 'health']))).toEqual(input);
   });
