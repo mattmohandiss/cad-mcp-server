@@ -7,7 +7,7 @@ const smokeRoot = resolve('smoke');
 const require = createRequire(join(smokeRoot, 'package.json'));
 const packageRoot = join(smokeRoot, 'node_modules/cad-mcp-server');
 const server = join(packageRoot, 'dist/src/index.js');
-const fixture = resolve('src/tests/fixtures/repeated-instances.step');
+const fixture = resolve('tests/fixtures/repeated-instances.step');
 assert.ok(require('node:fs').existsSync(server), `Packed server missing: ${server}`);
 assert.ok(require('node:fs').existsSync(fixture), `STEP fixture missing: ${fixture}`);
 
