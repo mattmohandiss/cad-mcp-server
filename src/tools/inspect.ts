@@ -6,7 +6,7 @@ import {
   artifactLocatorSchema,
   artifactPath,
   artifactReference,
-  STEP_MODEL_FRAME,
+  stepModelFrame,
 } from '../domain/artifact-reference.js';
 
 const includeSchema = z
@@ -39,7 +39,7 @@ const DEFAULT_INCLUDE = new Set(['size', 'counts', 'health']);
  */
 export type InspectResult = {
   artifact: ReturnType<typeof artifactReference>;
-  coordinate_frame: typeof STEP_MODEL_FRAME;
+  coordinate_frame: ReturnType<typeof stepModelFrame>;
   size?: {
     bounding_box: { min: Vec3; max: Vec3 };
     dimensions: { width: number; height: number; depth: number };
@@ -62,20 +62,20 @@ export async function handler(args: z.output<typeof schema>) {
   const include = args.include ? new Set(args.include) : DEFAULT_INCLUDE;
   return sidecarModels.withModel(
     artifactPath(args.uri),
-    async (client, modelId, _filePath, revision) => {
+    async (client, modelId, _filePath, revision, units) => {
       const { result } = await client.request('inspect', { modelId });
       const { min, max } = result.bounds;
       const [minX, minY, minZ] = min;
       const [maxX, maxY, maxZ] = max;
       const full: InspectResult = {
-        artifact: artifactReference(_filePath, revision),
-        coordinate_frame: STEP_MODEL_FRAME,
+        artifact: artifactReference(_filePath, revision, units.name),
+        coordinate_frame: stepModelFrame(units.name),
         size: {
           bounding_box: { min, max },
           dimensions: { width: maxX - minX, height: maxY - minY, depth: maxZ - minZ },
           volume: result.volume,
           surface_area: result.surfaceArea,
-          units: { length: 'mm', area: 'mm2', volume: 'mm3' },
+          units: { length: units.name, area: `${units.name}2`, volume: `${units.name}3` },
         },
         structure: {
           body_count: result.solids,

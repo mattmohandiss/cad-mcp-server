@@ -55,19 +55,17 @@ export const artifactReferenceSchema = z
     revision: artifactRevisionSchema,
     uri: artifactUriSchema,
     format: z.literal('step'),
-    units: z.literal('mm'),
+    units: z.string(),
   })
   .strict();
 // Inputs only need the binding fields; defaults fill the rest so a caller can
 // pass back the reference without reproducing every literal.
-export const artifactReferenceInputSchema = z
-  .object({
-    revision: artifactRevisionSchema,
-    uri: artifactUriSchema,
-    format: z.literal('step').default('step'),
-    units: z.literal('mm').default('mm'),
-  })
-  .strict();
+export const artifactReferenceInputSchema = z.object({
+  revision: artifactRevisionSchema,
+  uri: artifactUriSchema,
+  format: z.literal('step').optional(),
+  units: z.string().optional(),
+});
 // The response's top-level artifact already identifies the revision, so a
 // subject carries only the entity it points at.
 export const subjectReferenceSchema = z
@@ -90,28 +88,30 @@ export const ENTITY_ID_SCHEME = {
   idScheme: 'occt-topology-v1',
 } as const;
 
-export const STEP_MODEL_FRAME = {
-  id: 'step-model',
-  origin: [0, 0, 0],
-  axes: [
-    [1, 0, 0],
-    [0, 1, 0],
-    [0, 0, 1],
-  ],
-  handedness: 'right',
-  units: 'mm',
-} as const;
+export function stepModelFrame(units: string) {
+  return {
+    id: 'step-model',
+    origin: [0, 0, 0],
+    axes: [
+      [1, 0, 0],
+      [0, 1, 0],
+      [0, 0, 1],
+    ],
+    handedness: 'right',
+    units,
+  } as const;
+}
 
 export function artifactPath(uri: string): string {
   return fileURLToPath(toArtifactUri(uri));
 }
 
-export function artifactReference(filePath: string, revision: string) {
+export function artifactReference(filePath: string, revision: string, units: string) {
   return {
     revision,
     uri: pathToFileURL(filePath).href,
     format: 'step' as const,
-    units: 'mm' as const,
+    units,
   };
 }
 

@@ -8,8 +8,10 @@ const require = createRequire(join(smokeRoot, 'package.json'));
 const packageRoot = join(smokeRoot, 'node_modules/cad-mcp-server');
 const server = join(packageRoot, 'dist/src/index.js');
 const fixture = resolve('tests/fixtures/repeated-instances.step');
+const inchFixture = resolve('tests/fixtures/repeated-instances-inch.step');
 assert.ok(require('node:fs').existsSync(server), `Packed server missing: ${server}`);
 assert.ok(require('node:fs').existsSync(fixture), `STEP fixture missing: ${fixture}`);
+assert.ok(require('node:fs').existsSync(inchFixture), `Inch fixture missing: ${inchFixture}`);
 
 delete process.env.CAD_MCP_SIDECAR;
 delete process.env.OCCT_SIDECAR;
@@ -25,7 +27,7 @@ const { StdioClientTransport } = require('@modelcontextprotocol/client/stdio');
  * 2025-era handshake. Both must expose the tools and measure the fixture. The
  * second case also passes a plain filesystem path, not a file: URI.
  */
-async function smoke({ label, clientOptions, uri }) {
+async function smoke({ label, clientOptions, uri, unit }) {
   const client = new Client({ name: 'cad-mcp-pack-smoke', version: '1.0.0' }, clientOptions);
   const transport = new StdioClientTransport({
     command: process.execPath,
@@ -48,6 +50,8 @@ async function smoke({ label, clientOptions, uri }) {
     );
     assert.ok(Math.abs(size.volume - 2000) < 1e-6, `${label}: fixture volume changed`);
     assert.ok(Math.abs(size.surface_area - 1200) < 1e-6, `${label}: fixture area changed`);
+    assert.equal(size.units.length, unit, `${label}: expected ${unit} units`);
+    assert.equal(result.structuredContent.artifact.units, unit, `${label}: artifact unit mismatch`);
 
     const faces = await client.callTool({
       name: 'find_entities',
@@ -61,7 +65,7 @@ async function smoke({ label, clientOptions, uri }) {
         kind: 'thickness',
         entity_ids: faceIds,
         direction_mode: 'normal',
-        spacing_mm: 1000,
+        spacing: 1000,
       },
     });
     const stats = thickness.structuredContent.results[0].results.thickness.statistics;
@@ -71,7 +75,7 @@ async function smoke({ label, clientOptions, uri }) {
     );
     console.log(
       `${label}: protocol ${client.getNegotiatedProtocolVersion()} (${client.getProtocolEra()}), ` +
-        `tools ${tools.length}, 30x10x10 fixture, thickness ${stats.min_distance}`,
+        `tools ${tools.length}, 30x10x10 ${unit} fixture, thickness ${stats.min_distance} ${unit}`,
     );
   } finally {
     await client.close();
@@ -82,9 +86,17 @@ await smoke({
   label: 'modern pinned',
   clientOptions: { versionNegotiation: { mode: { pin: '2026-07-28' } } },
   uri: pathToFileURL(fixture).href,
+  unit: 'mm',
 });
 await smoke({
   label: 'stock client',
   clientOptions: undefined,
   uri: fixture,
+  unit: 'mm',
+});
+await smoke({
+  label: 'stock client, inch model',
+  clientOptions: undefined,
+  uri: inchFixture,
+  unit: 'in',
 });

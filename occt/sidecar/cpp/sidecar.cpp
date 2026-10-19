@@ -712,6 +712,13 @@ json dispatch(const std::string& op, const json& args) {
     if (reader.ReadFile(args.at("path").get<std::string>().c_str()) != IFSelect_RetDone)
       throw std::runtime_error("STEP read failed");
     const double readMs=milliseconds(readStart);
+    // Read in the file's own unit so measurements match the CAD export. The
+    // caller derives this from the STEP unit declaration.
+    if (args.contains("systemLengthUnit")) {
+      const double unit=args.at("systemLengthUnit").get<double>();
+      if (!std::isfinite(unit) || unit<=0) throw std::runtime_error("systemLengthUnit must be finite and positive");
+      reader.SetSystemLengthUnit(unit);
+    }
     auto transferStart=Clock::now();
     if (!reader.Transfer(m.doc)) throw std::runtime_error("STEP XCAF transfer failed");
     const double transferMs=milliseconds(transferStart);

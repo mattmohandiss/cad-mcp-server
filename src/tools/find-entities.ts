@@ -6,7 +6,7 @@ import {
   artifactReferenceInputSchema,
   artifactReference,
   ENTITY_ID_SCHEME,
-  STEP_MODEL_FRAME,
+  stepModelFrame,
 } from '../domain/artifact-reference.js';
 import { CURVE_TYPES, SURFACE_TYPES } from '../tool-schemas.js';
 import { parseEntityId } from '../utils/ids.js';
@@ -134,7 +134,7 @@ export const examples = [
 export async function handler(args: z.output<typeof schema>) {
   return sidecarModels.withModel(
     artifactPath(args.artifact.uri),
-    async (client, modelId, filePath, revision) => {
+    async (client, modelId, filePath, revision, units) => {
       const filters =
         args.entity_type === 'face'
           ? {
@@ -169,10 +169,15 @@ export async function handler(args: z.output<typeof schema>) {
         ),
       );
       return {
-        artifact: artifactReference(filePath, revision),
+        artifact: artifactReference(filePath, revision, units.name),
         entity_id_scheme: ENTITY_ID_SCHEME,
-        units: { length: 'mm', area: 'mm2', volume: 'mm3', angle: 'deg' },
-        coordinate_frame: STEP_MODEL_FRAME,
+        units: {
+          length: units.name,
+          area: `${units.name}2`,
+          volume: `${units.name}3`,
+          angle: 'deg',
+        },
+        coordinate_frame: stepModelFrame(units.name),
         query: { entity_type, filters: compactFilters, ...(entity_ids ? { entity_ids } : {}) },
         pagination: {
           limit,

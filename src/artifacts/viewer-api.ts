@@ -24,6 +24,7 @@ type ModelRecord = {
   faces?: SidecarEntity[];
   bodies?: SidecarEntity[];
   chunks?: MeshChunkDescriptor[];
+  units: string;
 };
 
 type MeshChunkDescriptor = {
@@ -187,51 +188,55 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse,
 
 async function openModel(filePath: string) {
   const startedAt = performance.now();
-  return sidecarModels.withModel(filePath, async (client, modelId, resolvedPath) => {
-    const details = { filePath: resolvedPath };
-    const [{ result: summary }, { result: faces }, { result: bodies }] = await Promise.all([
-      timed('cad_mcp.viewer.open_model.summary', details, () =>
-        client.request('inspect', { modelId }),
-      ),
-      client.request('findEntities', { modelId, entityType: 'face', limit: 1000, offset: 0 }),
-      client.request('findEntities', { modelId, entityType: 'body', limit: 1000, offset: 0 }),
-    ]);
-    if (faces.total_matched > 1000 || summary.faces > 1000)
-      throw new Error('Viewer artifact currently supports models with at most 1000 faces');
-    const fileStat = await stat(resolvedPath);
-    const cacheKey = `${resolvedPath}:${fileStat.size}:${fileStat.mtimeMs}`;
-    const artifactId = createArtifactId(cacheKey);
-    for (const [existingId, record] of records) {
-      if (record.filePath === resolvedPath && record.cacheKey !== cacheKey) {
-        records.delete(existingId);
+  return sidecarModels.withModel(
+    filePath,
+    async (client, modelId, resolvedPath, _revision, units) => {
+      const details = { filePath: resolvedPath };
+      const [{ result: summary }, { result: faces }, { result: bodies }] = await Promise.all([
+        timed('cad_mcp.viewer.open_model.summary', details, () =>
+          client.request('inspect', { modelId }),
+        ),
+        client.request('findEntities', { modelId, entityType: 'face', limit: 1000, offset: 0 }),
+        client.request('findEntities', { modelId, entityType: 'body', limit: 1000, offset: 0 }),
+      ]);
+      if (faces.total_matched > 1000 || summary.faces > 1000)
+        throw new Error('Viewer artifact currently supports models with at most 1000 faces');
+      const fileStat = await stat(resolvedPath);
+      const cacheKey = `${resolvedPath}:${fileStat.size}:${fileStat.mtimeMs}`;
+      const artifactId = createArtifactId(cacheKey);
+      for (const [existingId, record] of records) {
+        if (record.filePath === resolvedPath && record.cacheKey !== cacheKey) {
+          records.delete(existingId);
+        }
       }
-    }
-    records.set(artifactId, {
-      artifactId,
-      filePath: resolvedPath,
-      cacheKey,
-      summary,
-      faces: faces.entities,
-      bodies: bodies.entities,
-    });
-    if (timingEnabled)
-      console.error('cad_mcp.viewer.open_model.total', {
-        ...details,
+      records.set(artifactId, {
         artifactId,
-        bodyCount: summary.solids,
-        faceCount: summary.faces,
-        edgeCount: summary.edges,
-        elapsedMs: elapsedMs(startedAt),
+        filePath: resolvedPath,
+        cacheKey,
+        summary,
+        faces: faces.entities,
+        bodies: bodies.entities,
+        units: units.name,
       });
-    return {
-      artifactId,
-      fileHash: createArtifactId(cacheKey),
-      sourceFileName: basename(resolvedPath),
-      sourceFilePath: resolvedPath,
-      units: 'mm',
-      entityCount: summary.solids + summary.faces + summary.edges,
-    };
-  });
+      if (timingEnabled)
+        console.error('cad_mcp.viewer.open_model.total', {
+          ...details,
+          artifactId,
+          bodyCount: summary.solids,
+          faceCount: summary.faces,
+          edgeCount: summary.edges,
+          elapsedMs: elapsedMs(startedAt),
+        });
+      return {
+        artifactId,
+        fileHash: createArtifactId(cacheKey),
+        sourceFileName: basename(resolvedPath),
+        sourceFilePath: resolvedPath,
+        units: units.name,
+        entityCount: summary.solids + summary.faces + summary.edges,
+      };
+    },
+  );
 }
 
 async function getEntities(record: ModelRecord, includeEdges: boolean) {
@@ -326,7 +331,7 @@ async function getManifest(record: ModelRecord) {
       fileHash: createArtifactId(record.cacheKey),
       sourceFileName: basename(record.filePath),
       sourceFilePath: record.filePath,
-      units: 'mm',
+      units: record.units,
       bbox: [...summary.bounds.min, ...summary.bounds.max],
       counts: {
         bodies: summary.solids,

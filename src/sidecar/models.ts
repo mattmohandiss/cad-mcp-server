@@ -3,12 +3,14 @@ import { realpath, stat } from 'node:fs/promises';
 import type { SidecarClient } from './client.js';
 import { getSidecarClient, stopSidecar } from './runtime.js';
 import { fileRevision } from '../utils/hash.js';
+import { readStepLengthUnit, type StepLengthUnit } from '../domain/step-units.js';
 
 interface CachedModel {
   cacheKey: string;
   filePath: string;
   modelId: number;
   client: SidecarClient;
+  units: StepLengthUnit;
 }
 
 type ModelOperation<T> = (
@@ -16,6 +18,7 @@ type ModelOperation<T> = (
   modelId: number,
   filePath: string,
   revision: string,
+  units: StepLengthUnit,
 ) => Promise<T> | T;
 
 /** One resident model bounds sidecar memory; requests are serialized by the OCCT process. */
@@ -81,19 +84,30 @@ export class SidecarModelStore {
     const cacheKey = `${filePath}:${revision}`;
     const client = await getSidecarClient();
     if (this.cached && this.cached.client === client && this.cached.cacheKey === cacheKey) {
-      const result = await operation(client, this.cached.modelId, filePath, revision);
+      const result = await operation(
+        client,
+        this.cached.modelId,
+        filePath,
+        revision,
+        this.cached.units,
+      );
       await assertUnchanged(filePath, fileStat, revision);
       return result;
     }
 
     await this.releaseCachedModel(client);
-    const opened = await client.request('open', { path: filePath }, 600_000);
+    const units = await readStepLengthUnit(filePath);
+    const opened = await client.request(
+      'open',
+      { path: filePath, systemLengthUnit: units.mmPerUnit },
+      600_000,
+    );
     if (!Number.isInteger(opened.result.modelId) || opened.result.modelId < 1) {
       throw new Error('OCCT sidecar returned an invalid model handle');
     }
 
-    this.cached = { cacheKey, filePath, modelId: opened.result.modelId, client };
-    const result = await operation(client, opened.result.modelId, filePath, revision);
+    this.cached = { cacheKey, filePath, modelId: opened.result.modelId, client, units };
+    const result = await operation(client, opened.result.modelId, filePath, revision, units);
     await assertUnchanged(filePath, fileStat, revision);
     return result;
   }

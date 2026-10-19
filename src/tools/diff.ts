@@ -36,14 +36,18 @@ export async function handler(args: z.output<typeof schema>) {
     bounds: { min: number[]; max: number[] };
   };
   const read = (uri: string) =>
-    sidecarModels.withModel(artifactPath(uri), async (client, modelId, filePath, revision) => {
-      const response = await client.request('inspect', { modelId });
-      return {
-        stats: response.result,
-        artifact: artifactReference(filePath, revision),
-        filePath,
-      };
-    });
+    sidecarModels.withModel(
+      artifactPath(uri),
+      async (client, modelId, filePath, revision, units) => {
+        const response = await client.request('inspect', { modelId });
+        return {
+          stats: response.result,
+          artifact: artifactReference(filePath, revision, units.name),
+          filePath,
+          units,
+        };
+      },
+    );
   const baseline = await read(args.baseline.uri);
   const candidate = await read(args.candidate.uri);
   const parseVerified = async (path: string, expectedRevision: string) => {
@@ -68,21 +72,26 @@ export async function handler(args: z.output<typeof schema>) {
   ]);
   const dims = (stats: Stats) => stats.bounds.min.map((min, i) => stats.bounds.max[i]! - min);
   const baselineDimensions = dims(baseline.stats);
-  const candidateDimensions = dims(candidate.stats);
+  const scale = candidate.units.mmPerUnit / baseline.units.mmPerUnit;
+  const candidateDimensions = dims(candidate.stats).map((value) => value * scale);
   return {
     inputs: [
       { role: 'baseline', artifact: baseline.artifact },
       { role: 'candidate', artifact: candidate.artifact },
     ],
-    units: { length: 'mm', area: 'mm2', volume: 'mm3' },
+    units: {
+      length: baseline.units.name,
+      area: `${baseline.units.name}2`,
+      volume: `${baseline.units.name}3`,
+    },
     deltas: {
       dimensions: {
         width: candidateDimensions[0]! - baselineDimensions[0]!,
         height: candidateDimensions[1]! - baselineDimensions[1]!,
         depth: candidateDimensions[2]! - baselineDimensions[2]!,
       },
-      volume: candidate.stats.volume - baseline.stats.volume,
-      surfaceArea: candidate.stats.surfaceArea - baseline.stats.surfaceArea,
+      volume: candidate.stats.volume * scale ** 3 - baseline.stats.volume,
+      surfaceArea: candidate.stats.surfaceArea * scale ** 2 - baseline.stats.surfaceArea,
       bodyCount: candidate.stats.solids - baseline.stats.solids,
       faceCount: candidate.stats.faces - baseline.stats.faces,
       edgeCount: candidate.stats.edges - baseline.stats.edges,
