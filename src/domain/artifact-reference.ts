@@ -1,18 +1,53 @@
+import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { parseEntityId } from '../utils/ids.js';
 
 export const artifactRevisionSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+
+/**
+ * Accept what a person or an LLM host would naturally provide: an absolute or
+ * relative filesystem path, or a file: URI. Relative paths resolve against the
+ * server's working directory. Everything else is rejected before any kernel
+ * work starts.
+ */
+export function toArtifactUri(value: string): string {
+  const input = value.trim();
+  if (!input) throw new Error('Provide a local STEP file path or a file: URI.');
+
+  if (/^file:/i.test(input)) {
+    let url: URL;
+    try {
+      url = new URL(input);
+    } catch {
+      throw new Error(`Invalid file: URI: ${input}`);
+    }
+    if (url.protocol !== 'file:' || !url.pathname)
+      throw new Error('Provide a local STEP file path or a file: URI.');
+    return url.href;
+  }
+
+  // Any other absolute URI (http:, s3:, ...) is out of scope; a Windows drive
+  // letter does not match because it has no scheme separator.
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(input))
+    throw new Error(
+      'Geometry MCP reads local files only; provide a filesystem path or a file: URI.',
+    );
+
+  return pathToFileURL(resolve(input)).href;
+}
+
 export const artifactUriSchema = z
   .string()
-  .url()
+  .min(1)
   .refine((value) => {
     try {
-      return new URL(value).protocol === 'file:';
+      toArtifactUri(value);
+      return true;
     } catch {
       return false;
     }
-  }, 'Geometry MCP currently supports local file: artifact URIs only.');
+  }, 'Provide a local STEP file path or a file: URI.');
 
 export const artifactLocatorSchema = z.object({ uri: artifactUriSchema }).strict();
 export const artifactReferenceSchema = z
@@ -57,7 +92,7 @@ export const STEP_MODEL_FRAME = {
 } as const;
 
 export function artifactPath(uri: string): string {
-  return fileURLToPath(uri);
+  return fileURLToPath(toArtifactUri(uri));
 }
 
 export function artifactReference(filePath: string, revision: string) {

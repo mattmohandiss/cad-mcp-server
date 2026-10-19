@@ -51,7 +51,7 @@ export const TOOL_REGISTRY: ToolSpec[] = [
     name: 'inspect',
     title: 'Inspect Model Overview',
     description:
-      'Inspect a local STEP artifact by URI. Returns its content revision with dimensions, counts, and B-rep validity. Call this first; use the returned artifact reference for entity searches and measurements. ' +
+      'Inspect a local STEP artifact by filesystem path or file: URI. Returns its content revision with dimensions, counts, and B-rep validity. Call this first; use the returned artifact reference for entity searches and measurements. ' +
       'Use include to request only size, counts, and/or health sections.',
     purpose: 'Overview: dimensions, counts, and B-rep validity.',
     inputSchema: inspectTool.schema,
@@ -91,7 +91,7 @@ export const TOOL_REGISTRY: ToolSpec[] = [
     name: 'diff',
     title: 'Compare Step Versions',
     description:
-      'Compare baseline and candidate STEP artifact URIs. Returns both content revisions, geometry deltas, and parsed document facts: schema, product names/count, assembly flag, authoring system, and organization. ' +
+      'Compare baseline and candidate STEP artifacts, as filesystem paths or file: URIs. Returns both content revisions, geometry deltas, and parsed document facts: schema, product names/count, assembly flag, authoring system, and organization. ' +
       'These are file-level facts; they do not explain design intent.',
     purpose: 'Compare geometric measurements and STEP document metadata.',
     inputSchema: diffTool.schema,

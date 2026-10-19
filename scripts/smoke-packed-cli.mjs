@@ -18,33 +18,51 @@ delete process.env.OCCT_LAUNCHER;
 
 const { Client } = require('@modelcontextprotocol/client');
 const { StdioClientTransport } = require('@modelcontextprotocol/client/stdio');
-const client = new Client(
-  { name: 'cad-mcp-pack-smoke', version: '1.0.0' },
-  { versionNegotiation: { mode: { pin: '2026-07-28' } } },
-);
-const transport = new StdioClientTransport({
-  command: process.execPath,
-  args: [server],
-  cwd: process.cwd(),
-  stderr: 'inherit',
-});
-try {
-  await client.connect(transport);
-  assert.equal(client.getNegotiatedProtocolVersion(), '2026-07-28');
-  const result = await client.callTool({
-    name: 'inspect',
-    arguments: { uri: pathToFileURL(fixture).href },
+
+/**
+ * Exercise the packaged artifact the way real hosts do: once with the current
+ * protocol pinned, and once with a default client, which negotiates the
+ * 2025-era handshake. Both must expose the tools and measure the fixture. The
+ * second case also passes a plain filesystem path, not a file: URI.
+ */
+async function smoke({ label, clientOptions, uri }) {
+  const client = new Client({ name: 'cad-mcp-pack-smoke', version: '1.0.0' }, clientOptions);
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [server],
+    cwd: process.cwd(),
+    stderr: 'inherit',
   });
-  assert.equal(result.isError, undefined, JSON.stringify(result));
-  const dimensions = result.structuredContent?.size?.dimensions;
-  assert.ok(dimensions, 'Packaged MCP server returned no dimensions');
-  assert.ok(
-    [dimensions.width, dimensions.height, dimensions.depth].every(
-      (value) => Number.isFinite(value) && value > 0,
-    ),
-    'Packaged MCP server returned invalid dimensions',
-  );
-  console.log('Packed npm CLI launched its sidecar and inspected the STEP fixture');
-} finally {
-  await client.close();
+  try {
+    await client.connect(transport);
+    const { tools } = await client.listTools();
+    assert.equal(tools.length, 4, `${label}: expected four tools`);
+    const result = await client.callTool({ name: 'inspect', arguments: { uri } });
+    assert.equal(result.isError, undefined, `${label}: ${JSON.stringify(result)}`);
+    const dimensions = result.structuredContent?.size?.dimensions;
+    assert.ok(dimensions, `${label}: no dimensions returned`);
+    assert.ok(
+      [dimensions.width, dimensions.height, dimensions.depth].every(
+        (value) => Number.isFinite(value) && value > 0,
+      ),
+      `${label}: invalid dimensions`,
+    );
+    console.log(
+      `${label}: protocol ${client.getNegotiatedProtocolVersion()} (${client.getProtocolEra()}), ` +
+        `tools ${tools.length}, inspected ${dimensions.width}x${dimensions.height}x${dimensions.depth}`,
+    );
+  } finally {
+    await client.close();
+  }
 }
+
+await smoke({
+  label: 'modern pinned',
+  clientOptions: { versionNegotiation: { mode: { pin: '2026-07-28' } } },
+  uri: pathToFileURL(fixture).href,
+});
+await smoke({
+  label: 'stock client',
+  clientOptions: undefined,
+  uri: fixture,
+});

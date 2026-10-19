@@ -92,7 +92,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
 
       return server;
     },
-    { legacy: 'reject' },
+    // Serve the 2025-era handshake as well: stock MCP hosts negotiate
+    // 2025-11-25, and the same factory serves both eras.
+    { legacy: 'serve' },
   );
 
   let closePromise: Promise<void> | undefined;
