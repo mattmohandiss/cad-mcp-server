@@ -199,7 +199,7 @@ jobs:
   # tarball on every supported target.
   smoke-packaged:
     needs: [changes, pack-server]
-    if: needs.pack-server.result == 'success' && matrix.run
+    if: needs.pack-server.result == 'success' && needs.changes.outputs.kernel == 'true'
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.changes.outputs.smoke) }}
