@@ -128,7 +128,12 @@ runs:
             --title "CI payload cache" \
             --notes "Compiled OCCT Cosmopolitan payloads and compiler caches reused by CI across branches. Managed automatically; safe to ignore."
         fi
-        tar --zstd -cf cosmo-ccache.tar.zst -C ~/.cache ccache
-        gh release upload payload "cosmo-payload.tar.gz#${{ inputs.asset-key }}.tar.gz" --clobber
-        gh release upload payload "cosmo-ccache.tar.zst#cosmo-ccache-${{ runner.os }}-${{ runner.arch }}.tar.zst" --clobber
-        du -h cosmo-payload.tar.gz cosmo-ccache.tar.zst
+        # gh release upload does not rename on every version, so stage the
+        # final asset names explicitly.
+        payload="${{ inputs.asset-key }}.tar.gz"
+        ccache="cosmo-ccache-${{ runner.os }}-${{ runner.arch }}.tar.zst"
+        cp cosmo-payload.tar.gz "$payload"
+        tar --zstd -cf "$ccache" -C ~/.cache ccache
+        gh release upload payload "$payload" --clobber
+        gh release upload payload "$ccache" --clobber
+        du -h "$payload" "$ccache"
