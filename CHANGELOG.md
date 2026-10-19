@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.8.0](https://github.com/mattmohandiss/cad-mcp-server/compare/cad-mcp-server-v0.7.1...cad-mcp-server-v0.8.0) (2026-10-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* unify tooling and align the MCP surface with 2026-07-28
+
+### Features
+
+* unify tooling and align the MCP surface with 2026-07-28 ([59b47b8](https://github.com/mattmohandiss/cad-mcp-server/commit/59b47b866582174123352ed70443763217a2cf4b))
+
+
+### Bug Fixes
+
+* **ci:** negotiate modern MCP protocol in smoke test ([b0e1f24](https://github.com/mattmohandiss/cad-mcp-server/commit/b0e1f244394bf83c7175de89dde3b47d521ff4c1))
+* **ci:** point packaged smoke test at the moved STEP fixture ([2ff5c6f](https://github.com/mattmohandiss/cad-mcp-server/commit/2ff5c6f078a838df4c2df943a47dac886e265d3c))
+
+
+### Miscellaneous
+
+* make geometry server independently buildable ([987b383](https://github.com/mattmohandiss/cad-mcp-server/commit/987b3835d2d5aa4ed05ee0d51df6cb03c329c8e3))
+
 ## [0.7.1](https://github.com/mattmohandiss/cad-mcp-server/compare/cad-mcp-server-v0.7.0...cad-mcp-server-v0.7.1) (2026-10-05)
 
 
