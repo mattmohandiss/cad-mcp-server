@@ -264,22 +264,27 @@ gp_Dir normalizedDirection(const json& value, const char* field) {
   return gp_Dir(x/magnitude,y/magnitude,z/magnitude);
 }
 
-json rayHits(const TopoDS_Shape& shape, const gp_Pnt& origin, const gp_Dir& direction, double maxDistance, double originOffset = 0.0) {
+json rayHits(const TopoDS_Shape& shape, const gp_Pnt& origin, const gp_Dir& direction, double maxDistance) {
   IntCurvesFace_ShapeIntersector intersector;
   intersector.Load(shape, Precision::Confusion());
-  intersector.Perform(gp_Lin(origin,direction),0.0,maxDistance);
+  // Search the whole line and filter afterwards. OCCT's own guidance is to
+  // prefer an unbounded parameter range; bounded ranges can lose intersections
+  // near the ends.
+  intersector.Perform(gp_Lin(origin,direction),-Precision::Infinite(),Precision::Infinite());
   NCollection_IndexedMap<TopoDS_Shape,TopTools_ShapeMapHasher> faces;
   TopExp::MapShapes(shape,TopAbs_FACE,faces);
+  // The ray starts on the solid, so the source surface can report a hit at
+  // (or numerically near) parameter zero. Reject hits within this tolerance of
+  // the origin; it is a rejection threshold, not a geometric offset.
+  const double selfHitTolerance=Precision::Confusion()*10;
   std::vector<std::pair<double,json>> ordered;
   for(int i=1;i<=intersector.NbPnt();++i) {
-    const double parameter=intersector.WParameter(i);
-    if(parameter <= Precision::Confusion()) continue;
-    // The caller may start the ray slightly off the surface to skip a
-    // self-intersection; report distances from the original point.
-    const double distance=parameter+originOffset;
+    const double distance=intersector.WParameter(i);
+    if(distance<=selfHitTolerance || distance>maxDistance) continue;
+    const gp_Pnt point=intersector.Pnt(i);
+    if(point.Distance(origin)<=selfHitTolerance) continue;
     const int faceIndex=faces.FindIndex(intersector.Face(i))-1;
     if(faceIndex<0) continue;
-    const gp_Pnt point=intersector.Pnt(i);
     ordered.emplace_back(distance,json{{"face_id","face:"+std::to_string(faceIndex)},
       {"distance",distance},{"point",{point.X(),point.Y(),point.Z()}}});
   }
@@ -544,8 +549,7 @@ json measureGeometry(const Model& m, const json& args) {
         if(args.value("bidirectional",false)) { gp_Dir opposite=entityDirection; opposite.Reverse(); castDirections.push_back(opposite); }
         for(const gp_Dir& castDirection:castDirections) {
           ++castCount; ++totalRays;
-          const double offset=Precision::Confusion()*10;
-          const json hits=rayHits(m.shape,point.Translated(gp_Vec(castDirection)*offset),castDirection,maxDistance,offset);
+          const json hits=rayHits(m.shape,point,castDirection,maxDistance);
           if(hits.empty()) continue;
           const double d=hits[0]["distance"].get<double>(); distances.push_back(d);
           if(args.value("detail",std::string("stats"))!="stats") samples.push_back({{"origin",{point.X(),point.Y(),point.Z()}},{"hit",hits[0]}});
