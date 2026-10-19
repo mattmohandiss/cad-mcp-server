@@ -65,8 +65,6 @@ Results are reproducible: the server returns the entity IDs and the SHA-256 revi
 
 **How is this different from asking an assistant to look at a screenshot?** Measurements are computed from the model's B-rep geometry by Open CASCADE, so the same file and query return the same numbers. Each result also carries the entity IDs and revision it came from.
 
-**What if a STEP file fails to import?** STEP export varies between CAD systems. If a file does not import, open an [issue](https://github.com/mattmohandiss/cad-mcp-server/issues) with the producer and version.
-
 ## Documentation
 
 - [Example prompts](https://github.com/mattmohandiss/cad-mcp-server/blob/main/docs/EXAMPLE_PROMPTS.md)
