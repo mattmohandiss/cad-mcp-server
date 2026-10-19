@@ -717,7 +717,7 @@ json dispatch(const std::string& op, const json& args) {
     if (args.contains("systemLengthUnit")) {
       const double unit=args.at("systemLengthUnit").get<double>();
       if (!std::isfinite(unit) || unit<=0) throw std::runtime_error("systemLengthUnit must be finite and positive");
-      reader.SetSystemLengthUnit(unit);
+      reader.ChangeReader().SetSystemLengthUnit(unit);
     }
     auto transferStart=Clock::now();
     if (!reader.Transfer(m.doc)) throw std::runtime_error("STEP XCAF transfer failed");
