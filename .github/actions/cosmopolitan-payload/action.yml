@@ -1,9 +1,26 @@
 name: Restore or build Cosmopolitan payload
-description: Restore an exact-key sidecar payload cache or build and save it on a miss
+description: >
+  Resolve the compiled OCCT Cosmopolitan payload in three tiers: exact-key
+  Actions cache, published payload release asset, then a full build. A full
+  build takes roughly an hour; the first two tiers take seconds. The compiler
+  cache travels with the payload so a cold cache is still an incremental build.
+
 inputs:
   cache-key:
-    description: Exact key from build and packaging inputs
     required: true
+    description: Exact branch cache key; includes this action so orchestration changes stay isolated
+  asset-key:
+    required: true
+    description: Key over native build inputs only; names the assets shared across branches
+  jobs:
+    required: false
+    default: ''
+    description: Parallel build jobs; defaults to the runner's CPU count
+  publish:
+    required: false
+    default: 'false'
+    description: Publish built payload and compiler cache as release assets for other branches
+
 runs:
   using: composite
   steps:
@@ -14,35 +31,84 @@ runs:
         path: cosmo-payload.tar.gz
         key: ${{ inputs.cache-key }}
 
-    - name: Report Cosmopolitan payload cache status
+    # Actions caches are scoped to the branch that created them, so a payload
+    # built in a pull request is invisible to main. The release assets are the
+    # branch-independent copies: https://github.com/${{ github.repository }}/releases/tag/payload
+    - name: Download published payload
+      id: payload-asset
+      if: steps.payload-cache.outputs.cache-hit != 'true'
+      continue-on-error: true
       shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
-        echo "Exact payload cache hit: ${{ steps.payload-cache.outputs.cache-hit == 'true' }}"
+        gh release download payload --pattern "${{ inputs.asset-key }}.tar.gz" --dir . --clobber
+        mv "${{ inputs.asset-key }}.tar.gz" cosmo-payload.tar.gz
 
-    - name: Install native build tools
-      if: steps.payload-cache.outputs.cache-hit != 'true'
-      shell: bash
-      run: sudo apt-get update && sudo apt-get install -y ccache cmake ninja-build g++ python3
+    - name: Cache pinned build inputs
+      if: steps.payload-cache.outputs.cache-hit != 'true' && steps.payload-asset.outcome != 'success'
+      uses: actions/cache@v6.1.0
+      with:
+        path: |
+          occt/sidecar/build-work/occt-8.0.1-source.tar.gz
+          occt/sidecar/build-work/cosmocc-4.0.2.zip
+          occt/sidecar/build-work/json.hpp
+        key: cosmo-inputs-${{ runner.os }}-${{ runner.arch }}-v1
 
-    - name: Cache sidecar compiler outputs
-      if: steps.payload-cache.outputs.cache-hit != 'true'
+    - name: Restore compiler cache
+      if: steps.payload-cache.outputs.cache-hit != 'true' && steps.payload-asset.outcome != 'success'
       uses: actions/cache@v6.1.0
       with:
         path: ~/.cache/ccache
-        key: cosmo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('occt/sidecar/CMakeLists.txt', 'occt/sidecar/cpp/**', 'occt/sidecar/cmake/**', 'occt/sidecar/scripts/build.py', 'occt/sidecar/scripts/patch_occt.py') }}
+        key: cosmo-ccache-${{ runner.os }}-${{ runner.arch }}-${{ inputs.asset-key }}
         restore-keys: |
-          cosmo-${{ runner.os }}-${{ runner.arch }}-
-          cosmo-${{ runner.os }}-
+          cosmo-ccache-${{ runner.os }}-${{ runner.arch }}-
+          cosmo-ccache-${{ runner.os }}-
+
+    # Compiler objects are keyed by preprocessed source, so they survive
+    # unrelated changes. Shipping them beside the payload is what makes a
+    # sidecar-only edit rebuild in minutes instead of the whole kernel.
+    - name: Download published compiler cache
+      id: ccache-asset
+      if: steps.payload-cache.outputs.cache-hit != 'true' && steps.payload-asset.outcome != 'success'
+      continue-on-error: true
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        if [ -n "$(ls -A ~/.cache/ccache 2>/dev/null)" ]; then
+          echo "Compiler cache already restored from Actions cache"
+          exit 0
+        fi
+        name="cosmo-ccache-${{ runner.os }}-${{ runner.arch }}.tar.zst"
+        gh release download payload --pattern "$name" --dir . --clobber
+        mkdir -p ~/.cache
+        tar --zstd -xf "$name" -C ~/.cache
+
+    - name: Install native build tools
+      if: steps.payload-cache.outputs.cache-hit != 'true' && steps.payload-asset.outcome != 'success'
+      shell: bash
+      run: sudo apt-get update && sudo apt-get install -y ccache cmake ninja-build g++ python3 zstd
+
+    - name: Report runner capacity
+      if: steps.payload-cache.outputs.cache-hit != 'true' && steps.payload-asset.outcome != 'success'
+      shell: bash
+      run: |
+        echo "CPUs: $(nproc)"
+        free -h || true
+        ccache --max-size 1G
+        ccache --show-config | grep -E 'max_size|compression' || true
 
     - name: Build Cosmopolitan sidecar
-      if: steps.payload-cache.outputs.cache-hit != 'true'
+      if: steps.payload-cache.outputs.cache-hit != 'true' && steps.payload-asset.outcome != 'success'
       shell: bash
-      run: python3 occt/sidecar/scripts/build.py cosmo --jobs 2 --work occt/sidecar/build-work
-
-    - name: Prepare Cosmopolitan payload
-      if: steps.payload-cache.outputs.cache-hit != 'true'
-      shell: bash
-      run: python3 occt/sidecar/scripts/package_cosmopolitan_payload.py --work occt/sidecar/build-work --output cosmo-payload.tar.gz
+      run: |
+        jobs="${{ inputs.jobs }}"
+        if [ -z "$jobs" ]; then jobs="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"; fi
+        echo "Building with --jobs $jobs"
+        time python3 occt/sidecar/scripts/build.py cosmo --jobs "$jobs" --work occt/sidecar/build-work
+        python3 occt/sidecar/scripts/package_cosmopolitan_payload.py --work occt/sidecar/build-work --output cosmo-payload.tar.gz
+        ccache --show-stats
 
     - name: Cache built Cosmopolitan payload
       if: steps.payload-cache.outputs.cache-hit != 'true'
@@ -50,3 +116,24 @@ runs:
       with:
         path: cosmo-payload.tar.gz
         key: ${{ inputs.cache-key }}
+
+    - name: Publish payload and compiler cache
+      if: inputs.publish == 'true' && steps.payload-cache.outputs.cache-hit != 'true' && steps.payload-asset.outcome != 'success'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        if ! gh release view payload >/dev/null 2>&1; then
+          gh release create payload --prerelease \
+            --title "CI payload cache" \
+            --notes "Compiled OCCT Cosmopolitan payloads and compiler caches reused by CI across branches. Managed automatically; safe to ignore."
+        fi
+        # gh release upload does not rename on every version, so stage the
+        # final asset names explicitly.
+        payload="${{ inputs.asset-key }}.tar.gz"
+        ccache="cosmo-ccache-${{ runner.os }}-${{ runner.arch }}.tar.zst"
+        cp cosmo-payload.tar.gz "$payload"
+        tar --zstd -cf "$ccache" -C ~/.cache ccache
+        gh release upload payload "$payload" --clobber
+        gh release upload payload "$ccache" --clobber
+        du -h "$payload" "$ccache"

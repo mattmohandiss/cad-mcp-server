@@ -67,15 +67,31 @@ packaging scripts, with ccache as a fallback. Build output directories are gener
 
 ## CI and releases
 
-PR CI runs local checks, registry metadata validation, dependency review, native
-payload/launcher builds, and server packaging. It does not currently run a
-cross-platform public MCP smoke matrix. Native tests without their required
-environment are skipped, so a passing fast check alone is not native validation.
+PR CI scales with the change: `changes` classifies the diff, `check` always runs
+formatting, lint, typecheck, unit tests, registry metadata validation, and
+dependency review, and the compiled sidecar path only runs when it can matter.
+
+| Change                    | Kernel payload | Packaged smoke        |
+| ------------------------- | -------------- | --------------------- |
+| Docs, README, workflows⁠  | skipped        | skipped               |
+| `src/`, packaging, tests  | reused         | Linux x64             |
+| `occt/`, `cmake/`, vendor | rebuilt        | Linux, macOS, Windows |
+| `ci:full` label           | reused         | Linux, macOS, Windows |
+
+The payload is resolved in three tiers, cheapest first: an exact-key Actions
+cache, the payload published as a release asset (`payload` tag, `--prerelease`,
+safe to ignore), then a full build of roughly 90 minutes. Actions caches are
+scoped to the branch that created them, which is why the release asset exists:
+it is what `main` and other branches reuse. Native inputs are cached separately
+from the payload, and the build runs one compiler job per CPU.
+
+Native integration tests need `CAD_MCP_SIDECAR` and are not part of PR CI; the
+packaged smoke test is the end-to-end native check, and it exercises the artifact
+users actually install.
 
 Release-please and npm trusted publishing automate releases:
 
-1. Main-branch workflows restore/build the trusted payload cache and maintain
-   the release PR.
+1. Main-branch workflows seed the reusable payload and maintain the release PR.
 2. Conventional commits determine version changes (`feat`, `fix`, and breaking
    change markers). Do not manually edit release-managed versions or changelog.
 3. Merging the release PR creates the release/tag before publication completes.
