@@ -96,8 +96,91 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  publish:
+  # Pack the release artifact once, validate that exact tarball on every
+  # supported target, then publish the same bytes.
+  pack-release:
     needs: [release-please, build-macos-arm-launcher]
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-cosmo-payload
+          path: payload
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-ape-macos-arm64
+          path: payload
+
+      - name: Build and pack server
+        run: |
+          npm run build
+          bin=dist/src/sidecar/bin
+          mkdir -p "$bin"
+          tar -xzf payload/cosmo-payload.tar.gz -C dist/src/sidecar
+          tar -xzf payload/ape-macos-arm64.tar.gz -C "$bin"
+          rm "$bin/ape-m1.c"
+          npm pack --pack-destination "$RUNNER_TEMP" --json > "$RUNNER_TEMP/pack.json"
+          TARBALL=$(node -e "const p=require(process.env.RUNNER_TEMP+'/pack.json')[0]; console.log(p.filename)")
+          cp "$RUNNER_TEMP/$TARBALL" package.tgz
+          cp "$RUNNER_TEMP/pack.json" pack.json
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-tarball
+          path: |
+            package.tgz
+            pack.json
+          if-no-files-found: error
+          retention-days: 7
+
+  smoke-release:
+    needs: pack-release
+    if: ${{ needs.pack-release.result == 'success' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x64
+            runner: ubuntu-24.04
+          - name: macOS ARM64
+            runner: macos-14
+          - name: Windows x64
+            runner: windows-2022
+    name: Release smoke (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-tarball
+          path: packed
+
+      - name: Install packed npm artifact
+        run: npm install --prefix smoke --no-save --ignore-scripts ./packed/package.tgz @modelcontextprotocol/client@2.3.1
+
+      - name: Launch packaged sidecar and inspect STEP fixture
+        run: node scripts/smoke-packed-cli.mjs
+
+  publish:
+    needs: [release-please, smoke-release]
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
     runs-on: ubuntu-24.04
     permissions:
@@ -120,28 +203,12 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          name: release-cosmo-payload
-          path: payload
+          name: release-tarball
 
-      - uses: actions/download-artifact@v8
-        with:
-          name: release-ape-macos-arm64
-          path: payload
-
-      - name: Install dependencies and package sidecar
+      - name: Describe the smoke-tested tarball
         run: |
-          npm ci
-          npm run build
-          tar -xzf payload/cosmo-payload.tar.gz -C dist/src/sidecar
-          tar -xzf payload/ape-macos-arm64.tar.gz -C dist/src/sidecar/bin
-          rm dist/src/sidecar/bin/ape-m1.c
-
-      - name: Pack release tarball
-        run: |
-          npm pack --pack-destination "$RUNNER_TEMP" --json > "$RUNNER_TEMP/pack.json"
-          TARBALL=$(node -e "const p=require(process.env.RUNNER_TEMP+'/pack.json')[0]; console.log(p.filename)")
-          INTEGRITY=$(node -e "const p=require(process.env.RUNNER_TEMP+'/pack.json')[0]; console.log(p.integrity)")
-          echo "PACKAGE_TARBALL=$RUNNER_TEMP/$TARBALL" >> "$GITHUB_ENV"
+          echo "PACKAGE_TARBALL=$PWD/package.tgz" >> "$GITHUB_ENV"
+          INTEGRITY=$(node -e "const p=require('./pack.json')[0]; console.log(p.integrity)")
           echo "PACKAGE_INTEGRITY=$INTEGRITY" >> "$GITHUB_ENV"
 
       - name: Publish to npm
