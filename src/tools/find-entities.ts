@@ -12,8 +12,8 @@ import { CURVE_TYPES, SURFACE_TYPES } from '../tool-schemas.js';
 import { parseEntityId } from '../utils/ids.js';
 
 const page = {
-  limit: z.number().int().min(1).max(1000).default(50),
-  offset: z.number().int().min(0).default(0),
+  limit: z.coerce.number().int().min(1).max(1000).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
 };
 
 const ENTITY_TYPES = ['face', 'edge', 'vertex', 'body'] as const;
@@ -49,13 +49,13 @@ const baseSchema = z
         'Optional explicit ids to return; each must match entity_type (e.g. ["face:3"]).',
     }),
     surface_type: z.enum(SURFACE_TYPES).optional(),
-    min_area: z.number().nonnegative().optional(),
-    max_area: z.number().nonnegative().optional(),
+    min_area: z.coerce.number().nonnegative().optional(),
+    max_area: z.coerce.number().nonnegative().optional(),
     curve_type: z.enum(CURVE_TYPES).optional(),
-    min_length: z.number().nonnegative().optional(),
-    max_length: z.number().nonnegative().optional(),
-    min_radius: z.number().nonnegative().optional(),
-    max_radius: z.number().nonnegative().optional(),
+    min_length: z.coerce.number().nonnegative().optional(),
+    max_length: z.coerce.number().nonnegative().optional(),
+    min_radius: z.coerce.number().nonnegative().optional(),
+    max_radius: z.coerce.number().nonnegative().optional(),
     ...page,
   })
   .strict()

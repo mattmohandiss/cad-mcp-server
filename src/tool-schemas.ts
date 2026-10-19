@@ -61,7 +61,7 @@ export const shapeEntityId = entityId.refine(
   'Must be a face:N, edge:N, or body:N ID — or a component-scoped component:<name>/face:N or component:<name>/edge:N ID — from a prior find or inspect result.',
 );
 
-export const point3 = z.array(z.number()).length(3);
+export const point3 = z.array(z.coerce.number()).length(3);
 
 export const directionModeSchema = z.enum(['axis', 'normal']).meta({
   description:

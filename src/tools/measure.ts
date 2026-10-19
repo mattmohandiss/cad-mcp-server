@@ -36,8 +36,8 @@ const baseSchema = z
     pull_direction: point3.optional(),
     pull_direction_mode: directionModeSchema.optional(),
     bidirectional: z.boolean().optional(),
-    spacing_mm: z.number().positive().max(1000).optional(),
-    max_distance: z.number().positive().max(1_000_000).optional(),
+    spacing_mm: z.coerce.number().positive().max(1000).optional(),
+    max_distance: z.coerce.number().positive().max(1_000_000).optional(),
     origin: point3.optional(),
     origin_mode: z.enum(['extent_min', 'extent_center', 'extent_max']).optional(),
     points: z.array(point3).min(1).max(100).optional(),
@@ -54,7 +54,7 @@ const baseSchema = z
       .min(1)
       .max(5)
       .optional(),
-    tolerance: z.number().nonnegative().max(1000).optional(),
+    tolerance: z.coerce.number().nonnegative().max(1000).optional(),
     plane_origin: point3.optional(),
     plane_normal: point3.optional(),
     detail: z.enum(['stats', 'samples', 'hits']).optional(),
