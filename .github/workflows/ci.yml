@@ -114,6 +114,7 @@ jobs:
         uses: ./.github/actions/cosmopolitan-payload
         with:
           cache-key: ${{ runner.os }}-cosmo-payload-v1-${{ hashFiles('occt/**', 'CMakeLists.txt', 'cmake/**', 'vendor/**', 'scripts/patch_occt.py', '.github/actions/cosmopolitan-payload/action.yml', '.github/workflows/ci.yml') }}
+          asset-key: ${{ runner.os }}-cosmo-occt-v1-${{ hashFiles('occt/**', 'CMakeLists.txt', 'cmake/**', 'vendor/**', 'scripts/patch_occt.py') }}
           publish: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
 
       - uses: actions/upload-artifact@v7
