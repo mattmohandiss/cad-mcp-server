@@ -39,17 +39,39 @@ async function smoke({ label, clientOptions, uri }) {
     assert.equal(tools.length, 4, `${label}: expected four tools`);
     const result = await client.callTool({ name: 'inspect', arguments: { uri } });
     assert.equal(result.isError, undefined, `${label}: ${JSON.stringify(result)}`);
-    const dimensions = result.structuredContent?.size?.dimensions;
-    assert.ok(dimensions, `${label}: no dimensions returned`);
+    const size = result.structuredContent?.size;
+    assert.ok(size, `${label}: no size returned`);
+    assert.deepEqual(
+      [size.dimensions.width, size.dimensions.height, size.dimensions.depth],
+      [30, 10, 10],
+      `${label}: fixture dimensions changed`,
+    );
+    assert.ok(Math.abs(size.volume - 2000) < 1e-6, `${label}: fixture volume changed`);
+    assert.ok(Math.abs(size.surface_area - 1200) < 1e-6, `${label}: fixture area changed`);
+
+    const faces = await client.callTool({
+      name: 'find_entities',
+      arguments: { artifact: result.structuredContent.artifact, entity_type: 'face', limit: 5 },
+    });
+    const faceIds = faces.structuredContent.entities.map((entity) => entity.id).slice(0, 1);
+    const thickness = await client.callTool({
+      name: 'measure',
+      arguments: {
+        artifact: result.structuredContent.artifact,
+        kind: 'thickness',
+        entity_ids: faceIds,
+        direction_mode: 'normal',
+        spacing_mm: 1000,
+      },
+    });
+    const stats = thickness.structuredContent.results[0].results.thickness.statistics;
     assert.ok(
-      [dimensions.width, dimensions.height, dimensions.depth].every(
-        (value) => Number.isFinite(value) && value > 0,
-      ),
-      `${label}: invalid dimensions`,
+      Math.abs(stats.min_distance - 10) < 1e-9,
+      `${label}: thickness measured ${stats.min_distance}`,
     );
     console.log(
       `${label}: protocol ${client.getNegotiatedProtocolVersion()} (${client.getProtocolEra()}), ` +
-        `tools ${tools.length}, inspected ${dimensions.width}x${dimensions.height}x${dimensions.depth}`,
+        `tools ${tools.length}, 30x10x10 fixture, thickness ${stats.min_distance}`,
     );
   } finally {
     await client.close();
