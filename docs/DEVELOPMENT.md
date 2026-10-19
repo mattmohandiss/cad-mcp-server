@@ -112,7 +112,7 @@ claims distinct from the coverage actually executed.
 ## Distribution
 
 The npm package contains compiled runtime code, sidecar binaries/launchers,
-metadata, README, example prompts, and third-party notices. Exclude tests,
+metadata, README, example prompts, third-party notices, and the LICENSES texts. Exclude tests,
 source maps, and development artifacts. Preview the actual package with
 `npm pack --dry-run --ignore-scripts` before changing package contents.
 

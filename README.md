@@ -75,4 +75,4 @@ Results are reproducible: the server returns the entity IDs and the SHA-256 revi
 
 ## License
 
-MIT. The bundled Open CASCADE sidecar uses LGPL-2.1. See [THIRD_PARTY_NOTICES.md](https://github.com/mattmohandiss/cad-mcp-server/blob/main/THIRD_PARTY_NOTICES.md).
+MIT. Third-party licenses: [THIRD_PARTY_NOTICES.md](https://github.com/mattmohandiss/cad-mcp-server/blob/main/THIRD_PARTY_NOTICES.md).
