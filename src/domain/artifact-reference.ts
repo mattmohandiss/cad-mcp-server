@@ -58,10 +58,21 @@ export const artifactReferenceSchema = z
     units: z.literal('mm'),
   })
   .strict();
+// Inputs only need the binding fields; defaults fill the rest so a caller can
+// pass back the reference without reproducing every literal.
+export const artifactReferenceInputSchema = z
+  .object({
+    revision: artifactRevisionSchema,
+    uri: artifactUriSchema,
+    format: z.literal('step').default('step'),
+    units: z.literal('mm').default('mm'),
+  })
+  .strict();
+// The response's top-level artifact already identifies the revision, so a
+// subject carries only the entity it points at.
 export const subjectReferenceSchema = z
   .object({
     type: z.literal('geometry'),
-    artifact: artifactReferenceSchema,
     entity: z
       .object({
         authority: z.string().min(1),
@@ -104,11 +115,10 @@ export function artifactReference(filePath: string, revision: string) {
   };
 }
 
-export function subjectReference(artifact: ReturnType<typeof artifactReference>, id: string) {
+export function subjectReference(id: string) {
   const kind = parseEntityId(id)?.type ?? 'entity';
   return {
     type: 'geometry' as const,
-    artifact,
     entity: { ...ENTITY_ID_SCHEME, id, kind },
   };
 }

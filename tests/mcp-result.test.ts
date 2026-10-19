@@ -6,9 +6,7 @@ describe('MCP tool result shape', () => {
     const result = await runTool('t', async () => ({ value: 42 }));
 
     expect(result.structuredContent).toEqual({ value: 42 });
-    expect(result.content).toEqual([
-      { type: 'text', text: JSON.stringify({ value: 42 }, null, 2) },
-    ]);
+    expect(result.content).toEqual([{ type: 'text', text: JSON.stringify({ value: 42 }) }]);
     expect(result.isError).toBeUndefined();
   });
 

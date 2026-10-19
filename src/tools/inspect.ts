@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { stripNulls } from '../tool-schemas.js';
 import { sidecarModels } from '../sidecar/models.js';
 import type { Vec3 } from '../sidecar/operations.js';
 import {
@@ -16,12 +17,14 @@ const includeSchema = z
       'Sections to include: size, counts, health. Default: all three. Example: ["size", "health"].',
   });
 
-export const schema = z
+const baseSchema = z
   .object({
     ...artifactLocatorSchema.shape,
     include: includeSchema,
   })
   .strict();
+
+export const schema = z.preprocess(stripNulls, baseSchema);
 
 export const examples = [
   { uri: 'file:///work/model.step' },

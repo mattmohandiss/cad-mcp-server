@@ -1,17 +1,18 @@
 import { z } from 'zod';
+import { stripNulls } from '../tool-schemas.js';
 import { sidecarModels } from '../sidecar/models.js';
 import {
   artifactPath,
-  artifactReferenceSchema,
+  artifactReferenceInputSchema,
   artifactReference,
   ENTITY_ID_SCHEME,
   STEP_MODEL_FRAME,
 } from '../domain/artifact-reference.js';
-import { CURVE_TYPES, SURFACE_TYPES } from '../tool-defs.js';
+import { CURVE_TYPES, SURFACE_TYPES } from '../tool-schemas.js';
 import { parseEntityId } from '../utils/ids.js';
 
 const page = {
-  limit: z.number().int().min(1).max(1000).default(100),
+  limit: z.number().int().min(1).max(1000).default(50),
   offset: z.number().int().min(0).default(0),
 };
 
@@ -36,9 +37,9 @@ const componentName = z.string().min(1).max(256).optional().meta({
 // a root `properties` object reliably; a root `oneOf` caused the artifact
 // reference to be serialized as a string, which the server then rejected. The
 // per-entity-type field rules are enforced in the refinement below.
-export const schema = z
+const baseSchema = z
   .object({
-    artifact: artifactReferenceSchema,
+    artifact: artifactReferenceInputSchema,
     entity_type: z.enum(ENTITY_TYPES).meta({
       description: 'Entity category to search.',
     }),
@@ -121,6 +122,8 @@ const exampleArtifact = {
   units: 'mm' as const,
 };
 
+export const schema = z.preprocess(stripNulls, baseSchema);
+
 export const examples = [
   { artifact: exampleArtifact, entity_type: 'face', surface_type: 'cylinder', min_area: 100 },
   { artifact: exampleArtifact, entity_type: 'edge', curve_type: 'circle', min_length: 20 },
@@ -171,7 +174,6 @@ export async function handler(args: z.output<typeof schema>) {
         units: { length: 'mm', area: 'mm2', volume: 'mm3', angle: 'deg' },
         coordinate_frame: STEP_MODEL_FRAME,
         query: { entity_type, filters: compactFilters, ...(entity_ids ? { entity_ids } : {}) },
-        statistics: { total_entities: result.total_matched },
         pagination: {
           limit,
           offset,
@@ -180,7 +182,6 @@ export async function handler(args: z.output<typeof schema>) {
           has_more: offset + result.entities.length < result.total_matched,
         },
         entities: result.entities,
-        groups: [],
       };
     },
     args.artifact.revision,

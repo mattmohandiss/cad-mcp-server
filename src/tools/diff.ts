@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { stripNulls } from '../tool-schemas.js';
 import { sidecarModels } from '../sidecar/models.js';
 import {
   artifactLocatorSchema,
@@ -9,12 +10,14 @@ import { parseStepMetadata } from '../pmi/metadata.js';
 import { compareStepMetadata } from '../domain/compare.js';
 import { fileRevision } from '../utils/hash.js';
 
-export const schema = z
+const baseSchema = z
   .object({
     baseline: artifactLocatorSchema.describe('Original STEP artifact.'),
     candidate: artifactLocatorSchema.describe('Modified STEP artifact.'),
   })
   .strict();
+
+export const schema = z.preprocess(stripNulls, baseSchema);
 
 export const examples = [
   {

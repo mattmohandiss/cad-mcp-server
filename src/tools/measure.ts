@@ -1,10 +1,11 @@
 import { z } from 'zod';
+import { stripNulls } from '../tool-schemas.js';
 import { sidecarModels } from '../sidecar/models.js';
 import { directionModeSchema, entityId, point3, shapeEntityId } from '../tool-schemas.js';
 import {
   artifactPath,
   artifactReference,
-  artifactReferenceSchema,
+  artifactReferenceInputSchema,
   ENTITY_ID_SCHEME,
   STEP_MODEL_FRAME,
   subjectReference,
@@ -22,13 +23,13 @@ export const MEASURE_KINDS = [
   'continuity',
 ] as const;
 
-export const schema = z
+const baseSchema = z
   .object({
-    artifact: artifactReferenceSchema,
+    artifact: artifactReferenceInputSchema,
     kind: z.enum(MEASURE_KINDS),
     sources: z.array(shapeEntityId).min(1).max(1000).optional(),
     targets: z.array(shapeEntityId).min(1).max(1000).optional(),
-    summary: z.enum(['all', 'minimum']).default('all').optional(),
+    summary: z.enum(['all', 'minimum']).default('minimum'),
     entity_ids: z.array(entityId).min(1).max(100).optional(),
     direction: point3.optional(),
     direction_mode: directionModeSchema.optional(),
@@ -201,6 +202,8 @@ const exampleArtifact = {
   units: 'mm' as const,
 };
 
+export const schema = z.preprocess(stripNulls, baseSchema);
+
 export const examples = [
   {
     artifact: exampleArtifact,
@@ -248,7 +251,7 @@ export async function handler(args: z.output<typeof schema>) {
           entity_id_scheme: ENTITY_ID_SCHEME,
           coordinate_frame: STEP_MODEL_FRAME,
           subjects: [...(args.sources ?? []), ...(args.targets ?? [])].map((id) =>
-            subjectReference(artifactReference(filePath, revision), id),
+            subjectReference(id),
           ),
           kind: args.kind,
           units: { length: 'mm' },
@@ -286,9 +289,7 @@ export async function handler(args: z.output<typeof schema>) {
         artifact: artifactReference(filePath, revision),
         entity_id_scheme: ENTITY_ID_SCHEME,
         coordinate_frame: STEP_MODEL_FRAME,
-        subjects: (args.entity_ids ?? []).map((id) =>
-          subjectReference(artifactReference(filePath, revision), id),
-        ),
+        subjects: (args.entity_ids ?? []).map((id) => subjectReference(id)),
         kind: args.kind,
         units: { length: 'mm', angle: 'deg', curvature: 'mm-1' },
         entity_count: args.entity_ids?.length ?? 0,

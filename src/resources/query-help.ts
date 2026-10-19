@@ -1,4 +1,4 @@
-import { CURVE_TYPES, SURFACE_TYPES } from '../tool-defs.js';
+import { CURVE_TYPES, SURFACE_TYPES } from '../tool-schemas.js';
 import { TOOL_REGISTRY } from '../tools/registry.js';
 import { MEASURE_KINDS } from '../tools/measure.js';
 import pkg from '../../package.json' with { type: 'json' };

@@ -6,12 +6,13 @@ import * as findEntities from './find-entities.js';
 import * as measureTool from './measure.js';
 import * as outputSchemas from '../output-schemas.js';
 
-// Every cad-mcp tool is a read-only geometry query over a caller-supplied STEP path.
+// Every cad-mcp tool is a read-only geometry query over a caller-supplied local
+// STEP path; nothing reaches an open world.
 const READ_ONLY: ToolAnnotations = {
   readOnlyHint: true,
   destructiveHint: false,
   idempotentHint: true,
-  openWorldHint: true,
+  openWorldHint: false,
 };
 
 /** A registry entry with its input type erased so the array stays homogeneous. */
@@ -79,7 +80,7 @@ export const TOOL_REGISTRY: ToolSpec[] = [
     title: 'Measure Geometry',
     description:
       'Measure distance, wall thickness, draft, rays/ray grids, point geometry, planar sections, or edge continuity. Use the artifact reference and entity IDs from the same find_entities result. ' +
-      'Returns geometric measurements only, not engineering acceptance or design recommendations. Requests are bounded; geometry and OCCT handles remain in the sidecar.',
+      'Fetch the cad://help resource for the required fields of each kind. Returns geometric measurements only, not engineering acceptance or design recommendations.',
     purpose: 'Distance, thickness, draft, ray, point, section, and continuity measurements.',
     inputSchema: measureTool.schema,
     examples: measureTool.examples,

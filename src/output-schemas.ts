@@ -20,16 +20,6 @@ const pagination = z.object({
   has_more: z.boolean(),
 });
 
-const group = z.object({
-  id: z.string(),
-  key: record,
-  entity_count: z.number(),
-  sample_entity_ids: z.array(z.string()),
-  sample_entity_limit: z.number(),
-  sample_is_complete: z.boolean(),
-  summary: record,
-});
-
 export const inspect = z
   .object({
     artifact: artifactReferenceSchema,
@@ -74,10 +64,8 @@ export const query = z.object({
     angle: z.string(),
   }),
   query: record,
-  statistics: record,
   pagination,
   entities: z.array(record),
-  groups: z.array(group),
 });
 
 export const distance = z.object({
