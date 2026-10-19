@@ -1,61 +1,50 @@
-import { resolve } from 'node:path';
-import { Client } from '@modelcontextprotocol/client';
-import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
-const [serverEntry, stepFile] = process.argv.slice(2);
-if (!serverEntry || !stepFile) {
-  throw new Error('Usage: smoke-packed-cli.mjs <installed-server-entry> <step-file>');
-}
+const smokeRoot = resolve('smoke');
+const require = createRequire(join(smokeRoot, 'package.json'));
+const packageRoot = join(smokeRoot, 'node_modules/cad-mcp-server');
+const server = join(packageRoot, 'dist/src/index.js');
+const fixture = resolve('tests/fixtures/repeated-instances.step');
+assert.ok(require('node:fs').existsSync(server), `Packed server missing: ${server}`);
+assert.ok(require('node:fs').existsSync(fixture), `STEP fixture missing: ${fixture}`);
 
-const transport = new StdioClientTransport({
-  command: process.execPath,
-  args: [resolve(serverEntry)],
-  env: {
-    ...getDefaultEnvironment(),
-    ...(process.env.CAD_MCP_SIDECAR ? { CAD_MCP_SIDECAR: process.env.CAD_MCP_SIDECAR } : {}),
-  },
-  stderr: 'inherit',
-});
+delete process.env.CAD_MCP_SIDECAR;
+delete process.env.OCCT_SIDECAR;
+delete process.env.CAD_MCP_SIDECAR_LAUNCHER;
+delete process.env.OCCT_LAUNCHER;
+
+const { Client } = require('@modelcontextprotocol/client');
+const { StdioClientTransport } = require('@modelcontextprotocol/client/stdio');
 const client = new Client(
-  { name: 'cad-mcp-packed-smoke', version: '1.0.0' },
+  { name: 'cad-mcp-pack-smoke', version: '1.0.0' },
   { versionNegotiation: { mode: { pin: '2026-07-28' } } },
 );
-
+const transport = new StdioClientTransport({
+  command: process.execPath,
+  args: [server],
+  cwd: process.cwd(),
+  stderr: 'inherit',
+});
 try {
   await client.connect(transport);
-  const { tools } = await client.listTools();
-  if (!tools.some((tool) => tool.name === 'inspect')) {
-    throw new Error('Packed server did not advertise inspect');
-  }
-
+  assert.equal(client.getNegotiatedProtocolVersion(), '2026-07-28');
   const result = await client.callTool({
     name: 'inspect',
-    arguments: { file_path: resolve(stepFile) },
+    arguments: { uri: pathToFileURL(fixture).href },
   });
-  if (result.isError) throw new Error(`Packed inspect failed: ${JSON.stringify(result.content)}`);
-
-  const data = result.structuredContent;
-  if (typeof data !== 'object' || data === null || !('size' in data)) {
-    throw new Error('Packed inspect returned no structured geometry size');
-  }
-  const size = data.size;
-  if (typeof size !== 'object' || size === null || !('dimensions' in size) || !('volume' in size)) {
-    throw new Error('Packed inspect returned incomplete geometry size');
-  }
-  const dimensions = size.dimensions;
-  if (
-    typeof dimensions !== 'object' ||
-    dimensions === null ||
-    ![dimensions.width, dimensions.height, dimensions.depth].every(
-      (value) => typeof value === 'number' && Number.isFinite(value) && value > 0,
-    ) ||
-    typeof size.volume !== 'number' ||
-    !Number.isFinite(size.volume) ||
-    size.volume <= 0
-  ) {
-    throw new Error('Packed inspect returned invalid geometry dimensions or volume');
-  }
-  console.log('Packed CLI MCP inspect smoke test passed');
+  assert.equal(result.isError, undefined, JSON.stringify(result));
+  const dimensions = result.structuredContent?.size?.dimensions;
+  assert.ok(dimensions, 'Packaged MCP server returned no dimensions');
+  assert.ok(
+    [dimensions.width, dimensions.height, dimensions.depth].every(
+      (value) => Number.isFinite(value) && value > 0,
+    ),
+    'Packaged MCP server returned invalid dimensions',
+  );
+  console.log('Packed npm CLI launched its sidecar and inspected the STEP fixture');
 } finally {
   await client.close();
 }

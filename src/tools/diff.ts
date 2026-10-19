@@ -1,60 +1,93 @@
 import { z } from 'zod';
-import { runTool } from '../tool-helper.js';
 import { sidecarModels } from '../sidecar/models.js';
-import { filePath } from '../tool-schemas.js';
+import {
+  artifactLocatorSchema,
+  artifactPath,
+  artifactReference,
+} from '../domain/artifact-reference.js';
 import { parseStepMetadata } from '../pmi/metadata.js';
 import { compareStepMetadata } from '../domain/compare.js';
+import { fileRevision } from '../utils/hash.js';
 
 export const schema = z
   .object({
-    file_path_a: filePath.meta({
-      description: 'Path to the first (baseline/original) STEP file. Example: "v1_bracket.step".',
-    }),
-    file_path_b: filePath.meta({
-      description: 'Path to the second (modified/new) STEP file. Example: "v2_bracket.step".',
-    }),
+    baseline: artifactLocatorSchema.describe('Original STEP artifact.'),
+    candidate: artifactLocatorSchema.describe('Modified STEP artifact.'),
   })
   .strict();
 
-export const examples = [{ file_path_a: 'model_v1.step', file_path_b: 'model_v2.step' }];
+export const examples = [
+  {
+    baseline: { uri: 'file:///work/model_v1.step' },
+    candidate: { uri: 'file:///work/model_v2.step' },
+  },
+];
 
 export async function handler(args: z.output<typeof schema>) {
-  return runTool(async () => {
-    type Stats = {
-      solids: number;
-      faces: number;
-      edges: number;
-      volume: number;
-      surfaceArea: number;
-      bounds: { min: number[]; max: number[] };
-    };
-    const read = (filePath: string) =>
-      sidecarModels.withModel(filePath, async (client, modelId) => {
-        const response = await client.request<Stats>('inspect', { modelId });
-        return response.result;
-      });
-    const a = await read(args.file_path_a);
-    const b = await read(args.file_path_b);
-    const semanticA = await parseStepMetadata(args.file_path_a);
-    const semanticB = await parseStepMetadata(args.file_path_b);
-    const dims = (s: Stats) => s.bounds.min.map((min, i) => s.bounds.max[i]! - min);
-    const da = dims(a);
-    const db = dims(b);
-    return {
-      files: { a: args.file_path_a, b: args.file_path_b },
-      deltas: {
-        dimensions: { width: db[0]! - da[0]!, height: db[1]! - da[1]!, depth: db[2]! - da[2]! },
-        volume: b.volume - a.volume,
-        surfaceArea: b.surfaceArea - a.surfaceArea,
-        bodyCount: b.solids - a.solids,
-        faceCount: b.faces - a.faces,
-        edgeCount: b.edges - a.edges,
+  type Stats = {
+    solids: number;
+    faces: number;
+    edges: number;
+    volume: number;
+    surfaceArea: number;
+    bounds: { min: number[]; max: number[] };
+  };
+  const read = (uri: string) =>
+    sidecarModels.withModel(artifactPath(uri), async (client, modelId, filePath, revision) => {
+      const response = await client.request('inspect', { modelId });
+      return {
+        stats: response.result,
+        artifact: artifactReference(filePath, revision),
+        filePath,
+      };
+    });
+  const baseline = await read(args.baseline.uri);
+  const candidate = await read(args.candidate.uri);
+  const parseVerified = async (path: string, expectedRevision: string) => {
+    if ((await fileRevision(path)) !== expectedRevision) {
+      throw {
+        type: 'stale_reference',
+        message: 'STEP file changed before metadata comparison; retry diff against stable files.',
+      };
+    }
+    const metadata = await parseStepMetadata(path);
+    if ((await fileRevision(path)) !== expectedRevision) {
+      throw {
+        type: 'stale_reference',
+        message: 'STEP file changed during metadata comparison; retry diff against stable files.',
+      };
+    }
+    return metadata;
+  };
+  const [semanticBaseline, semanticCandidate] = await Promise.all([
+    parseVerified(baseline.filePath, baseline.artifact.revision),
+    parseVerified(candidate.filePath, candidate.artifact.revision),
+  ]);
+  const dims = (stats: Stats) => stats.bounds.min.map((min, i) => stats.bounds.max[i]! - min);
+  const baselineDimensions = dims(baseline.stats);
+  const candidateDimensions = dims(candidate.stats);
+  return {
+    inputs: [
+      { role: 'baseline', artifact: baseline.artifact },
+      { role: 'candidate', artifact: candidate.artifact },
+    ],
+    units: { length: 'mm', area: 'mm2', volume: 'mm3' },
+    deltas: {
+      dimensions: {
+        width: candidateDimensions[0]! - baselineDimensions[0]!,
+        height: candidateDimensions[1]! - baselineDimensions[1]!,
+        depth: candidateDimensions[2]! - baselineDimensions[2]!,
       },
-      exchange: compareStepMetadata(semanticA, semanticB),
-      providers: {
-        a: ['occt-sidecar', 'lightweight-step'],
-        b: ['occt-sidecar', 'lightweight-step'],
-      },
-    };
-  });
+      volume: candidate.stats.volume - baseline.stats.volume,
+      surfaceArea: candidate.stats.surfaceArea - baseline.stats.surfaceArea,
+      bodyCount: candidate.stats.solids - baseline.stats.solids,
+      faceCount: candidate.stats.faces - baseline.stats.faces,
+      edgeCount: candidate.stats.edges - baseline.stats.edges,
+    },
+    exchange: compareStepMetadata(semanticBaseline, semanticCandidate),
+    providers: {
+      baseline: ['occt-sidecar', 'lightweight-step'],
+      candidate: ['occt-sidecar', 'lightweight-step'],
+    },
+  };
 }

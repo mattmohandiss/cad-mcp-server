@@ -9,35 +9,9 @@ import { createViewerApiToken, startViewerArtifactApi } from './artifacts/viewer
 import { queryHelpResourceHandler, QUERY_HELP_URI } from './resources/query-help.js';
 import { TOOL_REGISTRY } from './tools/registry.js';
 import { logEvent } from './logging.js';
+import { runTool } from './tool-helper.js';
+import { SERVER_NAME, PROTOCOL_VERSION, CACHE_TTL_MS } from './identity.js';
 import { sidecarModels } from './sidecar/models.js';
-
-// All cad-mcp tools are pure geometry reads: they do not modify anything and
-// operate on the closed world of the given STEP file (no external side effects).
-const READ_ONLY = {
-  readOnlyHint: true,
-  destructiveHint: false,
-  idempotentHint: true,
-  openWorldHint: false,
-} as const;
-
-const CAD_CAPABILITY_MANIFEST = {
-  capabilityId: 'cad-core',
-  version: pkg.version,
-  title: 'CAD Geometry Facts',
-  domain: 'geometry',
-  workflows: ['inspect', 'find_entities', 'measure', 'diff'],
-  subjects: ['geometry', 'assembly'],
-  resultKinds: ['facts', 'comparison'],
-  requiredInputs: ['file_path'],
-  sideEffects: [],
-  dataHandling: { processing: 'local' },
-  // This server is read-only and understands geometry only. The companion
-  // review-mcp server registers the 8 engineering workflow prompts
-  // (analyze_part, check_thickness, check_moldability, draft_audit, etc.) that
-  // orchestrate these tools; a capability-aware host should look there for the
-  // interpretation surface.
-  promptsHostedBy: 'review-mcp',
-};
 
 function getArgValue(name: string): string | undefined {
   const prefix = `${name}=`;
@@ -56,11 +30,21 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
   const mcpHandle = serveStdio(
     () => {
       const server = new McpServer(
+        { name: SERVER_NAME, version: pkg.version },
         {
-          name: 'cad-mcp-server',
-          version: pkg.version,
+          capabilities: {
+            tools: { listChanged: false },
+            resources: { listChanged: false },
+          },
+          instructions:
+            'Local STEP geometry server. Call inspect first for a SHA-256 artifact reference, then find_entities and measure with the exact returned entity IDs. Returns measured geometry facts, never manufacturability or design-intent conclusions.',
+          cacheHints: {
+            'server/discover': { ttlMs: CACHE_TTL_MS, cacheScope: 'public' },
+            'tools/list': { ttlMs: CACHE_TTL_MS, cacheScope: 'public' },
+            'resources/list': { ttlMs: CACHE_TTL_MS, cacheScope: 'public' },
+            'resources/read': { ttlMs: CACHE_TTL_MS, cacheScope: 'public' },
+          },
         },
-        { capabilities: { tools: {}, resources: {} } },
       );
 
       for (const tool of TOOL_REGISTRY) {
@@ -69,29 +53,18 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
           {
             title: tool.title,
             description: tool.description,
-            inputSchema: tool.schema,
+            inputSchema: tool.inputSchema,
             outputSchema: tool.outputSchema,
-            annotations: READ_ONLY,
+            annotations: tool.annotations,
           },
           // The registry intentionally contains heterogeneous tool schemas.
           // MCP validates each tool's input before this adapter runs.
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          async (args: any) => {
-            const startedAt = Date.now();
-            logEvent('tool.started', { tool: tool.name });
-            const result = await tool.handler(args);
-            logEvent('tool.completed', {
-              tool: tool.name,
-              durationMs: Date.now() - startedAt,
-              isError: 'isError' in result && result.isError === true,
-            });
-            return result;
-          },
+          (args: unknown) => runTool(tool.name, () => tool.handler(args)),
         );
       }
 
       server.registerResource(
-        'query-help',
+        'help',
         QUERY_HELP_URI,
         {
           title: 'CAD MCP query help',
@@ -117,29 +90,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
         },
       );
 
-      server.registerResource(
-        'cad-core-capability',
-        'mcp-capability://cad-core',
-        {
-          title: 'CAD Core Capability',
-          description: 'Capability manifest for deterministic STEP geometry facts.',
-          mimeType: 'application/json',
-          annotations: {
-            audience: ['user', 'assistant'],
-            priority: 0.8,
-          },
-        },
-        async (uri) => ({
-          contents: [
-            {
-              uri: uri.href,
-              mimeType: 'application/json',
-              text: JSON.stringify(CAD_CAPABILITY_MANIFEST),
-            },
-          ],
-        }),
-      );
-
       return server;
     },
     { legacy: 'reject' },
@@ -158,5 +108,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
   process.once('SIGTERM', () => void close());
   process.stdin.once('end', () => void close());
 
-  logEvent('server.started', { tools: TOOL_REGISTRY.length, protocol: '2026-07-28' });
+  logEvent('server.started', { tools: TOOL_REGISTRY.length, protocol: PROTOCOL_VERSION });
 }

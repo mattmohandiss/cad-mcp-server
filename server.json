@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.mattmohandiss/cad-mcp-server",
   "title": "CAD MCP Server",
-  "description": "STEP file inspection for AI. Measure walls, draft angles, clearances. Returns facts, not guesses.",
+  "description": "Measure STEP CAD files with your AI assistant: dimensions, wall thickness, clearance, draft, and revision diffs. Local and read-only.",
   "repository": {
     "url": "https://github.com/mattmohandiss/cad-mcp-server",
     "source": "github",

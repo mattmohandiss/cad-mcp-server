@@ -20,7 +20,7 @@ export async function getSidecarClient(): Promise<SidecarClient> {
   const started = new SidecarClient({ executable, launcher });
   client = started;
   try {
-    const hello = await started.request<{ protocol: number; occt: string }>('hello', {}, 10_000);
+    const hello = await started.request('hello', {}, 10_000);
     if (hello.result.protocol !== 2) {
       throw new Error(`Unsupported sidecar protocol: ${hello.result.protocol}`);
     }
@@ -41,10 +41,8 @@ export async function stopSidecar(): Promise<void> {
 function defaultLauncher(): string | undefined {
   if (process.platform === 'linux') {
     if (process.arch === 'x64') return asset('ape-x86_64.elf');
-    if (process.arch === 'arm64') return asset('ape-aarch64.elf');
   }
   if (process.platform === 'darwin') {
-    if (process.arch === 'x64') return asset('ape-x86_64.macho');
     if (process.arch === 'arm64') return asset('ape-aarch64.macho');
   }
   if (process.platform === 'win32' && process.arch === 'x64') return undefined;

@@ -2,25 +2,17 @@
   "name": "cad-mcp-server",
   "version": "0.7.1",
   "mcpName": "io.github.mattmohandiss/cad-mcp-server",
-  "description": "Give your AI assistant the ability to inspect, measure, and compare 3D CAD models. Works locally with any STEP file — no CAD license, no cloud, no setup.",
+  "description": "Measure STEP CAD files with your AI assistant: dimensions, wall thickness, clearance, draft, and revision diffs. Local, read-only, no CAD license.",
   "type": "module",
   "main": "dist/src/index.js",
-  "exports": {
-    ".": {
-      "import": "./dist/src/index.js",
-      "types": "./dist/src/index.d.ts"
-    },
-    "./package.json": "./package.json"
-  },
   "files": [
-    "dist",
+    "dist/src",
+    "dist/package.json",
     "!dist/**/*.map",
-    "!dist/eval",
-    "!dist/src/tests",
-    "!dist/vitest.config.*",
     "README.md",
     "THIRD_PARTY_NOTICES.md",
     "docs/EXAMPLE_PROMPTS.md",
+    "docs/images",
     "server.json"
   ],
   "bin": {
@@ -29,21 +21,22 @@
   "engines": {
     "node": ">=24"
   },
-  "preferUnplugged": true,
   "scripts": {
-    "build": "rm -rf dist && tsc",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "dev": "tsx src/index.ts",
     "start": "node dist/src/index.js",
     "watch": "tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "typecheck": "tsc --noEmit",
-    "fmt": "prettier --write src/",
-    "lint": "oxlint src/ eval/",
+    "lint": "oxlint src tests",
+    "fmt": "prettier --write src tests package.json tsconfig.json tsconfig.build.json vitest.config.ts vitest.integration.config.ts",
+    "fmt:check": "prettier --check src tests package.json tsconfig.json tsconfig.build.json vitest.config.ts vitest.integration.config.ts",
     "prepare": "husky"
   },
   "lint-staged": {
-    "{src,eval}/**/*.{ts,tsx}": [
+    "{src,tests}/**/*.{ts,tsx}": [
       "oxlint --fix",
       "prettier --write"
     ],
@@ -69,6 +62,10 @@
     "geometry",
     "inspection",
     "quality",
+    "wall-thickness",
+    "clearance",
+    "draft-angle",
+    "revision-compare",
     "b-rep",
     "opencascade",
     "occt",
@@ -97,23 +94,23 @@
   "dependencies": {
     "@modelcontextprotocol/server": "2.3.1",
     "pino": "^10.4.0",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@ai-sdk/gateway": "^4.0.103",
-    "@ai-sdk/mcp": "^2.0.66",
+    "@ai-sdk/gateway": "^4.0.116",
+    "@ai-sdk/mcp": "^2.0.78",
     "@commitlint/cli": "^21.2.3",
     "@commitlint/config-conventional": "^21.2.3",
     "@modelcontextprotocol/client": "2.3.1",
-    "@types/node": "^26.6.4",
-    "ai": "^7.0.127",
+    "@types/node": "^24.0.0",
+    "ai": "^7.0.143",
     "husky": "^9.1.7",
     "lint-staged": "^17.6.0",
-    "oxlint": "^1.87.0",
-    "prettier": "^3.9.9",
+    "oxlint": "^1.88.0",
+    "prettier": "^3.9.10",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "typescript-language-server": "^6.0.1",
-    "vitest": "^5.0.3"
+    "typescript-language-server": "^6.0.2",
+    "vitest": "^5.0.5"
   }
 }

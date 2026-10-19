@@ -1,32 +1,31 @@
-import type { AnalysisError, AnalysisErrorType } from './utils/errors.js';
+import type { CallToolResult } from '@modelcontextprotocol/server';
+import { describeError } from './errors.js';
+import { logEvent } from './logging.js';
 
-function normalizeError(error: unknown): AnalysisError {
-  if (typeof error === 'object' && error !== null && 'type' in error && 'message' in error) {
-    const raw = error as { type?: unknown; message?: unknown };
-    const type: AnalysisErrorType =
-      raw.type === 'file_not_found' || raw.type === 'invalid_format' || raw.type === 'invalid_input'
-        ? raw.type
-        : 'unknown';
-    return { type, message: String(raw.message ?? '') };
-  }
-  return {
-    type: 'unknown',
-    message: error instanceof Error ? error.message : String(error),
-  };
-}
-
-export async function runTool<T>(fn: () => Promise<T>) {
+/**
+ * Run one tool implementation and shape the result for MCP.
+ *
+ * Success returns `structuredContent` plus the serialized JSON in a text block
+ * (the spec's backwards-compatibility guidance). Failure returns an actionable
+ * `code: message` text block with `isError: true` so the model can self-correct;
+ * no stack trace or host path is exposed.
+ */
+export async function runTool<T extends Record<string, unknown>>(
+  name: string,
+  fn: () => Promise<T>,
+): Promise<CallToolResult> {
+  const startedAt = Date.now();
+  logEvent('tool.started', { tool: name });
   try {
     const data = await fn();
+    logEvent('tool.completed', { tool: name, durationMs: Date.now() - startedAt });
     return {
-      content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+      content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
       structuredContent: data,
     };
   } catch (error) {
-    const { type, message } = normalizeError(error);
-    return {
-      content: [{ type: 'text' as const, text: `${type}: ${message}` }],
-      isError: true,
-    };
+    const { code, message } = describeError(error);
+    logEvent('tool.failed', { tool: name, durationMs: Date.now() - startedAt, error: message });
+    return { content: [{ type: 'text', text: `${code}: ${message}` }], isError: true };
   }
 }

@@ -77,7 +77,7 @@ export function parseJsonFrame(frame: SidecarFrame): unknown {
 export class SidecarFrameDecoder {
   private readonly header = Buffer.alloc(HEADER_BYTES);
   private headerBytes = 0;
-  private current?: ReturnType<typeof parseHeader>;
+  private current: ReturnType<typeof parseHeader> | undefined;
   private payloadChunks: Buffer[] = [];
   private payloadBytes = 0;
 

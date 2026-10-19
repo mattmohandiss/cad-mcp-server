@@ -15,8 +15,9 @@ function parseStepEntities(text: string): Map<number, RawStepEntity> {
   const re = /#(\d+)\s*=\s*([A-Z][A-Z0-9_]*)\s*\(/g;
   let match: RegExpExecArray | null;
   while ((match = re.exec(text)) !== null) {
-    const id = parseInt(match[1], 10);
-    const type = match[2];
+    // The pattern captures both groups on every match.
+    const id = parseInt(match[1]!, 10);
+    const type = match[2]!;
     const start = match.index + match[0].length;
     const end = findMatchingParen(text, start);
     if (end === -1) continue;
@@ -71,7 +72,7 @@ function parseParams(raw: string): StepParam[] {
   while (i < raw.length) {
     i = skipWhitespace(raw, i);
     if (i >= raw.length) break;
-    const ch = raw[i];
+    const ch = raw.charAt(i);
     if (ch === "'") {
       const { value, end } = parseString(raw, i);
       params.push({ kind: 'string', value });
@@ -147,22 +148,22 @@ function parseString(text: string, start: number): { value: string; end: number 
 
 function readInt(text: string, start: number): number {
   let i = start;
-  while (i < text.length && isDigit(text[i])) i++;
+  while (i < text.length && isDigit(text.charAt(i))) i++;
   return i;
 }
 
 function readNumber(text: string, start: number): number {
   let i = start;
   if (text[i] === '-' || text[i] === '+') i++;
-  while (i < text.length && isDigit(text[i])) i++;
+  while (i < text.length && isDigit(text.charAt(i))) i++;
   if (text[i] === '.') {
     i++;
-    while (i < text.length && isDigit(text[i])) i++;
+    while (i < text.length && isDigit(text.charAt(i))) i++;
   }
   if ((text[i] === 'e' || text[i] === 'E') && i + 1 < text.length) {
     i++;
     if (text[i] === '-' || text[i] === '+') i++;
-    while (i < text.length && isDigit(text[i])) i++;
+    while (i < text.length && isDigit(text.charAt(i))) i++;
   }
   return i;
 }

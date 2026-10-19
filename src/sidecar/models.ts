@@ -1,6 +1,8 @@
+import type { Stats } from 'node:fs';
 import { realpath, stat } from 'node:fs/promises';
 import type { SidecarClient } from './client.js';
 import { getSidecarClient, stopSidecar } from './runtime.js';
+import { fileRevision } from '../utils/hash.js';
 
 interface CachedModel {
   cacheKey: string;
@@ -13,17 +15,22 @@ type ModelOperation<T> = (
   client: SidecarClient,
   modelId: number,
   filePath: string,
+  revision: string,
 ) => Promise<T> | T;
 
 /** One resident model bounds sidecar memory; requests are serialized by the OCCT process. */
 export class SidecarModelStore {
-  private cached?: CachedModel;
+  private cached: CachedModel | undefined;
   private queue: Promise<unknown> = Promise.resolve();
 
-  withModel<T>(filePath: string, operation: ModelOperation<T>): Promise<T> {
+  withModel<T>(
+    filePath: string,
+    operation: ModelOperation<T>,
+    expectedRevision?: string,
+  ): Promise<T> {
     const result = this.queue.then(
-      () => this.withModelExclusive(filePath, operation),
-      () => this.withModelExclusive(filePath, operation),
+      () => this.withModelExclusive(filePath, operation, expectedRevision),
+      () => this.withModelExclusive(filePath, operation, expectedRevision),
     );
     this.queue = result.catch(() => undefined);
     return result;
@@ -49,6 +56,7 @@ export class SidecarModelStore {
   private async withModelExclusive<T>(
     requestedPath: string,
     operation: ModelOperation<T>,
+    expectedRevision?: string,
   ): Promise<T> {
     let filePath: string;
     try {
@@ -62,20 +70,32 @@ export class SidecarModelStore {
     const fileStat = await stat(filePath);
     if (!fileStat.isFile()) throw new Error(`STEP path is not a regular file: ${requestedPath}`);
 
-    const cacheKey = `${filePath}:${fileStat.size}:${fileStat.mtimeMs}`;
+    const revision = await fileRevision(filePath);
+    await assertUnchanged(filePath, fileStat);
+    if (expectedRevision !== undefined && expectedRevision !== revision) {
+      throw {
+        type: 'stale_reference',
+        message: `Artifact revision mismatch: expected ${expectedRevision}, found ${revision}`,
+      };
+    }
+    const cacheKey = `${filePath}:${revision}`;
     const client = await getSidecarClient();
     if (this.cached && this.cached.client === client && this.cached.cacheKey === cacheKey) {
-      return operation(client, this.cached.modelId, filePath);
+      const result = await operation(client, this.cached.modelId, filePath, revision);
+      await assertUnchanged(filePath, fileStat, revision);
+      return result;
     }
 
     await this.releaseCachedModel(client);
-    const opened = await client.request<{ modelId: number }>('open', { path: filePath }, 600_000);
+    const opened = await client.request('open', { path: filePath }, 600_000);
     if (!Number.isInteger(opened.result.modelId) || opened.result.modelId < 1) {
       throw new Error('OCCT sidecar returned an invalid model handle');
     }
 
     this.cached = { cacheKey, filePath, modelId: opened.result.modelId, client };
-    return operation(client, opened.result.modelId, filePath);
+    const result = await operation(client, opened.result.modelId, filePath, revision);
+    await assertUnchanged(filePath, fileStat, revision);
+    return result;
   }
 
   private async releaseCachedModel(client: SidecarClient): Promise<void> {
@@ -88,6 +108,32 @@ export class SidecarModelStore {
       await stopSidecar();
       throw error;
     }
+  }
+}
+
+async function assertUnchanged(
+  filePath: string,
+  initialStat: Stats,
+  expectedRevision?: string,
+): Promise<void> {
+  const currentRevision = expectedRevision === undefined ? undefined : await fileRevision(filePath);
+  const currentStat = await stat(filePath);
+  if (
+    currentStat.dev !== initialStat.dev ||
+    currentStat.ino !== initialStat.ino ||
+    currentStat.size !== initialStat.size ||
+    currentStat.mtimeMs !== initialStat.mtimeMs
+  ) {
+    throw {
+      type: 'stale_reference',
+      message: 'STEP file changed while it was being analyzed; retry against the current file.',
+    };
+  }
+  if (expectedRevision !== undefined && currentRevision !== expectedRevision) {
+    throw {
+      type: 'stale_reference',
+      message: `STEP file changed while it was being analyzed; expected ${expectedRevision}.`,
+    };
   }
 }
 
