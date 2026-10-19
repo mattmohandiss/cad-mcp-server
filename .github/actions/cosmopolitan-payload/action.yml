@@ -89,6 +89,7 @@ runs:
         jobs="${{ inputs.jobs }}"
         if [ -z "$jobs" ]; then jobs="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"; fi
         echo "Building with --jobs $jobs"
+        du -sh occt/sidecar/build-work/cosmo 2>/dev/null || true
         time python3 occt/sidecar/scripts/build.py cosmo --jobs "$jobs" --work occt/sidecar/build-work
         python3 occt/sidecar/scripts/package_cosmopolitan_payload.py --work occt/sidecar/build-work --output cosmo-payload.tar.gz
 
@@ -99,8 +100,11 @@ runs:
         path: cosmo-payload.tar.gz
         key: ${{ inputs.cache-key }}
 
+    # A large cache can exceed the repository cache budget; failing to store it
+    # must not fail an otherwise good build.
     - name: Cache OCCT build tree
       if: steps.tree-cache.outcome == 'success' && steps.tree-cache.outputs.cache-hit != 'true'
+      continue-on-error: true
       uses: actions/cache/save@v6.1.0
       with:
         path: occt/sidecar/build-work/cosmo
