@@ -1,12 +1,13 @@
 import { z } from 'zod';
+import { stripNulls } from '../tool-schemas.js';
 import { sidecarModels } from '../sidecar/models.js';
 import { directionModeSchema, entityId, point3, shapeEntityId } from '../tool-schemas.js';
 import {
   artifactPath,
   artifactReference,
-  artifactReferenceSchema,
+  artifactReferenceInputSchema,
   ENTITY_ID_SCHEME,
-  STEP_MODEL_FRAME,
+  stepModelFrame,
   subjectReference,
 } from '../domain/artifact-reference.js';
 import { parseEntityId } from '../utils/ids.js';
@@ -22,21 +23,21 @@ export const MEASURE_KINDS = [
   'continuity',
 ] as const;
 
-export const schema = z
+const baseSchema = z
   .object({
-    artifact: artifactReferenceSchema,
+    artifact: artifactReferenceInputSchema,
     kind: z.enum(MEASURE_KINDS),
     sources: z.array(shapeEntityId).min(1).max(1000).optional(),
     targets: z.array(shapeEntityId).min(1).max(1000).optional(),
-    summary: z.enum(['all', 'minimum']).default('all').optional(),
+    summary: z.enum(['all', 'minimum']).default('minimum'),
     entity_ids: z.array(entityId).min(1).max(100).optional(),
     direction: point3.optional(),
     direction_mode: directionModeSchema.optional(),
     pull_direction: point3.optional(),
     pull_direction_mode: directionModeSchema.optional(),
     bidirectional: z.boolean().optional(),
-    spacing_mm: z.number().positive().max(1000).optional(),
-    max_distance: z.number().positive().max(1_000_000).optional(),
+    spacing: z.coerce.number().positive().max(1000).optional(),
+    max_distance: z.coerce.number().positive().max(1_000_000).optional(),
     origin: point3.optional(),
     origin_mode: z.enum(['extent_min', 'extent_center', 'extent_max']).optional(),
     points: z.array(point3).min(1).max(100).optional(),
@@ -53,7 +54,7 @@ export const schema = z
       .min(1)
       .max(5)
       .optional(),
-    tolerance: z.number().nonnegative().max(1000).optional(),
+    tolerance: z.coerce.number().nonnegative().max(1000).optional(),
     plane_origin: point3.optional(),
     plane_normal: point3.optional(),
     detail: z.enum(['stats', 'samples', 'hits']).optional(),
@@ -201,6 +202,8 @@ const exampleArtifact = {
   units: 'mm' as const,
 };
 
+export const schema = z.preprocess(stripNulls, baseSchema);
+
 export const examples = [
   {
     artifact: exampleArtifact,
@@ -221,7 +224,7 @@ export const examples = [
     kind: 'ray_grid',
     entity_ids: ['face:6'],
     direction_mode: 'normal',
-    spacing_mm: 2,
+    spacing: 2,
   },
   {
     artifact: exampleArtifact,
@@ -235,7 +238,7 @@ export const examples = [
 export async function handler(args: z.output<typeof schema>) {
   return sidecarModels.withModel(
     artifactPath(args.artifact.uri),
-    async (client, modelId, filePath, revision) => {
+    async (client, modelId, filePath, revision, units) => {
       if (args.kind === 'distance') {
         const { result } = await client.request('measureEntityDistances', {
           modelId,
@@ -244,14 +247,14 @@ export async function handler(args: z.output<typeof schema>) {
           summary: args.summary,
         });
         return {
-          artifact: artifactReference(filePath, revision),
+          artifact: artifactReference(filePath, revision, units.name),
           entity_id_scheme: ENTITY_ID_SCHEME,
-          coordinate_frame: STEP_MODEL_FRAME,
+          coordinate_frame: stepModelFrame(units.name),
           subjects: [...(args.sources ?? []), ...(args.targets ?? [])].map((id) =>
-            subjectReference(artifactReference(filePath, revision), id),
+            subjectReference(id),
           ),
           kind: args.kind,
-          units: { length: 'mm' },
+          units: { length: units.name },
           pair_count: result.pair_count,
           min_distance: result.minimum?.distance,
           closest_source: result.minimum?.source_entity_id,
@@ -273,7 +276,7 @@ export async function handler(args: z.output<typeof schema>) {
         origin: args.origin,
         originMode: args.origin_mode,
         bidirectional: args.bidirectional,
-        spacingMm: args.spacing_mm,
+        spacingMm: args.spacing,
         maxDistance: args.max_distance,
         points: args.points,
         checks: args.checks,
@@ -283,14 +286,12 @@ export async function handler(args: z.output<typeof schema>) {
         detail: args.detail,
       });
       return {
-        artifact: artifactReference(filePath, revision),
+        artifact: artifactReference(filePath, revision, units.name),
         entity_id_scheme: ENTITY_ID_SCHEME,
-        coordinate_frame: STEP_MODEL_FRAME,
-        subjects: (args.entity_ids ?? []).map((id) =>
-          subjectReference(artifactReference(filePath, revision), id),
-        ),
+        coordinate_frame: stepModelFrame(units.name),
+        subjects: (args.entity_ids ?? []).map((id) => subjectReference(id)),
         kind: args.kind,
-        units: { length: 'mm', angle: 'deg', curvature: 'mm-1' },
+        units: { length: units.name, angle: 'deg', curvature: `${units.name}-1` },
         entity_count: args.entity_ids?.length ?? 0,
         results: result.results,
       };

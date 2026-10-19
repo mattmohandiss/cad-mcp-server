@@ -49,7 +49,7 @@ export interface SidecarMeasureEntry {
 /** Arguments for each sidecar operation. */
 export interface SidecarOps {
   hello: Record<string, never>;
-  open: { path: string };
+  open: { path: string; systemLengthUnit?: number };
   close: { modelId: number };
   inspect: { modelId: number };
   findEntities: {

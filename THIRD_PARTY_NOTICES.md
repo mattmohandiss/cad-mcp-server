@@ -1,13 +1,10 @@
 # Third-Party Notices
 
-CAD MCP Server bundles an OCCT sidecar executable built from Open CASCADE Technology.
+The published package bundles a native sidecar built from:
 
-## Open CASCADE Technology
+- Open CASCADE Technology 8.0.1 — LGPL-2.1
+- Cosmopolitan libc 4.0.2 — ISC
+- nlohmann/json 3.12.0 — MIT
 
-- Project: Open CASCADE Technology
-- Website: https://dev.opencascade.org/
-- License: GNU Lesser General Public License version 2.1
-
-Open CASCADE Technology 8.0.1 is used for STEP import and geometric/topological measurement. The packaged sidecar is built from upstream source during the release workflow; no OCCT JavaScript/WASM package is used.
-
-Review the upstream license terms before redistributing modified kernel builds or embedding this package in another commercial distribution.
+License texts, versions, and source locations are in [`LICENSES/`](LICENSES/README.md).
+CAD MCP Server itself is MIT licensed; see [`LICENSE`](LICENSE).

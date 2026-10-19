@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { schema as findEntitiesSchema } from '../src/tools/find-entities.js';
 import { filterInspectResult, type InspectResult } from '../src/tools/inspect.js';
 import { schema as measureSchema } from '../src/tools/measure.js';
-import { STEP_MODEL_FRAME } from '../src/domain/artifact-reference.js';
+import { stepModelFrame } from '../src/domain/artifact-reference.js';
 
 const artifact = {
   revision: `sha256:${'0'.repeat(64)}`,
@@ -15,7 +15,7 @@ describe('four-tool artifact surface', () => {
   it('filters inspect output while retaining artifact identity', () => {
     const input: InspectResult = {
       artifact,
-      coordinate_frame: STEP_MODEL_FRAME,
+      coordinate_frame: stepModelFrame('mm'),
       size: {
         bounding_box: { min: [0, 0, 0], max: [1, 2, 3] },
         dimensions: { width: 1, height: 2, depth: 3 },

@@ -30,7 +30,7 @@ Works with any MCP client, including Claude Desktop, Cursor, and VS Code.
 
 - "What are the overall dimensions and volume of this part?"
 - "Find the cylindrical faces and list their diameters and axes."
-- "Measure wall thickness on these faces and report it in millimetres."
+- "Measure wall thickness on these faces and report it in the model's units."
 - "What is the minimum distance between this hole and the nearest wall?"
 - "Measure draft relative to the +Z direction and list faces with negative draft."
 - "Cut a section through this body at X = 40."
@@ -47,7 +47,7 @@ More examples, including DFM-style review prompts, are in [docs/EXAMPLE_PROMPTS.
 | `measure`       | Distance between faces, wall thickness, draft, ray casts, ray grids, point analysis, planar sections, and edge continuity. |
 | `diff`          | Dimension, volume, area, and topology deltas between two STEP revisions, plus parsed STEP metadata.                        |
 
-Measurement kinds are `distance`, `thickness`, `draft`, `ray`, `ray_grid`, `point_analysis`, `section`, and `continuity`. Lengths are millimetres and angles are degrees.
+Measurement kinds are `distance`, `thickness`, `draft`, `ray`, `ray_grid`, `point_analysis`, `section`, and `continuity`. Lengths are reported in the model's own unit and angles in degrees.
 
 Results are reproducible: the server returns the entity IDs and the SHA-256 revision each measurement came from, and rejects stale IDs when a file changes underneath a session. It reports geometry; whether a part is manufacturable remains an engineering judgment.
 
@@ -75,4 +75,4 @@ Results are reproducible: the server returns the entity IDs and the SHA-256 revi
 
 ## License
 
-MIT. The bundled Open CASCADE sidecar uses LGPL-2.1. See [THIRD_PARTY_NOTICES.md](https://github.com/mattmohandiss/cad-mcp-server/blob/main/THIRD_PARTY_NOTICES.md).
+MIT. Third-party licenses: [THIRD_PARTY_NOTICES.md](https://github.com/mattmohandiss/cad-mcp-server/blob/main/THIRD_PARTY_NOTICES.md).

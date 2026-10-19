@@ -20,7 +20,9 @@ export async function runTool<T extends Record<string, unknown>>(
     const data = await fn();
     logEvent('tool.completed', { tool: name, durationMs: Date.now() - startedAt });
     return {
-      content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+      // Compact on purpose: hosts that fall back to the text block otherwise
+      // pay for indentation on every response.
+      content: [{ type: 'text', text: JSON.stringify(data) }],
       structuredContent: data,
     };
   } catch (error) {

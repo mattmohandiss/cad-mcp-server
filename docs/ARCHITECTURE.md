@@ -13,9 +13,9 @@ Entity IDs are local to a model revision and ID scheme. Copy both the artifact r
 
 ## The four tools
 
-- **`inspect`** — accepts a local artifact URI and returns its SHA-256 revision, bounding-box dimensions, volume and surface area, body/assembly structure, and B-rep validity with body/face/edge counts. Geometry lengths are in millimeters.
+- **`inspect`** — accepts a local artifact URI and returns its SHA-256 revision, bounding-box dimensions, volume and surface area, body/assembly structure, and B-rep validity with body/face/edge counts. Geometry lengths are in the model's declared unit.
 - **`find_entities`** — find faces, edges, vertices, or solid bodies. Face and edge searches support geometric filters; results are paginated and include IDs for later measurement.
-- **`measure`** — distance between selected entity sets; wall thickness; draft against a pull direction; rays and ray grids; point analysis; planar sections; and edge continuity. Lengths are in millimeters and angles in degrees. Required inputs depend on the selected measurement kind.
+- **`measure`** — distance between selected entity sets; wall thickness; draft against a pull direction; rays and ray grids; point analysis; planar sections; and edge continuity. Lengths are in the model's declared unit and angles in degrees. Required inputs depend on the selected measurement kind.
 - **`diff`** — new-minus-baseline deltas for overall dimensions, volume, surface area, and body/face/edge counts, along with parsed STEP schema, product, and authoring metadata.
 
 ## What the results mean

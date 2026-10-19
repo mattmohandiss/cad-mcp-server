@@ -50,8 +50,7 @@ function human(event: string, fields: Record<string, unknown>, message?: string)
     return `${paint('31', `[${SERVER_NAME}] [fail]`)} ${paint('33', tool ?? 'tool')}${duration}${error}`;
   if (event === 'server.started') {
     const tools = fields.tools !== undefined ? ` tools=${fields.tools}` : '';
-    const protocol = fields.protocol !== undefined ? ` protocol=${fields.protocol}` : '';
-    return paint('36', `[${SERVER_NAME}] ready`) + tools + protocol;
+    return paint('36', `[${SERVER_NAME}] ready`) + tools;
   }
   return `[${SERVER_NAME}] ${event}${message ? ` ${message}` : ''}`;
 }

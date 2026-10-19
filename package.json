@@ -11,6 +11,7 @@
     "!dist/**/*.map",
     "README.md",
     "THIRD_PARTY_NOTICES.md",
+    "LICENSES",
     "docs/EXAMPLE_PROMPTS.md",
     "docs/images",
     "server.json"

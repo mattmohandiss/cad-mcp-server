@@ -30,6 +30,18 @@ describe.skipIf(!enabled)('sidecar measurement integration', () => {
     }
   });
 
+  it('reports exact dimensions, volume, and area for the fixture', () => {
+    const sample = inspect as unknown as {
+      volume: number;
+      surfaceArea: number;
+      bounds: { min: number[]; max: number[] };
+    };
+    const { min, max } = sample.bounds;
+    expect([max[0]! - min[0]!, max[1]! - min[1]!, max[2]! - min[2]!]).toEqual([30, 10, 10]);
+    expect(sample.volume).toBeCloseTo(2000, 6);
+    expect(sample.surfaceArea).toBeCloseTo(1200, 6);
+  });
+
   const measure = async (args: Omit<SidecarOps['measureGeometry'], 'modelId'>) =>
     (
       await client!.request('measureGeometry', {
@@ -48,6 +60,16 @@ describe.skipIf(!enabled)('sidecar measurement integration', () => {
       spacingMm: 1000,
     });
     expect(thickness).toHaveProperty('thickness.statistics.total_rays');
+    const thicknessStats = (
+      thickness as unknown as {
+        thickness: {
+          statistics: { total_rays: number; min_distance: number; max_distance: number };
+        };
+      }
+    ).thickness.statistics;
+    expect(thicknessStats.total_rays).toBeGreaterThan(0);
+    expect(thicknessStats.min_distance).toBeCloseTo(10, 9);
+    expect(thicknessStats.max_distance).toBeCloseTo(10, 9);
 
     const draft = await measure({
       kind: 'draft',

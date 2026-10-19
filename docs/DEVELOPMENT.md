@@ -80,10 +80,17 @@ dependency review, and the compiled sidecar path only runs when it can matter.
 
 The payload is resolved in three tiers, cheapest first: an exact-key Actions
 cache, the payload published as a release asset (`payload` tag, `--prerelease`,
-safe to ignore), then a full build of roughly 90 minutes. Actions caches are
-scoped to the branch that created them, which is why the release asset exists:
-it is what `main` and other branches reuse. Native inputs are cached separately
-from the payload, and the build runs one compiler job per CPU.
+safe to ignore), then a build. Actions caches are scoped to the branch that
+created them, which is why the release asset exists: it is what `main` and other
+branches reuse.
+
+Builds are layered so a sidecar-only change stays cheap. The compiled OCCT build
+tree is cached under a key derived from the OCCT inputs alone
+(`occt/sidecar/CMakeLists.txt`, `cmake/`, the patch and build scripts, and
+`vendor/`), while the payload is keyed on everything including the sidecar
+sources. Editing `occt/sidecar/cpp/sidecar.cpp` therefore restores the OCCT
+objects, recompiles one translation unit, and relinks; a cold kernel build takes
+roughly an hour and runs one compiler job per CPU.
 
 Native integration tests need `CAD_MCP_SIDECAR` and are not part of PR CI; the
 packaged smoke test is the end-to-end native check, and it exercises the artifact
@@ -112,7 +119,7 @@ claims distinct from the coverage actually executed.
 ## Distribution
 
 The npm package contains compiled runtime code, sidecar binaries/launchers,
-metadata, README, example prompts, and third-party notices. Exclude tests,
+metadata, README, example prompts, third-party notices, and the LICENSES texts. Exclude tests,
 source maps, and development artifacts. Preview the actual package with
 `npm pack --dry-run --ignore-scripts` before changing package contents.
 

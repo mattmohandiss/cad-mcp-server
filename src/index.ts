@@ -10,7 +10,7 @@ import { queryHelpResourceHandler, QUERY_HELP_URI } from './resources/query-help
 import { TOOL_REGISTRY } from './tools/registry.js';
 import { logEvent } from './logging.js';
 import { runTool } from './tool-helper.js';
-import { SERVER_NAME, PROTOCOL_VERSION, CACHE_TTL_MS } from './identity.js';
+import { SERVER_NAME, CACHE_TTL_MS } from './identity.js';
 import { sidecarModels } from './sidecar/models.js';
 
 function getArgValue(name: string): string | undefined {
@@ -92,7 +92,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
 
       return server;
     },
-    { legacy: 'reject' },
+    // Serve the 2025-era handshake as well: stock MCP hosts negotiate
+    // 2025-11-25, and the same factory serves both eras.
+    { legacy: 'serve' },
   );
 
   let closePromise: Promise<void> | undefined;
@@ -108,5 +110,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
   process.once('SIGTERM', () => void close());
   process.stdin.once('end', () => void close());
 
-  logEvent('server.started', { tools: TOOL_REGISTRY.length, protocol: PROTOCOL_VERSION });
+  logEvent('server.started', { tools: TOOL_REGISTRY.length });
 }

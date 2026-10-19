@@ -92,7 +92,6 @@ describe('tool contracts', () => {
         statistics: {},
         pagination: { limit: 10, offset: 0, returned: 1, total_matched: 1, has_more: false },
         entities: [{ id: 'face:1' }],
-        groups: [],
       }).success,
     ).toBe(true);
     expect(
@@ -114,7 +113,6 @@ describe('tool contracts', () => {
         subjects: [
           {
             type: 'geometry',
-            artifact,
             entity: {
               authority: 'cad-mcp-server',
               idScheme: 'occt-topology-v1',
