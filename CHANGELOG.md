@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.1](https://github.com/mattmohandiss/cad-mcp-server/compare/cad-mcp-server-v0.8.0...cad-mcp-server-v0.8.1) (2026-10-19)
+
+
+### Bug Fixes
+
+* keep registry metadata inside the published limits ([c90aa21](https://github.com/mattmohandiss/cad-mcp-server/commit/c90aa214fbf03763974ac4043ef29a940327f59b))
+* keep registry metadata inside the published limits ([038384d](https://github.com/mattmohandiss/cad-mcp-server/commit/038384d2e8a9e6d6a42d35bc0c3b533518252ba5))
+
 ## [0.8.0](https://github.com/mattmohandiss/cad-mcp-server/compare/cad-mcp-server-v0.7.1...cad-mcp-server-v0.8.0) (2026-10-19)
 
 
