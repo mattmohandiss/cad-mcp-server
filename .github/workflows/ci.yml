@@ -11,8 +11,66 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
+  # Decide how much of the pipeline a change actually needs. The compiled OCCT
+  # payload costs ~90 minutes to build and only changes when its inputs change,
+  # so documentation-only and TypeScript-only pull requests skip it entirely.
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      kernel: ${{ steps.plan.outputs.kernel }}
+      smoke: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            native:
+              - 'occt/**'
+              - 'cmake/**'
+              - 'CMakeLists.txt'
+              - 'vendor/**'
+              - 'scripts/patch_occt.py'
+              - '.github/actions/cosmopolitan-payload/**'
+            runtime:
+              - 'src/**'
+              - 'scripts/**'
+              - 'tests/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'server.json'
+              - 'tsconfig*.json'
+              - 'vitest*.ts'
+              - 'justfile'
+              - '.github/workflows/ci.yml'
+
+      - name: Plan kernel and smoke coverage
+        id: plan
+        env:
+          NATIVE: ${{ steps.filter.outputs.native }}
+          RUNTIME: ${{ steps.filter.outputs.runtime }}
+          FULL_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci:full') }}
+        run: |
+          # Always emit a valid, non-empty matrix: GitHub evaluates the matrix
+          # before a job-level `if`, so an empty one is rejected outright.
+          three='{"include":[{"name":"Linux x64","runner":"ubuntu-24.04","run":true},{"name":"macOS ARM64","runner":"macos-14","run":true},{"name":"Windows x64","runner":"windows-2022","run":true}]}'
+          one='{"include":[{"name":"Linux x64","runner":"ubuntu-24.04","run":true}]}'
+          none='{"include":[{"name":"skipped","runner":"ubuntu-24.04","run":false}]}'
+          if [ "$NATIVE" = "true" ] || [ "$FULL_LABEL" = "true" ]; then
+            echo "matrix=$three" >> "$GITHUB_OUTPUT"
+            echo "kernel=true" >> "$GITHUB_OUTPUT"
+          elif [ "$RUNTIME" = "true" ]; then
+            echo "matrix=$one" >> "$GITHUB_OUTPUT"
+            echo "kernel=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "matrix=$none" >> "$GITHUB_OUTPUT"
+            echo "kernel=false" >> "$GITHUB_OUTPUT"
+          fi
+
   check:
     runs-on: ubuntu-24.04
     steps:
@@ -41,16 +99,22 @@ jobs:
           fail-on: error
 
   build-sidecar:
-    needs: check
+    needs: changes
+    if: needs.changes.outputs.kernel == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 180
+    # Publishing the reusable payload asset is limited to branches in this
+    # repository; fork pull requests still consume the published asset.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
 
-      - name: Restore or build Cosmopolitan payload
+      - name: Restore, download, or build Cosmopolitan payload
         uses: ./.github/actions/cosmopolitan-payload
         with:
-          cache-key: ${{ runner.os }}-cosmo-payload-v1-${{ hashFiles('occt/**', 'CMakeLists.txt', 'cmake/**', 'vendor/**', 'scripts/patch_occt.py', '.github/actions/cosmopolitan-payload/action.yml') }}
+          cache-key: ${{ runner.os }}-cosmo-payload-v1-${{ hashFiles('occt/**', 'CMakeLists.txt', 'cmake/**', 'vendor/**', 'scripts/patch_occt.py', '.github/actions/cosmopolitan-payload/action.yml', '.github/workflows/ci.yml') }}
+          publish: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
 
       - uses: actions/upload-artifact@v7
         with:
@@ -60,7 +124,8 @@ jobs:
           retention-days: 1
 
   build-macos-arm-launcher:
-    needs: build-sidecar
+    needs: [changes, build-sidecar]
+    if: needs.changes.outputs.kernel == 'true'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
@@ -85,7 +150,8 @@ jobs:
           retention-days: 1
 
   pack-server:
-    needs: [build-sidecar, build-macos-arm-launcher]
+    needs: [changes, build-sidecar, build-macos-arm-launcher]
+    if: needs.changes.outputs.kernel == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -128,18 +194,15 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  # Packaging and runtime changes get one platform; native changes and the
+  # `ci:full` label get all three. The release workflow validates the published
+  # tarball on every supported target.
   smoke-packaged:
-    needs: pack-server
+    needs: [changes, pack-server]
+    if: needs.pack-server.result == 'success' && matrix.run
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: Linux x64
-            runner: ubuntu-24.04
-          - name: macOS ARM64
-            runner: macos-14
-          - name: Windows x64
-            runner: windows-2022
+      matrix: ${{ fromJSON(needs.changes.outputs.smoke) }}
     name: Packaged runtime (${{ matrix.name }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
