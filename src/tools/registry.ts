@@ -6,6 +6,16 @@ import * as findEntities from './find-entities.js';
 import * as measureTool from './measure.js';
 import * as outputSchemas from '../output-schemas.js';
 
+// Derived from the measure spec table rather than restated, because a
+// duplicated list of which kind takes which field is exactly how this
+// description went stale: it used to claim `ray` took sources/targets.
+const SOURCES_KINDS = Object.entries(measureTool.MEASURE_KIND_SPECS)
+  .filter(([, spec]) => spec.requires.includes('sources'))
+  .map(([kind]) => kind);
+const ENTITY_ID_RULE =
+  `${SOURCES_KINDS.join(', ')} takes sources/targets; every other measure kind takes ` +
+  'entity_ids, and cad://help lists the required fields for each kind.';
+
 // Every cad-mcp tool is a read-only geometry query over a caller-supplied local
 // STEP path; nothing reaches an open world.
 const READ_ONLY: ToolAnnotations = {
@@ -66,8 +76,11 @@ export const TOOL_REGISTRY: ToolSpec[] = [
     title: 'Find Model Entities',
     description:
       'Find faces, edges, vertices, or solid bodies in the revision-bound artifact returned by inspect, optionally scoped to an assembly component_name. ' +
-      'Faces support surface type, area, and radius filters; edges support curve type, length, and radius. Vertices return coordinates and bodies return volume. ' +
-      'Occurrence IDs distinguish repeated component instances; copy returned IDs into measure sources/targets.',
+      'Use this before measure, because every measurement names entity IDs rather than coordinates, and follow pagination until has_more is false whenever a count or a minimum matters. ' +
+      'Faces support surface_type, area, and radius filters (e.g. { surface_type: "cylinder", min_radius: 2 }); edges support curve_type, length, and radius; vertices return coordinates and bodies return volume. ' +
+      'IDs are producer- and revision-scoped: they are valid only for this server and only for the artifact revision that returned them, so never reuse them after the file changes or in another tool. ' +
+      'Occurrence IDs distinguish repeated component instances. ' +
+      ENTITY_ID_RULE,
     purpose: 'Find whole-model or occurrence-scoped entities for measurement.',
     inputSchema: findEntities.schema,
     examples: findEntities.examples,
