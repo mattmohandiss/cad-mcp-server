@@ -20,7 +20,10 @@ const includeSchema = z
 const baseSchema = z
   .object({
     ...artifactLocatorSchema.shape,
-    include: includeSchema,
+    include: includeSchema.meta({
+      description:
+        'Sections to return. Omit for all three; ask for fewer to save context on a large assembly.',
+    }),
   })
   .strict();
 

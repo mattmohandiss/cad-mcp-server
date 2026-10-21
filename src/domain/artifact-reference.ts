@@ -49,7 +49,13 @@ export const artifactUriSchema = z
     }
   }, 'Provide a local STEP file path or a file: URI.');
 
-export const artifactLocatorSchema = z.object({ uri: artifactUriSchema }).strict();
+export const artifactLocatorSchema = z
+  .object({
+    uri: artifactUriSchema.meta({
+      description: 'STEP file to read, as a file: URI or an absolute filesystem path.',
+    }),
+  })
+  .strict();
 export const artifactReferenceSchema = z
   .object({
     revision: artifactRevisionSchema,
@@ -61,10 +67,18 @@ export const artifactReferenceSchema = z
 // Inputs only need the binding fields; defaults fill the rest so a caller can
 // pass back the reference without reproducing every literal.
 export const artifactReferenceInputSchema = z.object({
-  revision: artifactRevisionSchema,
-  uri: artifactUriSchema,
-  format: z.literal('step').optional(),
-  units: z.string().optional(),
+  revision: artifactRevisionSchema.meta({
+    description:
+      'sha256 revision returned by inspect. Rejected if the file changed since then, which is what keeps IDs and measurements bound to one revision.',
+  }),
+  uri: artifactUriSchema.meta({
+    description: 'Same STEP file the revision came from, as a file: URI or absolute path.',
+  }),
+  format: z.literal('step').optional().meta({ description: "Always 'step'." }),
+  units: z
+    .string()
+    .optional()
+    .meta({ description: 'Spatial unit of the source file; echoed from inspect.' }),
 });
 // The response's top-level artifact already identifies the revision, so a
 // subject carries only the entity it points at.

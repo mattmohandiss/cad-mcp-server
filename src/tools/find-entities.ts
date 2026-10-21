@@ -12,8 +12,19 @@ import { CURVE_TYPES, SURFACE_TYPES } from '../tool-schemas.js';
 import { parseEntityId } from '../utils/ids.js';
 
 const page = {
-  limit: z.coerce.number().int().min(1).max(1000).default(50),
-  offset: z.coerce.number().int().min(0).default(0),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(1000)
+    .default(50)
+    .meta({ description: 'Maximum entities to return in this page (default 50).' }),
+  offset: z.coerce
+    .number()
+    .int()
+    .min(0)
+    .default(0)
+    .meta({ description: 'Entities to skip; follow pagination.has_more to page.' }),
 };
 
 const ENTITY_TYPES = ['face', 'edge', 'vertex', 'body'] as const;
@@ -39,7 +50,10 @@ const componentName = z.string().min(1).max(256).optional().meta({
 // per-entity-type field rules are enforced in the refinement below.
 const baseSchema = z
   .object({
-    artifact: artifactReferenceInputSchema,
+    artifact: artifactReferenceInputSchema.meta({
+      description:
+        'Revision-bound STEP reference from inspect (uri + sha256 revision). The revision must still match the file on disk.',
+    }),
     entity_type: z.enum(ENTITY_TYPES).meta({
       description: 'Entity category to search.',
     }),
@@ -48,14 +62,44 @@ const baseSchema = z
       description:
         'Optional explicit ids to return; each must match entity_type (e.g. ["face:3"]).',
     }),
-    surface_type: z.enum(SURFACE_TYPES).optional(),
-    min_area: z.coerce.number().nonnegative().optional(),
-    max_area: z.coerce.number().nonnegative().optional(),
-    curve_type: z.enum(CURVE_TYPES).optional(),
-    min_length: z.coerce.number().nonnegative().optional(),
-    max_length: z.coerce.number().nonnegative().optional(),
-    min_radius: z.coerce.number().nonnegative().optional(),
-    max_radius: z.coerce.number().nonnegative().optional(),
+    surface_type: z
+      .enum(SURFACE_TYPES)
+      .optional()
+      .meta({ description: 'Faces only: keep faces of this surface type.' }),
+    min_area: z.coerce
+      .number()
+      .nonnegative()
+      .optional()
+      .meta({ description: 'Faces only: minimum face area in mm².' }),
+    max_area: z.coerce
+      .number()
+      .nonnegative()
+      .optional()
+      .meta({ description: 'Faces only: maximum face area in mm².' }),
+    curve_type: z
+      .enum(CURVE_TYPES)
+      .optional()
+      .meta({ description: 'Edges only: keep edges of this curve type.' }),
+    min_length: z.coerce
+      .number()
+      .nonnegative()
+      .optional()
+      .meta({ description: 'Edges only: minimum edge length in mm.' }),
+    max_length: z.coerce
+      .number()
+      .nonnegative()
+      .optional()
+      .meta({ description: 'Edges only: maximum edge length in mm.' }),
+    min_radius: z.coerce
+      .number()
+      .nonnegative()
+      .optional()
+      .meta({ description: 'Faces/edges only: minimum radius in mm.' }),
+    max_radius: z.coerce
+      .number()
+      .nonnegative()
+      .optional()
+      .meta({ description: 'Faces/edges only: maximum radius in mm.' }),
     ...page,
   })
   .strict()
