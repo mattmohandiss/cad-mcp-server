@@ -64,6 +64,7 @@ export const TOOL_REGISTRY: ToolSpec[] = [
     title: 'Inspect Model Overview',
     description:
       'Inspect a local STEP artifact by filesystem path or file: URI. Returns its content revision with dimensions, counts, and B-rep validity. Call this first; use the returned artifact reference for entity searches and measurements. ' +
+      'Lengths are in the declared unit, which is labelled on every result. Bounding boxes are conservative envelopes, and volume is null when the file has no solid material. ' +
       'Use include to request only size, counts, and/or health sections.',
     purpose: 'Overview: dimensions, counts, and B-rep validity.',
     inputSchema: inspectTool.schema,
@@ -94,6 +95,7 @@ export const TOOL_REGISTRY: ToolSpec[] = [
     title: 'Measure Geometry',
     description:
       'Measure distance, wall thickness, draft, rays/ray grids, point geometry, planar sections, or edge continuity. Use the artifact reference and entity IDs from the same find_entities result. ' +
+      'Lengths are in the declared unit, which is labelled on every result. Ray grids report their grid size and can be refined with max_rays up to 20000. ' +
       'Fetch the cad://help resource for the required fields of each kind. Returns geometric measurements only, not engineering acceptance or design recommendations.',
     purpose: 'Distance, thickness, draft, ray, point, section, and continuity measurements.',
     inputSchema: measureTool.schema,
@@ -109,7 +111,7 @@ export const TOOL_REGISTRY: ToolSpec[] = [
       'Report the dimensions, geometric tolerances, and datums that a STEP artifact declares, as data: nominal and deviations for each dimension, and value, zone shape, material requirement, and datum references for each geometric tolerance, with the entity IDs each annotation applies to. ' +
       'These are the callouts the file carries, not a verdict: whether a tolerance is met, whether a stack closes, and what to change are engineering judgements. ' +
       'A tolerance whose magnitude could not be read is marked value_resolved: false rather than reported as 0, because a genuine zero-at-MMC callout also reads 0. ' +
-      'Values use the same unit this server reports for the artifact. An empty section means the file declares no PMI, which is the common case for a model exported without annotations. ' +
+      'Values are in the declared unit, the same unit this server uses for measurements. An empty section means the file declares no PMI, which is the common case for a model exported without annotations. ' +
       'Use the artifact reference from inspect; entity IDs are valid only for that revision.',
     purpose: 'Declared dimensions, geometric tolerances, and datums (PMI/GD&T).',
     inputSchema: describePmi.schema,
@@ -122,7 +124,7 @@ export const TOOL_REGISTRY: ToolSpec[] = [
     name: 'diff',
     title: 'Compare Step Versions',
     description:
-      'Compare baseline and candidate STEP artifacts, as filesystem paths or file: URIs. Returns both content revisions, geometry deltas, declared PMI counts (dimensions, geometric tolerances, datums, and how many tolerance values could not be read), and parsed document facts: schema, product names/count, assembly flag, authoring system, and organization. ' +
+      'Compare baseline and candidate STEP artifacts, as filesystem paths or file: URIs. Returns both content revisions, geometry deltas in the baseline declared unit, declared PMI counts (dimensions, geometric tolerances, datums, and how many tolerance values could not be read), and parsed document facts: schema, product names/count, assembly flag, authoring system, and organization. ' +
       'The PMI counts show whether a revision added or dropped callouts; they compare how many callouts exist, not whether any is met. ' +
       'These are file-level facts; they do not explain design intent.',
     purpose: 'Compare geometric measurements and STEP document metadata.',

@@ -7,8 +7,10 @@ import {
   artifactReference,
   artifactReferenceInputSchema,
   ENTITY_ID_SCHEME,
+  measurementUnits,
   stepModelFrame,
   subjectReference,
+  unitNote,
 } from '../domain/artifact-reference.js';
 import { parseEntityId } from '../utils/ids.js';
 
@@ -69,15 +71,17 @@ const FIELD_HELP = {
   pull_direction_mode:
     'draft only: "axis" or "normal" shortcut for the pull direction (faces only). Mutually exclusive with pull_direction.',
   bidirectional: 'ray and ray_grid: also shoot from the origin in the opposite direction.',
-  spacing: 'ray_grid: grid pitch in model units (mm), at most 1000.',
-  max_distance: 'ray, ray_grid and thickness: ignore hits beyond this distance in model units.',
+  spacing: 'ray_grid: grid pitch in millimetres, at most 1000.',
+  max_rays:
+    'ray_grid and thickness: maximum ray casts, 1 to 20000. Default 4000. Raising it allows a finer grid at proportionally higher cost.',
+  max_distance: 'ray, ray_grid and thickness: ignore hits beyond this distance in millimetres.',
   origin: 'ray and ray_grid: explicit ray origin [x, y, z]. Mutually exclusive with origin_mode.',
   origin_mode:
     'ray and ray_grid: place the origin at the entity extent instead of passing origin: extent_min, extent_center (default), or extent_max.',
   points: 'point_analysis: points to test, in model coordinates (mm), up to 100.',
   checks:
     'point_analysis: one or more of contains_body, classify_face, closest_face_point, surface_curvature, edge_projection.',
-  tolerance: 'continuity and point checks: geometric tolerance in model units.',
+  tolerance: 'continuity and point checks: geometric tolerance in millimetres.',
   plane_origin: 'section: a point on the cutting plane.',
   plane_normal: 'section: cutting-plane normal.',
   detail: 'Per-sample detail to return: "stats" (default), "samples", or "hits".',
@@ -184,6 +188,13 @@ const baseSchema = z
       .max(1000)
       .optional()
       .meta({ description: FIELD_HELP.spacing }),
+    max_rays: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(20000)
+      .optional()
+      .meta({ description: FIELD_HELP.max_rays }),
     max_distance: z.coerce
       .number()
       .positive()
@@ -338,13 +349,14 @@ export async function handler(args: z.output<typeof schema>) {
         });
         return {
           artifact: artifactReference(filePath, revision, units.name),
+          unit_note: unitNote(units),
           entity_id_scheme: ENTITY_ID_SCHEME,
           coordinate_frame: stepModelFrame(units.name),
           subjects: [...(args.sources ?? []), ...(args.targets ?? [])].map((id) =>
             subjectReference(id),
           ),
           kind: args.kind,
-          units: { length: units.name },
+          units: measurementUnits(units),
           pair_count: result.pair_count,
           min_distance: result.minimum?.distance,
           closest_source: result.minimum?.source_entity_id,
@@ -367,6 +379,7 @@ export async function handler(args: z.output<typeof schema>) {
         originMode: args.origin_mode,
         bidirectional: args.bidirectional,
         spacingMm: args.spacing,
+        maxRays: args.max_rays,
         maxDistance: args.max_distance,
         points: args.points,
         checks: args.checks,
@@ -377,11 +390,16 @@ export async function handler(args: z.output<typeof schema>) {
       });
       return {
         artifact: artifactReference(filePath, revision, units.name),
+        unit_note: unitNote(units),
         entity_id_scheme: ENTITY_ID_SCHEME,
         coordinate_frame: stepModelFrame(units.name),
         subjects: (args.entity_ids ?? []).map((id) => subjectReference(id)),
         kind: args.kind,
-        units: { length: units.name, angle: 'deg', curvature: `${units.name}-1` },
+        units: {
+          ...measurementUnits(units),
+          angle: 'deg',
+          curvature: `${units.name}-1`,
+        },
         entity_count: args.entity_ids?.length ?? 0,
         results: result.results,
       };

@@ -26,9 +26,16 @@ export const inspect = z
     coordinate_frame: coordinateFrame,
     size: z
       .object({
-        bounding_box: z.object({ min: vector3, max: vector3 }),
+        bounding_box: z.object({
+          min: vector3,
+          max: vector3,
+          method: z.literal('conservative-envelope'),
+          note: z.string(),
+        }),
         dimensions: z.object({ width: z.number(), height: z.number(), depth: z.number() }),
-        volume: z.number(),
+        volume: z.number().nullable(),
+        volume_available: z.boolean(),
+        volume_basis: z.enum(['solid-only', 'none']),
         surface_area: z.number(),
         units: z.object({ length: z.string(), area: z.string(), volume: z.string() }),
       })
@@ -36,6 +43,7 @@ export const inspect = z
     structure: z
       .object({
         body_count: z.number(),
+        shell_count: z.number(),
         is_assembly: z.boolean(),
         component_occurrences: z.array(z.string()),
       })
@@ -63,6 +71,8 @@ export const query = z.object({
     volume: z.string(),
     angle: z.string(),
   }),
+  unit_note: z.string().optional(),
+  bounds_method: z.literal('conservative-envelope').optional(),
   query: record,
   pagination,
   entities: z.array(record),
@@ -109,6 +119,7 @@ export const geometry = z.object({
 export const diff = z.object({
   inputs: z.array(z.object({ role: z.string(), artifact: artifactReferenceSchema })).length(2),
   units: z.object({ length: z.string(), area: z.string(), volume: z.string() }),
+  unit_note: z.string().optional(),
   deltas: record,
   exchange: record.optional(),
   pmi: record,
@@ -118,6 +129,7 @@ export const diff = z.object({
 export const pmi = z.object({
   artifact: artifactReferenceSchema,
   coordinate_frame: coordinateFrame,
+  unit_note: z.string().optional(),
   units: z.object({ length: z.string() }),
   counts: z.object({
     dimensions: z.number(),

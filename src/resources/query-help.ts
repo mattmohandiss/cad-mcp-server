@@ -33,7 +33,7 @@ function buildHelpDocument() {
       'Use measure with one kind. Each kind has its own required arguments; measure_kinds below lists them, and the same notes are on the tool schema fields.',
       'Pass the same artifact reference and IDs from find_entities to measure. A changed file revision is rejected as stale instead of reusing old IDs.',
       'Use diff with baseline and candidate file: URIs; its output identifies both input revisions.',
-      'Use describe_pmi to read the dimensions, geometric tolerances, and datums a file declares, with the entity IDs they apply to. Values are in the model unit, and a tolerance whose magnitude could not be read is marked value_resolved: false rather than reported as 0. An empty section means the file declares no PMI.',
+      'Use describe_pmi to read the dimensions, geometric tolerances, and datums a file declares, with the entity IDs they apply to. Values are in the declared unit, and a tolerance whose magnitude could not be read is marked value_resolved: false rather than reported as 0. An empty section means the file declares no PMI.',
       'Treat measurements and PMI as declared facts. Apply process limits, material data, drawings, and requirements separately before making engineering judgments.',
       'Entity IDs must come from a prior tool result; never invent them.',
       'Omit optional fields entirely. Do not send empty arrays or zero bounds as placeholders.',

@@ -5,6 +5,7 @@ import {
   artifactLocatorSchema,
   artifactPath,
   artifactReference,
+  measurementUnits,
 } from '../domain/artifact-reference.js';
 import { parseStepMetadata } from '../pmi/metadata.js';
 import { comparePmi, compareStepMetadata } from '../domain/compare.js';
@@ -31,7 +32,7 @@ export async function handler(args: z.output<typeof schema>) {
     solids: number;
     faces: number;
     edges: number;
-    volume: number;
+    volume: number | null;
     surfaceArea: number;
     bounds: { min: number[]; max: number[] };
   };
@@ -46,7 +47,7 @@ export async function handler(args: z.output<typeof schema>) {
           pmi: pmi.result,
           artifact: artifactReference(filePath, revision, units.name),
           filePath,
-          units,
+          sourceUnit: units,
         };
       },
     );
@@ -72,27 +73,34 @@ export async function handler(args: z.output<typeof schema>) {
     parseVerified(baseline.filePath, baseline.artifact.revision),
     parseVerified(candidate.filePath, candidate.artifact.revision),
   ]);
+  // Each sidecar model is in its own declared unit. Convert the candidate into
+  // the baseline unit so every delta has one unambiguous unit.
+  const scale = candidate.sourceUnit.mmPerUnit / baseline.sourceUnit.mmPerUnit;
   const dims = (stats: Stats) => stats.bounds.min.map((min, i) => stats.bounds.max[i]! - min);
   const baselineDimensions = dims(baseline.stats);
-  const scale = candidate.units.mmPerUnit / baseline.units.mmPerUnit;
   const candidateDimensions = dims(candidate.stats).map((value) => value * scale);
+  const bothHaveVolume = baseline.stats.volume !== null && candidate.stats.volume !== null;
   return {
     inputs: [
       { role: 'baseline', artifact: baseline.artifact },
       { role: 'candidate', artifact: candidate.artifact },
     ],
-    units: {
-      length: baseline.units.name,
-      area: `${baseline.units.name}2`,
-      volume: `${baseline.units.name}3`,
-    },
+    units: measurementUnits(baseline.sourceUnit),
+    unit_note:
+      `Deltas are in ${baseline.sourceUnit.name}.` +
+      (candidate.sourceUnit.name === baseline.sourceUnit.name
+        ? ''
+        : ` The candidate declares ${candidate.sourceUnit.name} and was converted to ${baseline.sourceUnit.name}.`),
     deltas: {
       dimensions: {
         width: candidateDimensions[0]! - baselineDimensions[0]!,
         height: candidateDimensions[1]! - baselineDimensions[1]!,
         depth: candidateDimensions[2]! - baselineDimensions[2]!,
       },
-      volume: candidate.stats.volume * scale ** 3 - baseline.stats.volume,
+      volume: bothHaveVolume
+        ? (candidate.stats.volume as number) * scale ** 3 - (baseline.stats.volume as number)
+        : null,
+      volume_available: bothHaveVolume,
       surfaceArea: candidate.stats.surfaceArea * scale ** 2 - baseline.stats.surfaceArea,
       bodyCount: candidate.stats.solids - baseline.stats.solids,
       faceCount: candidate.stats.faces - baseline.stats.faces,

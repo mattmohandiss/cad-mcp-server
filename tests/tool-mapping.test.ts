@@ -17,13 +17,25 @@ describe('four-tool artifact surface', () => {
       artifact,
       coordinate_frame: stepModelFrame('mm'),
       size: {
-        bounding_box: { min: [0, 0, 0], max: [1, 2, 3] },
+        bounding_box: {
+          min: [0, 0, 0],
+          max: [1, 2, 3],
+          method: 'conservative-envelope',
+          note: 'test',
+        },
         dimensions: { width: 1, height: 2, depth: 3 },
         volume: 6,
+        volume_available: true,
+        volume_basis: 'solid-only',
         surface_area: 22,
         units: { length: 'mm', area: 'mm2', volume: 'mm3' },
       },
-      structure: { body_count: 1, is_assembly: false, component_occurrences: [] },
+      structure: {
+        body_count: 1,
+        shell_count: 1,
+        is_assembly: false,
+        component_occurrences: [],
+      },
       health: {
         is_valid: true,
         complexity: { body_count: 1, face_count: 6, edge_count: 12 },

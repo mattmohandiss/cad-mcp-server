@@ -102,6 +102,12 @@ export const ENTITY_ID_SCHEME = {
   idScheme: 'occt-topology-v1',
 } as const;
 
+/**
+ * Geometry is read and measured in the file's declared unit, so an inch part
+ * stays in inches and an engineer's numbers need no conversion. Consumers that
+ * need another unit ask their own tool for it; no conversion factor is exposed
+ * as an invitation for the caller to do arithmetic.
+ */
 export function stepModelFrame(units: string) {
   return {
     id: 'step-model',
@@ -127,6 +133,20 @@ export function artifactReference(filePath: string, revision: string, units: str
     format: 'step' as const,
     units,
   };
+}
+
+/** The unit block every geometry result carries. */
+export function measurementUnits(source: { name: string }) {
+  return {
+    length: source.name,
+    area: `${source.name}2`,
+    volume: `${source.name}3`,
+  };
+}
+
+/** State the unit without asking the caller to do arithmetic. */
+export function unitNote(source: { name: string }): string {
+  return `Lengths are in ${source.name}.`;
 }
 
 export function subjectReference(id: string) {

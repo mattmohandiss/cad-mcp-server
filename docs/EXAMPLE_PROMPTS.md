@@ -14,9 +14,9 @@ These prompts are useful when `cad-mcp` is connected to an MCP host. The server 
 
 ## Measurement
 
-> Find the faces I identify as the walls around these openings. Then measure thickness on those faces and report the values in the model units. Do not decide whether the values meet a manufacturing requirement.
+> Find the faces I identify as the walls around these openings. Then measure thickness on those faces and report the values in millimetres. Do not decide whether the values meet a manufacturing requirement.
 
-> Measure the minimum distance between these selected hole faces and wall faces. Return the closest entity pair and distance in the model units.
+> Measure the minimum distance between these selected hole faces and wall faces. Return the closest entity pair and distance in millimetres.
 
 > Measure draft relative to the +Z direction and identify faces with negative draft.
 

@@ -6,7 +6,9 @@ import {
   artifactReferenceInputSchema,
   artifactReference,
   ENTITY_ID_SCHEME,
+  measurementUnits,
   stepModelFrame,
+  unitNote,
 } from '../domain/artifact-reference.js';
 import { CURVE_TYPES, SURFACE_TYPES } from '../tool-schemas.js';
 import { parseEntityId } from '../utils/ids.js';
@@ -214,13 +216,10 @@ export async function handler(args: z.output<typeof schema>) {
       );
       return {
         artifact: artifactReference(filePath, revision, units.name),
+        unit_note: unitNote(units),
         entity_id_scheme: ENTITY_ID_SCHEME,
-        units: {
-          length: units.name,
-          area: `${units.name}2`,
-          volume: `${units.name}3`,
-          angle: 'deg',
-        },
+        units: { ...measurementUnits(units), angle: 'deg' },
+        bounds_method: 'conservative-envelope',
         coordinate_frame: stepModelFrame(units.name),
         query: { entity_type, filters: compactFilters, ...(entity_ids ? { entity_ids } : {}) },
         pagination: {

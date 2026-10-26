@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shapePmi, toModelUnit } from '../src/tools/describe-pmi.js';
+import { shapePmi } from '../src/tools/describe-pmi.js';
 import type {
   SidecarPmi,
   SidecarPmiDimension,
@@ -7,19 +7,21 @@ import type {
 } from '../src/sidecar/operations.js';
 
 /**
- * The sidecar reports GD&T in millimetres whatever unit the geometry was read
- * in, so a value has to be converted before it can be compared with anything
- * this server measures. Getting this wrong is a silent 25.4x error on an inch
- * part, which is why it is tested rather than trusted.
+ * OCCT reports GD&T in millimetres, so it must be converted into the artifact's
+ * declared unit before it can be compared with a measurement from the same
+ * file. Missing this is a silent 25.4x error on an inch part.
  */
-describe('PMI unit conversion', () => {
-  it('leaves millimetre models alone', () => {
-    expect(toModelUnit(12.7, 1)).toBe(12.7);
+describe('PMI unit handling', () => {
+  it('converts millimetre values into an inch model', () => {
+    const shaped = shapePmi(sidecarPmi, 25.4);
+    expect(shaped.dimensions[0]!.nominal).toBeCloseTo(10, 12);
+    expect(shaped.dimensions[0]!.upper_deviation).toBeCloseTo(0.001, 12);
+    expect(shaped.geometric_tolerances[0]!.value).toBeCloseTo(0.025, 12);
   });
 
-  it('converts millimetre values into an inch model', () => {
-    expect(toModelUnit(12.7, 25.4)).toBeCloseTo(0.5, 12);
-    expect(toModelUnit(0.2032, 25.4)).toBeCloseTo(0.008, 12);
+  it('leaves millimetre models alone', () => {
+    const shaped = shapePmi(sidecarPmi, 1);
+    expect(shaped.dimensions[0]!.nominal).toBeCloseTo(254, 12);
   });
 });
 
@@ -61,18 +63,11 @@ const sidecarPmi: SidecarPmi = {
 };
 
 describe('PMI shaping', () => {
-  it('reports an inch model in inches, matching the drawing', () => {
-    const shaped = shapePmi(sidecarPmi, 25.4);
-    expect(shaped.dimensions[0]!.nominal).toBeCloseTo(10, 12);
-    expect(shaped.dimensions[0]!.upper_deviation).toBeCloseTo(0.001, 12);
-    expect(shaped.geometric_tolerances[0]!.value).toBeCloseTo(0.025, 12);
-  });
-
   it('keeps a range dimension a range, not a pair of deviations', () => {
-    const range = shapePmi(sidecarPmi, 1).dimensions[1]!;
-    expect(range.lower_bound).toBe(30);
-    expect(range.upper_bound).toBe(33);
-    expect(range.upper_deviation).toBeUndefined();
+    const shaped = shapePmi(sidecarPmi, 1).dimensions[1]!;
+    expect(shaped.lower_bound).toBe(30);
+    expect(shaped.upper_bound).toBe(33);
+    expect(shaped.upper_deviation).toBeUndefined();
   });
 
   it('carries the material requirement, datum reference and entity binding', () => {
@@ -85,7 +80,10 @@ describe('PMI shaping', () => {
 
   it('passes an unresolved value through as unresolved rather than dropping it', () => {
     const shaped = shapePmi(
-      { ...sidecarPmi, geometricTolerances: [{ ...position, valueResolved: false }] },
+      {
+        ...sidecarPmi,
+        geometricTolerances: [{ ...position, valueResolved: false }],
+      },
       1,
     );
     expect(shaped.geometric_tolerances[0]!.value_resolved).toBe(false);

@@ -5,6 +5,7 @@
 #include <IFSelect_ReturnStatus.hxx>
 #include <TDocStd_Document.hxx>
 #include <XCAFDoc_DocumentTool.hxx>
+#include <UnitsMethods_LengthUnit.hxx>
 #include <XCAFDoc_ShapeTool.hxx>
 #include <XCAFDoc_DimTolTool.hxx>
 #include <XCAFDoc_Dimension.hxx>
@@ -24,6 +25,8 @@
 #include <GProp_GProps.hxx>
 #include <BRepBndLib.hxx>
 #include <Bnd_Box.hxx>
+#include <BndLib_AddSurface.hxx>
+#include <BndLib_Add3dCurve.hxx>
 #include <BRepCheck_Analyzer.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepAlgoAPI_Section.hxx>
@@ -134,6 +137,53 @@ int count(const TopoDS_Shape& shape, TopAbs_ShapeEnum type) {
   TopExp::MapShapes(shape, type, map);
   return map.Extent();
 }
+/**
+ * Conservative axis-aligned bounds.
+ *
+ * BRepBndLib::AddOptimal is fast but can under-report real extents (curved
+ * faces and free edges are the documented corpus failures). A bound that is too
+ * small is unsafe for clearance work, so this unions the optimal per-face box,
+ * a parametric envelope for every non-planar face, every edge and every vertex.
+ * The envelope can overstate a curved face trimmed inside its UV rectangle; the
+ * result is therefore marked conservative rather than exact.
+ */
+void addFaceBounds(const TopoDS_Face& face, Bnd_Box& box) {
+  Bnd_Box faceBox;
+  BRepBndLib::AddOptimal(face, faceBox, false, false);
+  box.Add(faceBox);
+  BRepAdaptor_Surface surface(face, true);
+  if (surface.GetType() == GeomAbs_Plane) return;
+  double uMin, uMax, vMin, vMax;
+  BRepTools::UVBounds(face, uMin, uMax, vMin, vMax);
+  if (!std::isfinite(uMin) || !std::isfinite(uMax) || !std::isfinite(vMin) ||
+      !std::isfinite(vMax) || uMax < uMin || vMax < vMin)
+    return;
+  Bnd_Box envelope;
+  BndLib_AddSurface::Add(surface, uMin, uMax, vMin, vMax,
+                         BRep_Tool::Tolerance(face), envelope);
+  box.Add(envelope);
+}
+Bnd_Box computeShapeBounds(const TopoDS_Shape& shape) {
+  Bnd_Box box;
+  for (TopExp_Explorer faces(shape, TopAbs_FACE); faces.More(); faces.Next())
+    addFaceBounds(TopoDS::Face(faces.Current()), box);
+  for (TopExp_Explorer edges(shape, TopAbs_EDGE); edges.More(); edges.Next()) {
+    const TopoDS_Edge& edge = TopoDS::Edge(edges.Current());
+    if (!BRep_Tool::IsGeometric(edge)) continue;
+    BRepAdaptor_Curve curve(edge);
+    Bnd_Box edgeBox;
+    BndLib_Add3dCurve::AddOptimal(curve, BRep_Tool::Tolerance(edge), edgeBox);
+    box.Add(edgeBox);
+  }
+  for (TopExp_Explorer vertices(shape, TopAbs_VERTEX); vertices.More(); vertices.Next()) {
+    const TopoDS_Vertex& vertex = TopoDS::Vertex(vertices.Current());
+    Bnd_Box vertexBox;
+    vertexBox.Add(BRep_Tool::Pnt(vertex));
+    vertexBox.Enlarge(BRep_Tool::Tolerance(vertex));
+    box.Add(vertexBox);
+  }
+  return box;
+}
 
 TopoDS_Shape resolveEntity(const Model& m, const std::string& id) {
   const auto scopeStart = id.rfind("component:", 0) == 0 ? id.find('/') : std::string::npos;
@@ -203,14 +253,21 @@ void collectOccurrences(Model& m, const Handle(XCAFDoc_ShapeTool)& tool,
   m.occurrences.push_back({name + "#" + std::to_string(instance), shape});
 }
 json inspect(const Model& m) {
-  Bnd_Box box;
-  BRepBndLib::AddOptimal(m.shape, box, false, false);
+  const Bnd_Box box = computeShapeBounds(m.shape);
   double xmin, ymin, zmin, xmax, ymax, zmax;
   box.Get(xmin, ymin, zmin, xmax, ymax, zmax);
-  json result = {{"solids", count(m.shape, TopAbs_SOLID)}, {"faces", count(m.shape, TopAbs_FACE)},
+  const int solids = count(m.shape, TopAbs_SOLID);
+  const int shells = count(m.shape, TopAbs_SHELL);
+  double materialVolume = 0;
+  for (TopExp_Explorer solid(m.shape, TopAbs_SOLID); solid.More(); solid.Next())
+    materialVolume += volume(solid.Current());
+  json result = {{"solids", solids}, {"shells", shells}, {"faces", count(m.shape, TopAbs_FACE)},
     {"edges", count(m.shape, TopAbs_EDGE)}, {"vertices", count(m.shape, TopAbs_VERTEX)},
-    {"volume", volume(m.shape)}, {"surfaceArea", surfaceArea(m.shape)}, {"valid", BRepCheck_Analyzer(m.shape).IsValid()},
-    {"bounds", {{"min", {xmin,ymin,zmin}}, {"max", {xmax,ymax,zmax}}}}};
+    {"volume", solids > 0 ? json(materialVolume) : json(nullptr)},
+    {"volumeAvailable", solids > 0}, {"volumeBasis", solids > 0 ? "solid-only" : "none"},
+    {"surfaceArea", surfaceArea(m.shape)}, {"valid", BRepCheck_Analyzer(m.shape).IsValid()},
+    {"bounds", {{"min", {xmin,ymin,zmin}}, {"max", {xmax,ymax,zmax}}}},
+    {"boundsMethod", "conservative-envelope"}};
   if (!m.doc.IsNull()) {
     auto tool = XCAFDoc_DocumentTool::ShapeTool(m.doc->Main());
     NCollection_Sequence<TDF_Label> roots;
@@ -272,34 +329,46 @@ gp_Dir normalizedDirection(const json& value, const char* field) {
   return gp_Dir(x/magnitude,y/magnitude,z/magnitude);
 }
 
-json rayHits(const TopoDS_Shape& shape, const gp_Pnt& origin, const gp_Dir& direction, double maxDistance) {
-  IntCurvesFace_ShapeIntersector intersector;
-  intersector.Load(shape, Precision::Confusion());
-  // Search the whole line and filter afterwards. OCCT's own guidance is to
-  // prefer an unbounded parameter range; bounded ranges can lose intersections
-  // near the ends.
-  intersector.Perform(gp_Lin(origin,direction),-Precision::Infinite(),Precision::Infinite());
-  NCollection_IndexedMap<TopoDS_Shape,TopTools_ShapeMapHasher> faces;
-  TopExp::MapShapes(shape,TopAbs_FACE,faces);
-  // The ray starts on the solid, so the source surface can report a hit at
-  // (or numerically near) parameter zero. Reject hits within this tolerance of
-  // the origin; it is a rejection threshold, not a geometric offset.
-  const double selfHitTolerance=Precision::Confusion()*10;
-  std::vector<std::pair<double,json>> ordered;
-  for(int i=1;i<=intersector.NbPnt();++i) {
-    const double distance=intersector.WParameter(i);
-    if(distance<=selfHitTolerance || distance>maxDistance) continue;
-    const gp_Pnt point=intersector.Pnt(i);
-    if(point.Distance(origin)<=selfHitTolerance) continue;
-    const int faceIndex=faces.FindIndex(intersector.Face(i))-1;
-    if(faceIndex<0) continue;
-    ordered.emplace_back(distance,json{{"face_id","face:"+std::to_string(faceIndex)},
-      {"distance",distance},{"point",{point.X(),point.Y(),point.Z()}}});
+/**
+ * Reusable ray caster. Loading the shape into IntCurvesFace_ShapeIntersector is
+ * the expensive part, so a ray grid loads it once instead of once per sample.
+ */
+struct RayCaster {
+  explicit RayCaster(const TopoDS_Shape& shape) {
+    intersector.Load(shape, Precision::Confusion());
+    TopExp::MapShapes(shape, TopAbs_FACE, faces);
   }
-  std::sort(ordered.begin(),ordered.end(),[](const auto& a,const auto& b){return a.first<b.first;});
-  json hits=json::array();
-  for(const auto& hit:ordered) hits.push_back(hit.second);
-  return hits;
+  json hits(const gp_Pnt& origin, const gp_Dir& direction, double maxDistance) {
+    // Search the whole line and filter afterwards. OCCT's own guidance is to
+    // prefer an unbounded parameter range; bounded ranges can lose intersections
+    // near the ends.
+    intersector.Perform(gp_Lin(origin,direction),-Precision::Infinite(),Precision::Infinite());
+    // The ray starts on the solid, so the source surface can report a hit at
+    // (or numerically near) parameter zero. Reject hits within this tolerance of
+    // the origin; it is a rejection threshold, not a geometric offset.
+    const double selfHitTolerance=Precision::Confusion()*10;
+    std::vector<std::pair<double,json>> ordered;
+    for(int i=1;i<=intersector.NbPnt();++i) {
+      const double distance=intersector.WParameter(i);
+      if(distance<=selfHitTolerance || distance>maxDistance) continue;
+      const gp_Pnt point=intersector.Pnt(i);
+      if(point.Distance(origin)<=selfHitTolerance) continue;
+      const int faceIndex=faces.FindIndex(intersector.Face(i))-1;
+      if(faceIndex<0) continue;
+      ordered.emplace_back(distance,json{{"face_id","face:"+std::to_string(faceIndex)},
+        {"distance",distance},{"point",{point.X(),point.Y(),point.Z()}}});
+    }
+    std::sort(ordered.begin(),ordered.end(),[](const auto& a,const auto& b){return a.first<b.first;});
+    json hits=json::array();
+    for(const auto& hit:ordered) hits.push_back(hit.second);
+    return hits;
+  }
+  IntCurvesFace_ShapeIntersector intersector;
+  NCollection_IndexedMap<TopoDS_Shape,TopTools_ShapeMapHasher> faces;
+};
+json rayHits(const TopoDS_Shape& shape, const gp_Pnt& origin, const gp_Dir& direction, double maxDistance) {
+  RayCaster caster(shape);
+  return caster.hits(origin, direction, maxDistance);
 }
 
 gp_Dir faceNormal(const TopoDS_Face& face, double u, double v, gp_Pnt* point = nullptr) {
@@ -466,7 +535,8 @@ json measureGeometry(const Model& m, const json& args) {
   }
   const double spacing=args.value("spacingMm",2.0);
   if(grid&&(!std::isfinite(spacing)||spacing<=0)) throw std::runtime_error("spacingMm must be finite and positive");
-  const int maxRaysPerFace=1500;
+  const int maxRays=args.value("maxRays",4000);
+  if(grid&&(maxRays<1||maxRays>20000)) throw std::runtime_error("maxRays must be an integer from 1 to 20000");
   int totalRays=0;
   for(const auto& id:ids) {
     const TopoDS_Shape entity=resolveEntity(m,id);
@@ -545,7 +615,12 @@ json measureGeometry(const Model& m, const json& args) {
       GProp_GProps areaProps; BRepGProp::SurfaceProperties(face,areaProps);
       const int n=std::max(1,static_cast<int>(std::ceil(std::sqrt(std::max(1.0,areaProps.Mass()))/spacing)));
       const int rayMultiplier=args.value("bidirectional",false)?2:1;
-      if(n*n*rayMultiplier>maxRaysPerFace || totalRays+n*n*rayMultiplier>4000) throw std::runtime_error("Ray grid exceeds 4000-ray bounded limit; increase spacingMm");
+      const int requestedRays=n*n*rayMultiplier;
+      if(totalRays+requestedRays>maxRays)
+        throw std::runtime_error("Ray grid needs "+std::to_string(requestedRays)+
+          " rays for spacing="+std::to_string(spacing)+", exceeding max_rays="+std::to_string(maxRays)+
+          ". Increase spacing or set max_rays up to 20000.");
+      RayCaster caster(m.shape);
       std::vector<double> distances; json samples=json::array(); int castCount=0;
       for(int iu=0;iu<n;++iu) for(int iv=0;iv<n;++iv) {
         const double u=u0+(iu+0.5)*(u1-u0)/n, v=v0+(iv+0.5)*(v1-v0)/n;
@@ -557,7 +632,7 @@ json measureGeometry(const Model& m, const json& args) {
         if(args.value("bidirectional",false)) { gp_Dir opposite=entityDirection; opposite.Reverse(); castDirections.push_back(opposite); }
         for(const gp_Dir& castDirection:castDirections) {
           ++castCount; ++totalRays;
-          const json hits=rayHits(m.shape,point,castDirection,maxDistance);
+          const json hits=caster.hits(point,castDirection,maxDistance);
           if(hits.empty()) continue;
           const double d=hits[0]["distance"].get<double>(); distances.push_back(d);
           if(args.value("detail",std::string("stats"))!="stats") samples.push_back({{"origin",{point.X(),point.Y(),point.Z()}},{"hit",hits[0]}});
@@ -565,7 +640,8 @@ json measureGeometry(const Model& m, const json& args) {
       }
       std::sort(distances.begin(),distances.end());
       double sum=0; for(double d:distances) sum+=d;
-      json stats={{"total_rays",castCount},{"hit_count",distances.size()},{"miss_count",castCount-static_cast<int>(distances.size())}};
+      json stats={{"total_rays",castCount},{"hit_count",distances.size()},{"miss_count",castCount-static_cast<int>(distances.size())},
+        {"requested_spacing_mm",spacing},{"grid_size",n},{"requested_rays",requestedRays},{"max_rays",maxRays}};
       if(!distances.empty()) stats.update({{"min_distance",distances.front()},{"max_distance",distances.back()},{"avg_distance",sum/distances.size()},{"median_distance",distances[distances.size()/2]}});
       facts[kind=="thickness"?"thickness":"ray_test_grid"]={{"statistics",stats},{"hits",samples}};
     }
@@ -590,7 +666,7 @@ std::string curveTypeName(GeomAbs_CurveType type) {
   }
 }
 json shapeBounds(const TopoDS_Shape& shape) {
-  Bnd_Box box; BRepBndLib::AddOptimal(shape,box,false,false);
+  const Bnd_Box box = computeShapeBounds(shape);
   double x0,y0,z0,x1,y1,z1; box.Get(x0,y0,z0,x1,y1,z1);
   return {{"min",{x0,y0,z0}},{"max",{x1,y1,z1}},{"center",{(x0+x1)/2,(y0+y1)/2,(z0+z1)/2}}};
 }
@@ -962,19 +1038,19 @@ json dispatch(const std::string& op, const json& args) {
   if (op == "open") {
     Model m;
     m.doc = new TDocStd_Document(TCollection_ExtendedString("BinXCAF"));
+    // STEPCAFControl_Reader::Transfer takes the document's length unit as the
+    // cascade unit. Without setting it here every model was transferred to mm
+    // and then labelled with the file's declared unit, a silent 25.4x error on
+    // inch files. The caller passes millimetres per source unit.
+    const double unit=args.value("systemLengthUnit",1.0);
+    if (!std::isfinite(unit) || unit<=0) throw std::runtime_error("systemLengthUnit must be finite and positive");
+    XCAFDoc_DocumentTool::SetLengthUnit(m.doc, unit, UnitsMethods_LengthUnit_Millimeter);
     STEPCAFControl_Reader reader;
     reader.SetGDTMode(true);
     auto readStart=Clock::now();
     if (reader.ReadFile(args.at("path").get<std::string>().c_str()) != IFSelect_RetDone)
       throw std::runtime_error("STEP read failed");
     const double readMs=milliseconds(readStart);
-    // Read in the file's own unit so measurements match the CAD export. The
-    // caller derives this from the STEP unit declaration.
-    if (args.contains("systemLengthUnit")) {
-      const double unit=args.at("systemLengthUnit").get<double>();
-      if (!std::isfinite(unit) || unit<=0) throw std::runtime_error("systemLengthUnit must be finite and positive");
-      reader.ChangeReader().SetSystemLengthUnit(unit);
-    }
     auto transferStart=Clock::now();
     if (!reader.Transfer(m.doc)) throw std::runtime_error("STEP XCAF transfer failed");
     const double transferMs=milliseconds(transferStart);

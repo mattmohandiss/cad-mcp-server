@@ -3,8 +3,12 @@ import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   artifactPath,
+  artifactReference,
   artifactUriSchema,
+  measurementUnits,
+  stepModelFrame,
   toArtifactUri,
+  unitNote,
 } from '../src/domain/artifact-reference.js';
 
 describe('artifact input normalization', () => {
@@ -31,6 +35,21 @@ describe('artifact input normalization', () => {
     expect(() => toArtifactUri('https://example.com/part.step')).toThrow(/local files only/);
     expect(() => toArtifactUri('s3://bucket/part.step')).toThrow(/local files only/);
     expect(() => toArtifactUri('')).toThrow(/local STEP file path/);
+  });
+
+  it('labels every measurement in the declared source unit', () => {
+    const path = resolve('tests/fixtures/repeated-instances-inch.step');
+    expect(artifactReference(path, `sha256:${'0'.repeat(64)}`, 'in').units).toBe('in');
+    expect(stepModelFrame('in').units).toBe('in');
+  });
+
+  it('reports the declared unit without exposing arithmetic', () => {
+    expect(measurementUnits({ name: 'in' })).toEqual({
+      length: 'in',
+      area: 'in2',
+      volume: 'in3',
+    });
+    expect(unitNote({ name: 'in' })).toBe('Lengths are in in.');
   });
 
   it('keeps the advertised schema a plain string that validates either form', () => {

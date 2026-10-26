@@ -6,6 +6,7 @@ import {
   artifactPath,
   artifactReference,
   stepModelFrame,
+  unitNote,
 } from '../domain/artifact-reference.js';
 import type { SidecarPmi } from '../sidecar/operations.js';
 
@@ -66,6 +67,7 @@ export type PmiDatum = {
 export type DescribePmiResult = {
   artifact: ReturnType<typeof artifactReference>;
   coordinate_frame: ReturnType<typeof stepModelFrame>;
+  unit_note: string;
   units: { length: string };
   counts: {
     dimensions: number;
@@ -80,10 +82,10 @@ export type DescribePmiResult = {
 };
 
 /**
- * The sidecar reports GD&T in millimetres whatever unit the geometry was read
- * in, so every value is divided by the model's millimetres-per-unit. Returning
- * them raw would be wrong by 25.4x on an inch part, and would not compare with
- * any measurement from the same artifact.
+ * OCCT reports GD&T in millimetres whatever unit the geometry was read in, so
+ * convert it to the artifact's declared unit. Returning it raw would be wrong by
+ * 25.4x on an inch part and would not compare with any measurement from the same
+ * artifact.
  */
 export function toModelUnit(value: number, millimetresPerUnit: number): number {
   return value / millimetresPerUnit;
@@ -152,6 +154,7 @@ export async function handler(args: z.output<typeof schema>) {
       const full: DescribePmiResult = {
         artifact: artifactReference(filePath, revision, units.name),
         coordinate_frame: stepModelFrame(units.name),
+        unit_note: unitNote(units),
         units: { length: units.name },
         counts: {
           dimensions: result.counts.dimensions,

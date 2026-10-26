@@ -6,7 +6,9 @@ import {
   artifactLocatorSchema,
   artifactPath,
   artifactReference,
+  measurementUnits,
   stepModelFrame,
+  unitNote,
 } from '../domain/artifact-reference.js';
 
 const includeSchema = z
@@ -43,15 +45,24 @@ const DEFAULT_INCLUDE = new Set(['size', 'counts', 'health']);
 export type InspectResult = {
   artifact: ReturnType<typeof artifactReference>;
   coordinate_frame: ReturnType<typeof stepModelFrame>;
+  unit_note?: string;
   size?: {
-    bounding_box: { min: Vec3; max: Vec3 };
+    bounding_box: {
+      min: Vec3;
+      max: Vec3;
+      method: 'conservative-envelope';
+      note: string;
+    };
     dimensions: { width: number; height: number; depth: number };
-    volume: number;
+    volume: number | null;
+    volume_available: boolean;
+    volume_basis: 'solid-only' | 'none';
     surface_area: number;
     units: { length: string; area: string; volume: string };
   };
   structure?: {
     body_count: number;
+    shell_count: number;
     is_assembly: boolean;
     component_occurrences: string[];
   };
@@ -73,15 +84,26 @@ export async function handler(args: z.output<typeof schema>) {
       const full: InspectResult = {
         artifact: artifactReference(_filePath, revision, units.name),
         coordinate_frame: stepModelFrame(units.name),
+        unit_note: unitNote(units),
         size: {
-          bounding_box: { min, max },
+          bounding_box: {
+            min,
+            max,
+            method: 'conservative-envelope',
+            note:
+              'Axis-aligned envelope of all faces, free edges and vertices. Non-planar faces are ' +
+              'bounded over their full UV range, so a trimmed curved face can overstate the exact extent.',
+          },
           dimensions: { width: maxX - minX, height: maxY - minY, depth: maxZ - minZ },
           volume: result.volume,
+          volume_available: result.volumeAvailable,
+          volume_basis: result.volumeBasis,
           surface_area: result.surfaceArea,
-          units: { length: units.name, area: `${units.name}2`, volume: `${units.name}3` },
+          units: measurementUnits(units),
         },
         structure: {
           body_count: result.solids,
+          shell_count: result.shells,
           is_assembly: (result.xcaf?.rootAssemblies ?? 0) > 0,
           component_occurrences: result.xcaf?.occurrenceIds ?? [],
         },
@@ -104,6 +126,7 @@ export function filterInspectResult(full: InspectResult, include: Set<string>): 
     artifact: full.artifact,
     coordinate_frame: full.coordinate_frame,
   };
+  if (full.unit_note !== undefined) result.unit_note = full.unit_note;
 
   if (include.has('size')) result.size = full.size;
   if (include.has('counts') || include.has('health')) {

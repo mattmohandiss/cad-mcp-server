@@ -37,7 +37,10 @@ describe.skipIf(!enabled)('sidecar measurement integration', () => {
       bounds: { min: number[]; max: number[] };
     };
     const { min, max } = sample.bounds;
-    expect([max[0]! - min[0]!, max[1]! - min[1]!, max[2]! - min[2]!]).toEqual([30, 10, 10]);
+    // The conservative envelope adds the face tolerance, so allow a tiny margin.
+    expect(max[0]! - min[0]!).toBeCloseTo(30, 4);
+    expect(max[1]! - min[1]!).toBeCloseTo(10, 4);
+    expect(max[2]! - min[2]!).toBeCloseTo(10, 4);
     expect(sample.volume).toBeCloseTo(2000, 6);
     expect(sample.surfaceArea).toBeCloseTo(1200, 6);
   });
@@ -94,6 +97,30 @@ describe.skipIf(!enabled)('sidecar measurement integration', () => {
       spacingMm: 1000,
     });
     expect(grid).toHaveProperty('ray_test_grid.statistics.total_rays');
+
+    await expect(
+      measure({
+        kind: 'ray_grid',
+        entityIds: ['face:0'],
+        direction: [0, 0, 1],
+        spacingMm: 0.5,
+        maxRays: 100,
+      }),
+    ).rejects.toThrow(/max_rays=100/);
+    const refined = (await measure({
+      kind: 'ray_grid',
+      entityIds: ['face:0'],
+      direction: [0, 0, 1],
+      spacingMm: 0.5,
+      maxRays: 400,
+    })) as unknown as {
+      ray_test_grid: {
+        statistics: { total_rays: number; max_rays: number; requested_spacing_mm: number };
+      };
+    };
+    expect(refined.ray_test_grid.statistics.max_rays).toBe(400);
+    expect(refined.ray_test_grid.statistics.requested_spacing_mm).toBe(0.5);
+    expect(refined.ray_test_grid.statistics.total_rays).toBeLessThanOrEqual(400);
 
     const points = await measure({
       kind: 'point_analysis',

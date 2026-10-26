@@ -19,13 +19,18 @@ export interface SidecarEntity {
 /** The `inspect` payload: model size, structure, and B-rep health. */
 export interface SidecarInspect {
   solids: number;
+  shells: number;
   faces: number;
   edges: number;
   vertices: number;
-  volume: number;
+  /** Null when the file has no solid material, e.g. an open surface shell. */
+  volume: number | null;
+  volumeAvailable: boolean;
+  volumeBasis: 'solid-only' | 'none';
   surfaceArea: number;
   valid: boolean;
   bounds: { min: Vec3; max: Vec3 };
+  boundsMethod: 'conservative-envelope';
   xcaf?: {
     roots: number;
     rootAssemblies: number;
@@ -164,6 +169,7 @@ export interface SidecarOps {
     originMode?: string;
     bidirectional?: boolean;
     spacingMm?: number;
+    maxRays?: number;
     maxDistance?: number;
     points?: readonly (readonly number[])[];
     checks?: readonly string[];
