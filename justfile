@@ -40,6 +40,17 @@ sidecar-native:
 sidecar-native-ci:
 	python3 occt/sidecar/scripts/build.py native --jobs 2 --work occt/sidecar/build-work
 
+# Cosmopolitan (APE) sidecar: the artefact that ships (cold ~90 min on 8 cores).
+sidecar-cosmo:
+	python3 occt/sidecar/scripts/build.py cosmo --jobs {{ num_cpus() }} --work occt/sidecar/build-work
+
+# Package the payload and install it where .env and the harness expect it.
+sidecar-payload:
+	python3 occt/sidecar/scripts/package_cosmopolitan_payload.py --work occt/sidecar/build-work --output occt/sidecar/build-work/cosmo-payload.tar.gz
+	mkdir -p occt/sidecar/build-work/remote/sidecar
+	tar -xzf occt/sidecar/build-work/cosmo-payload.tar.gz -C occt/sidecar/build-work/remote/sidecar
+	@echo "installed: occt/sidecar/build-work/remote/sidecar/bin/occt-sidecar.exe"
+
 clean:
 	rm -rf dist node_modules occt/sidecar/build occt/sidecar/build-work *.tgz
 
