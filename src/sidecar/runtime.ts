@@ -1,8 +1,30 @@
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { SidecarClient } from './client.js';
+import { SIDECAR_OPS } from './operations.js';
 
 let client: SidecarClient | undefined;
+
+/**
+ * Fail at connect when the binary does not implement what this package calls.
+ *
+ * Without this the mismatch surfaced later as an MCP tool error with *empty
+ * content* and `Unknown operation: pmi` only in the error field, which two
+ * evaluation runs missed. A binary that reports nothing lists every operation as
+ * missing, so there is one failure mode and one message.
+ */
+export function assertOperations(ops: readonly string[] | undefined, executable: string): void {
+  const available = new Set(ops);
+  const missing = SIDECAR_OPS.filter((op) => !available.has(op));
+  if (missing.length > 0) {
+    throw new Error(
+      `OCCT sidecar at ${executable} does not implement ${missing.join(', ')}. ` +
+        'The server source is newer than the binary being run, so a tool would fail ' +
+        'mid-conversation instead. Rebuild the sidecar payload, or point ' +
+        'CAD_MCP_SIDECAR at a current build.',
+    );
+  }
+}
 
 export async function getSidecarClient(): Promise<SidecarClient> {
   if (client?.isAlive) return client;
@@ -24,6 +46,7 @@ export async function getSidecarClient(): Promise<SidecarClient> {
     if (hello.result.protocol !== 2) {
       throw new Error(`Unsupported sidecar protocol: ${hello.result.protocol}`);
     }
+    assertOperations(hello.result.ops, executable);
     return started;
   } catch (error) {
     if (client === started) client = undefined;

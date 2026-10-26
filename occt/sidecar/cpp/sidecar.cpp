@@ -916,6 +916,12 @@ json pmiInventory(const Model& m) {
 
 json dispatch(const std::string& op, const json& args) {
   if (op == "hello") return {{"occt", OCC_VERSION_COMPLETE}, {"protocol",2}, {"models",models.size()},
+    // The operations this binary actually implements, so a server whose build is
+    // newer than the binary it is pointed at fails at connect time rather than
+    // mid-conversation with "Unknown operation". Keep in step with dispatch().
+    {"ops", {"open","close","inspect","pmi","findEntities","measureEntityDistances",
+             "measureGeometry","volume","meshChunk","box","memory","ping","hello",
+             "configureAllocator","allocatorSettings","releaseMemory"}},
 #if defined(__COSMOPOLITAN__)
     {"runtime","cosmopolitan"}
 #else

@@ -103,6 +103,33 @@ export interface SidecarPmiDatum {
   targetType?: string;
 }
 
+/**
+ * The operations this package calls, as values as well as types.
+ *
+ * The type alone cannot be enumerated at run time, so the list is stated here and
+ * a type-level assertion keeps it honest: adding an op to `SidecarOps` without
+ * adding it below is a compile error. The client checks the list against what the
+ * binary reports in `hello`, which turns "the payload predates this build" into a
+ * failure at connect rather than an `Unknown operation` error mid-conversation.
+ */
+export const SIDECAR_OPS = [
+  'hello',
+  'open',
+  'close',
+  'inspect',
+  'pmi',
+  'findEntities',
+  'measureEntityDistances',
+  'measureGeometry',
+  'meshChunk',
+] as const;
+
+type _OpsAreComplete = Exclude<keyof SidecarOps, (typeof SIDECAR_OPS)[number]>;
+type _OpsAreReal = Exclude<(typeof SIDECAR_OPS)[number], keyof SidecarOps>;
+// Each must be `never`: every interface key is listed, and every listed key exists.
+export const OPS_ARE_COMPLETE: _OpsAreComplete extends never ? true : never = true;
+export const OPS_ARE_REAL: _OpsAreReal extends never ? true : never = true;
+
 /** Arguments for each sidecar operation. */
 export interface SidecarOps {
   hello: Record<string, never>;
@@ -158,7 +185,7 @@ export interface SidecarOps {
  * measurement kinds, so its per-kind payload stays opaque to this layer.
  */
 export interface SidecarResults {
-  hello: { protocol: number; occt: string };
+  hello: { protocol: number; occt: string; ops: string[] };
   open: { modelId: number };
   close: unknown;
   inspect: SidecarInspect;
