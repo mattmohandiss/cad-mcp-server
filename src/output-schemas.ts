@@ -111,6 +111,7 @@ export const diff = z.object({
   units: z.object({ length: z.string(), area: z.string(), volume: z.string() }),
   deltas: record,
   exchange: record.optional(),
+  pmi: record,
   providers: record,
 });
 

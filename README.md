@@ -46,7 +46,7 @@ More examples, including DFM-style review prompts, are in [docs/EXAMPLE_PROMPTS.
 | `find_entities` | Faces, edges, vertices, and bodies, with filters for surface type, radius, axis, and area.                                                                                  |
 | `measure`       | Distance between faces, wall thickness, draft, ray casts, ray grids, point analysis, planar sections, and edge continuity.                                                  |
 | `describe_pmi`  | Declared dimensions (nominal with deviations or bounds), geometric tolerances (value, zone, material modifier, datums), and datums, each with the entity IDs it applies to. |
-| `diff`          | Dimension, volume, area, and topology deltas between two STEP revisions, plus parsed STEP metadata.                                                                         |
+| `diff`          | Dimension, volume, area, and topology deltas between two STEP revisions, declared PMI counts, and parsed STEP metadata.                                                     |
 
 Measurement kinds are `distance`, `thickness`, `draft`, `ray`, `ray_grid`, `point_analysis`, `section`, and `continuity`. Lengths are reported in the model's own unit and angles in degrees.
 

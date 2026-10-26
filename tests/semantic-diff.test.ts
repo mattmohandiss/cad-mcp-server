@@ -10,9 +10,7 @@ const metadata = (overrides: Partial<ParsedStepMetadata> = {}): ParsedStepMetada
   authoringSystem: 'CAD A',
   organizationName: 'Example',
   hasAssembly: false,
-  toleranceEntityCount: 0,
   shapeRepresentationCount: 1,
-  pmiKeywords: [],
   entityCounts: {},
   ...overrides,
 });

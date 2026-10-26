@@ -102,6 +102,7 @@ describe('tool contracts', () => {
         ],
         units: { length: 'mm', area: 'mm2', volume: 'mm3' },
         deltas: {},
+        pmi: {},
         providers: {},
       }).success,
     ).toBe(true);

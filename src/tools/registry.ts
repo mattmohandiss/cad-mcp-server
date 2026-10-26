@@ -122,7 +122,8 @@ export const TOOL_REGISTRY: ToolSpec[] = [
     name: 'diff',
     title: 'Compare Step Versions',
     description:
-      'Compare baseline and candidate STEP artifacts, as filesystem paths or file: URIs. Returns both content revisions, geometry deltas, and parsed document facts: schema, product names/count, assembly flag, authoring system, and organization. ' +
+      'Compare baseline and candidate STEP artifacts, as filesystem paths or file: URIs. Returns both content revisions, geometry deltas, declared PMI counts (dimensions, geometric tolerances, datums, and how many tolerance values could not be read), and parsed document facts: schema, product names/count, assembly flag, authoring system, and organization. ' +
+      'The PMI counts show whether a revision added or dropped callouts; they compare how many callouts exist, not whether any is met. ' +
       'These are file-level facts; they do not explain design intent.',
     purpose: 'Compare geometric measurements and STEP document metadata.',
     inputSchema: diffTool.schema,

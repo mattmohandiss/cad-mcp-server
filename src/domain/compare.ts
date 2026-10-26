@@ -1,4 +1,5 @@
 import type { ParsedStepMetadata } from '../pmi/metadata.js';
+import type { SidecarPmi } from '../sidecar/operations.js';
 
 /** Compare parsed STEP document facts without inferring engineering intent. */
 export function compareStepMetadata(a: ParsedStepMetadata, b: ParsedStepMetadata) {
@@ -20,5 +21,36 @@ export function compareStepMetadata(a: ParsedStepMetadata, b: ParsedStepMetadata
     organization_changed: a.organizationName !== b.organizationName,
     organization_a: a.organizationName,
     organization_b: b.organizationName,
+  };
+}
+
+/**
+ * Compare the PMI a revision declares. Counts, not values: whether a dimension
+ * moved is a geometry question the deltas already answer, while a revision that
+ * drops or adds callouts is a design-intent change that nothing else reports.
+ *
+ * `unresolved_values` is carried because a count is only as good as what could be
+ * read: a tolerance whose magnitude did not resolve is a callout that exists but
+ * cannot be compared, and silently counting it as present would overstate the
+ * comparison.
+ */
+export function comparePmi(baseline: SidecarPmi, candidate: SidecarPmi) {
+  const summarise = (pmi: SidecarPmi) => ({
+    dimensions: pmi.counts.dimensions,
+    geometric_tolerances: pmi.counts.geometricTolerances,
+    datums: pmi.counts.datums,
+    unresolved_values: pmi.geometricTolerances.filter((tolerance) => !tolerance.valueResolved)
+      .length,
+  });
+  const before = summarise(baseline);
+  const after = summarise(candidate);
+  return {
+    baseline: before,
+    candidate: after,
+    deltas: {
+      dimensions: after.dimensions - before.dimensions,
+      geometric_tolerances: after.geometric_tolerances - before.geometric_tolerances,
+      datums: after.datums - before.datums,
+    },
   };
 }

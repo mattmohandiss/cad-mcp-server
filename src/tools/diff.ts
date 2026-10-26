@@ -7,7 +7,7 @@ import {
   artifactReference,
 } from '../domain/artifact-reference.js';
 import { parseStepMetadata } from '../pmi/metadata.js';
-import { compareStepMetadata } from '../domain/compare.js';
+import { comparePmi, compareStepMetadata } from '../domain/compare.js';
 import { fileRevision } from '../utils/hash.js';
 
 const baseSchema = z
@@ -40,8 +40,10 @@ export async function handler(args: z.output<typeof schema>) {
       artifactPath(uri),
       async (client, modelId, filePath, revision, units) => {
         const response = await client.request('inspect', { modelId });
+        const pmi = await client.request('pmi', { modelId });
         return {
           stats: response.result,
+          pmi: pmi.result,
           artifact: artifactReference(filePath, revision, units.name),
           filePath,
           units,
@@ -97,6 +99,7 @@ export async function handler(args: z.output<typeof schema>) {
       edgeCount: candidate.stats.edges - baseline.stats.edges,
     },
     exchange: compareStepMetadata(semanticBaseline, semanticCandidate),
+    pmi: comparePmi(baseline.pmi, candidate.pmi),
     providers: {
       baseline: ['occt-sidecar', 'lightweight-step'],
       candidate: ['occt-sidecar', 'lightweight-step'],
