@@ -19,6 +19,7 @@ it('serves discovery and tools over the modern MCP protocol', async () => {
     expect(client.getProtocolEra()).toBe('modern');
     const { tools } = await client.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual([
+      'describe_pmi',
       'diff',
       'find_entities',
       'inspect',
@@ -43,6 +44,7 @@ it('serves the 2025-era handshake that stock MCP hosts negotiate', async () => {
     expect(client.getProtocolEra()).toBe('legacy');
     const { tools } = await client.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual([
+      'describe_pmi',
       'diff',
       'find_entities',
       'inspect',

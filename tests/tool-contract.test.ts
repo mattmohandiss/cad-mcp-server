@@ -20,7 +20,7 @@ describe('tool contracts', () => {
     expect(new Set(names).size).toBe(names.length);
     expect(TOOL_REGISTRY.every((tool) => tool.outputSchema)).toBe(true);
     expect(PUBLIC_TOOL_NAMES.sort()).toEqual(
-      ['diff', 'find_entities', 'inspect', 'measure'].sort(),
+      ['describe_pmi', 'diff', 'find_entities', 'inspect', 'measure'].sort(),
     );
   });
 
@@ -31,7 +31,7 @@ describe('tool contracts', () => {
       rules: string[];
     };
     expect(Object.keys(help.tools).sort()).toEqual([...PUBLIC_TOOL_NAMES].sort());
-    expect(help.surface).toContain('4 read-only tools');
+    expect(help.surface).toContain('5 read-only tools');
     expect(help.rules.join(' ')).toContain('artifact revision and id scheme');
     expect(help).not.toHaveProperty('prompts');
   });

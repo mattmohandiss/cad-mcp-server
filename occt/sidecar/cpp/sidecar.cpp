@@ -6,6 +6,14 @@
 #include <TDocStd_Document.hxx>
 #include <XCAFDoc_DocumentTool.hxx>
 #include <XCAFDoc_ShapeTool.hxx>
+#include <XCAFDoc_DimTolTool.hxx>
+#include <XCAFDoc_Dimension.hxx>
+#include <XCAFDoc_GeomTolerance.hxx>
+#include <XCAFDoc_Datum.hxx>
+#include <XCAFDimTolObjects_Tool.hxx>
+#include <XCAFDimTolObjects_DimensionObject.hxx>
+#include <XCAFDimTolObjects_GeomToleranceObject.hxx>
+#include <XCAFDimTolObjects_DatumObject.hxx>
 #include <TDF_Label.hxx>
 #include <TDF_Tool.hxx>
 #include <TDataStd_Name.hxx>
@@ -667,6 +675,245 @@ json findEntities(const Model& m, const json& args) {
   }
   return {{"entities",entities},{"total_matched",total}};
 }
+// ---------------------------------------------------------------------------
+// PMI / GD&T
+//
+// STEPCAFControl_Reader::SetGDTMode(true) already transfers dimensions,
+// geometric tolerances and datums into the XCAF document at open time, and
+// nothing read them back until now. This reports what the file declares, as
+// data: it does not decide whether a tolerance is met. That judgement is the
+// caller's, and it is what an evaluation of this server grades.
+//
+// Units. OCCT returns GD&T values in millimetres whatever system length unit the
+// geometry was read in (SetSystemLengthUnit does not affect them), so they are
+// reported as millimetres and the caller converts them to the unit it reports for
+// measurements. Reporting them raw is wrong by 25.4x on an inch part, which looks
+// perfectly plausible.
+//
+// valueResolved. When OCCT cannot resolve a tolerance magnitude it leaves the
+// value at its default and says nothing, so an unresolved tolerance and a genuine
+// zero-at-MMC callout both read 0.0. A tolerance is reported as resolved when the
+// magnitude or any magnitude-derived field was set (value, material requirement,
+// zone shape, or a datum reference). Measured against the NIST conformance set on
+// OCCT 8.0.1 that flags nothing but the two genuine zero-at-MMC callouts, which
+// carry a material modifier; on 7.9.3 it flagged 7 of 17 files.
+
+const char* geomToleranceKind(int type) {
+  switch (type) {
+    case 1: return "angularity";
+    case 2: return "circular-runout";
+    case 3: return "circularity";
+    case 4: return "coaxiality";
+    case 5: return "concentricity";
+    case 6: return "cylindricity";
+    case 7: return "flatness";
+    case 8: return "parallelism";
+    case 9: return "perpendicularity";
+    case 10: return "position";
+    case 11: return "profile-of-line";
+    case 12: return "profile-of-surface";
+    case 13: return "straightness";
+    case 14: return "symmetry";
+    case 15: return "total-runout";
+    default: return "none";
+  }
+}
+
+const char* materialRequirementName(int modifier) {
+  switch (modifier) {
+    case 1: return "MMC";
+    case 2: return "LMC";
+    default: return "none";
+  }
+}
+
+const char* zoneShapeName(int valueType) {
+  switch (valueType) {
+    case 1: return "diameter";
+    case 2: return "spherical-diameter";
+    default: return "none";
+  }
+}
+
+// A GD&T annotation references shapes by label; measurements refer to entities by
+// index into the same face and edge maps, so map the label's shape back to an id
+// or report that it could not be placed.
+std::vector<std::string> pmiEntityIds(
+    const occ::handle<XCAFDoc_ShapeTool>& shapeTool,
+    const NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher>& faces,
+    const NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher>& edges,
+    const NCollection_Sequence<TDF_Label>& labels, int& unresolved) {
+  std::vector<std::string> ids;
+  for (int i = 1; i <= labels.Length(); ++i) {
+    if (!shapeTool->IsShape(labels.Value(i))) { ++unresolved; continue; }
+    const TopoDS_Shape shape = shapeTool->GetShape(labels.Value(i));
+    if (shape.IsNull()) { ++unresolved; continue; }
+    if (shape.ShapeType() == TopAbs_FACE) {
+      const int index = faces.FindIndex(shape);
+      if (index > 0) { ids.push_back("face:" + std::to_string(index - 1)); continue; }
+    } else if (shape.ShapeType() == TopAbs_EDGE) {
+      const int index = edges.FindIndex(shape);
+      if (index > 0) { ids.push_back("edge:" + std::to_string(index - 1)); continue; }
+    }
+    ++unresolved;
+  }
+  return ids;
+}
+
+json pmiInventory(const Model& m) {
+  if (m.doc.IsNull()) throw std::runtime_error("Model has no XCAF document");
+  auto dimTol = XCAFDoc_DocumentTool::DimTolTool(m.doc->Main());
+  auto shapeTool = XCAFDoc_DocumentTool::ShapeTool(m.doc->Main());
+  if (dimTol.IsNull()) throw std::runtime_error("XCAF GD&T tool unavailable");
+  if (shapeTool.IsNull()) throw std::runtime_error("XCAF shape tool unavailable");
+
+  NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> faces, edges;
+  TopExp::MapShapes(m.shape, TopAbs_FACE, faces);
+  TopExp::MapShapes(m.shape, TopAbs_EDGE, edges);
+
+  NCollection_Sequence<TDF_Label> dimensionLabels, toleranceLabels, datumLabels;
+  dimTol->GetDimensionLabels(dimensionLabels);
+  dimTol->GetGeomToleranceLabels(toleranceLabels);
+  dimTol->GetDatumLabels(datumLabels);
+
+  int unresolvedReferences = 0;
+  int presentationSkipped = 0;
+
+  json dimensions = json::array();
+  for (int i = 1; i <= dimensionLabels.Length(); ++i) {
+    const TDF_Label& label = dimensionLabels.Value(i);
+    occ::handle<XCAFDoc_Dimension> attribute;
+    if (!label.FindAttribute(XCAFDoc_Dimension::GetID(), attribute) || attribute.IsNull())
+      continue;
+    const auto object = attribute->GetObject();
+    if (object.IsNull()) continue;
+    // The graphical layer carries its own dimension objects. They are a
+    // presentation of the same callout, not a second callout.
+    const std::string kind =
+        object->GetSemanticName().IsNull() ? "" : object->GetSemanticName()->ToCString();
+    if (kind.rfind("DGT:", 0) == 0) { ++presentationSkipped; continue; }
+
+    json entry{{"type", static_cast<int>(object->GetType())}, {"kind", kind}};
+    entry["nominal"] = object->GetValue();
+    if (object->IsDimWithPlusMinusTolerance()) {
+      entry["upperDeviation"] = object->GetUpperTolValue();
+      entry["lowerDeviation"] = object->GetLowerTolValue();
+    }
+    if (object->IsDimWithRange()) {
+      entry["lowerBound"] = object->GetLowerBound();
+      entry["upperBound"] = object->GetUpperBound();
+    }
+    if (object->HasQualifier()) entry["qualifier"] = static_cast<int>(object->GetQualifier());
+
+    NCollection_Sequence<TDF_Label> first, second;
+    if (XCAFDoc_DimTolTool::GetRefShapeLabel(label, first, second)) {
+      auto ids = pmiEntityIds(shapeTool, faces, edges, first, unresolvedReferences);
+      if (!ids.empty()) entry["entityIds"] = ids;
+      auto secondary = pmiEntityIds(shapeTool, faces, edges, second, unresolvedReferences);
+      if (!secondary.empty()) entry["secondaryEntityIds"] = secondary;
+    }
+    dimensions.push_back(std::move(entry));
+  }
+
+  json tolerances = json::array();
+  for (int i = 1; i <= toleranceLabels.Length(); ++i) {
+    const TDF_Label& label = toleranceLabels.Value(i);
+    occ::handle<XCAFDoc_GeomTolerance> attribute;
+    if (!label.FindAttribute(XCAFDoc_GeomTolerance::GetID(), attribute) || attribute.IsNull())
+      continue;
+    const auto object = attribute->GetObject();
+    if (object.IsNull()) continue;
+
+    const int modifier = static_cast<int>(object->GetMaterialRequirementModifier());
+    const int zoneShape = static_cast<int>(object->GetTypeOfValue());
+
+    NCollection_Sequence<TDF_Label> datumRefs;
+    dimTol->GetDatumOfTolerLabels(label, datumRefs);
+    json datums = json::array();
+    for (int d = 1; d <= datumRefs.Length(); ++d) {
+      occ::handle<XCAFDoc_Datum> datumAttribute;
+      if (!datumRefs.Value(d).FindAttribute(XCAFDoc_Datum::GetID(), datumAttribute) ||
+          datumAttribute.IsNull())
+        continue;
+      const auto datum = datumAttribute->GetObject();
+      if (datum.IsNull()) continue;
+      datums.push_back(
+          {{"name", datum->GetName().IsNull() ? "" : datum->GetName()->ToCString()},
+           {"position", datum->GetPosition()}});
+    }
+
+    json entry{{"type", static_cast<int>(object->GetType())},
+               {"kind", geomToleranceKind(static_cast<int>(object->GetType()))},
+               {"value", object->GetValue()},
+               {"zoneShape", zoneShapeName(zoneShape)},
+               {"materialRequirement", materialRequirementName(modifier)},
+               // An unread magnitude leaves every magnitude-derived field at its
+               // default; a genuine zero-at-MMC callout carries a modifier.
+               {"valueResolved",
+                object->GetValue() != 0.0 || modifier != 0 || zoneShape != 0 ||
+                    datums.size() > 0}};
+    if (object->GetValueOfZoneModifier() != 0.0)
+      entry["zoneModifier"] = object->GetValueOfZoneModifier();
+    if (!datums.empty()) entry["datums"] = datums;
+
+    NCollection_Sequence<TDF_Label> first, second;
+    if (XCAFDoc_DimTolTool::GetRefShapeLabel(label, first, second)) {
+      auto ids = pmiEntityIds(shapeTool, faces, edges, first, unresolvedReferences);
+      if (!ids.empty()) entry["entityIds"] = ids;
+      auto secondary = pmiEntityIds(shapeTool, faces, edges, second, unresolvedReferences);
+      if (!secondary.empty()) entry["secondaryEntityIds"] = secondary;
+    }
+    tolerances.push_back(std::move(entry));
+  }
+
+  json datums = json::array();
+  for (int i = 1; i <= datumLabels.Length(); ++i) {
+    occ::handle<XCAFDoc_Datum> attribute;
+    if (!datumLabels.Value(i).FindAttribute(XCAFDoc_Datum::GetID(), attribute) ||
+        attribute.IsNull())
+      continue;
+    const auto object = attribute->GetObject();
+    if (object.IsNull()) continue;
+    json entry{{"name", object->GetName().IsNull() ? "" : object->GetName()->ToCString()},
+               {"position", object->GetPosition()},
+               {"isTarget", static_cast<bool>(object->IsDatumTarget())}};
+    if (object->IsDatumTarget()) {
+      switch (static_cast<int>(object->GetDatumTargetType())) {
+        case 1: entry["targetType"] = "point"; break;
+        case 2: entry["targetType"] = "line"; break;
+        case 3: entry["targetType"] = "rectangle"; break;
+        case 4: entry["targetType"] = "circle"; break;
+        case 5: entry["targetType"] = "area"; break;
+        default: break;
+      }
+    }
+    datums.push_back(std::move(entry));
+  }
+
+  json warnings = json::array();
+  if (unresolvedReferences > 0)
+    warnings.push_back(std::to_string(unresolvedReferences) +
+                       " GD&T shape reference(s) could not be placed on a face or edge");
+  const int unresolvedValues =
+      static_cast<int>(std::count_if(tolerances.begin(), tolerances.end(),
+                                     [](const json& t) { return !t.at("valueResolved").get<bool>(); }));
+  if (unresolvedValues > 0)
+    warnings.push_back(std::to_string(unresolvedValues) +
+                       " geometric tolerance value(s) could not be read and are reported as 0.0");
+
+  return {{"units", {{"length", "mm"},
+                     {"note", "GD&T values are reported in millimetres; convert to the "
+                              "unit reported for measurements"}}},
+          {"counts", {{"dimensions", dimensions.size()},
+                      {"geometricTolerances", tolerances.size()},
+                      {"datums", datums.size()},
+                      {"presentationSkipped", presentationSkipped}}},
+          {"dimensions", dimensions},
+          {"geometricTolerances", tolerances},
+          {"datums", datums},
+          {"warnings", warnings}};
+}
+
 json dispatch(const std::string& op, const json& args) {
   if (op == "hello") return {{"occt", OCC_VERSION_COMPLETE}, {"protocol",2}, {"models",models.size()},
 #if defined(__COSMOPOLITAN__)
@@ -752,6 +999,7 @@ json dispatch(const std::string& op, const json& args) {
     return {{"modelId",id},{"readMs",readMs},{"transferMs",transferMs}};
   }
   if (op == "inspect") return inspect(model(args));
+  if (op == "pmi") return pmiInventory(model(args));
   if (op == "findEntities") return findEntities(model(args), args);
   if (op == "measureEntityDistances") return measureEntityDistances(model(args), args);
   if (op == "measureGeometry") return measureGeometry(model(args), args);

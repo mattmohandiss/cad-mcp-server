@@ -80,6 +80,13 @@ int main(int argc, char** argv) {
   if (status != IFSelect_RetDone) {
     return 1;
   }
+  // Mirror the server's open path: it reads in the file's own unit, so
+  // measurements come out in that unit and the caller is told which.
+  if (argc > 2) {
+    const double unit = std::stod(argv[2]);
+    reader.ChangeReader().SetSystemLengthUnit(unit);
+    std::printf("system length unit: %.4f\n", unit);
+  }
   reader.Transfer(document);
 
   occ::handle<XCAFDoc_DimTolTool> dimTol =

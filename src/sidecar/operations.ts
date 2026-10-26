@@ -46,10 +46,68 @@ export interface SidecarMeasureEntry {
   results: Record<string, unknown>;
 }
 
+/** The `pmi` payload: GD&T declared by the file, as data rather than judgements. */
+export interface SidecarPmi {
+  units: { length: string; note: string };
+  counts: {
+    dimensions: number;
+    geometricTolerances: number;
+    datums: number;
+    presentationSkipped: number;
+  };
+  dimensions: SidecarPmiDimension[];
+  geometricTolerances: SidecarPmiTolerance[];
+  datums: SidecarPmiDatum[];
+  warnings: string[];
+}
+
+/** One dimensional callout. Values are millimetres whatever the model unit is. */
+export interface SidecarPmiDimension {
+  /** OCCT's dimension type code; `kind` is the readable equivalent. */
+  type: number;
+  /** OCCT's own semantic name, e.g. "diameter" or "linear distance". */
+  kind: string;
+  nominal: number;
+  upperDeviation?: number;
+  lowerDeviation?: number;
+  lowerBound?: number;
+  upperBound?: number;
+  qualifier?: number;
+  entityIds?: string[];
+  secondaryEntityIds?: string[];
+}
+
+/** One geometric tolerance (flatness, position, ...). Values are millimetres. */
+export interface SidecarPmiTolerance {
+  type: number;
+  kind: string;
+  value: number;
+  zoneShape: string;
+  materialRequirement: string;
+  zoneModifier?: number;
+  /**
+   * False when OCCT could not resolve the magnitude and left it at 0.0. A
+   * genuine zero-at-MMC callout reads true, because it carries a modifier.
+   */
+  valueResolved: boolean;
+  datums?: Array<{ name: string; position: number }>;
+  entityIds?: string[];
+  secondaryEntityIds?: string[];
+}
+
+/** One datum feature or datum target. */
+export interface SidecarPmiDatum {
+  name: string;
+  position: number;
+  isTarget: boolean;
+  targetType?: string;
+}
+
 /** Arguments for each sidecar operation. */
 export interface SidecarOps {
   hello: Record<string, never>;
   open: { path: string; systemLengthUnit?: number };
+  pmi: { modelId: number };
   close: { modelId: number };
   inspect: { modelId: number };
   findEntities: {
@@ -104,6 +162,7 @@ export interface SidecarResults {
   open: { modelId: number };
   close: unknown;
   inspect: SidecarInspect;
+  pmi: SidecarPmi;
   findEntities: { entities: SidecarEntity[]; total_matched: number };
   measureEntityDistances: {
     pair_count: number;

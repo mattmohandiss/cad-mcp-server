@@ -1,6 +1,7 @@
 import type { ToolAnnotations } from '@modelcontextprotocol/server';
 import type { z } from 'zod';
 import * as diffTool from './diff.js';
+import * as describePmi from './describe-pmi.js';
 import * as inspectTool from './inspect.js';
 import * as findEntities from './find-entities.js';
 import * as measureTool from './measure.js';
@@ -99,6 +100,22 @@ export const TOOL_REGISTRY: ToolSpec[] = [
     examples: measureTool.examples,
     handler: measureTool.handler,
     outputSchema: outputSchemas.measure,
+    annotations: READ_ONLY,
+  }),
+  defineTool({
+    name: 'describe_pmi',
+    title: 'Describe Model PMI and GD&T',
+    description:
+      'Report the dimensions, geometric tolerances, and datums that a STEP artifact declares, as data: nominal and deviations for each dimension, and value, zone shape, material requirement, and datum references for each geometric tolerance, with the entity IDs each annotation applies to. ' +
+      'These are the callouts the file carries, not a verdict: whether a tolerance is met, whether a stack closes, and what to change are engineering judgements. ' +
+      'A tolerance whose magnitude could not be read is marked value_resolved: false rather than reported as 0, because a genuine zero-at-MMC callout also reads 0. ' +
+      'Values use the same unit this server reports for the artifact. An empty section means the file declares no PMI, which is the common case for a model exported without annotations. ' +
+      'Use the artifact reference from inspect; entity IDs are valid only for that revision.',
+    purpose: 'Declared dimensions, geometric tolerances, and datums (PMI/GD&T).',
+    inputSchema: describePmi.schema,
+    examples: describePmi.examples,
+    handler: describePmi.handler,
+    outputSchema: outputSchemas.pmi,
     annotations: READ_ONLY,
   }),
   defineTool({

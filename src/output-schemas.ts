@@ -114,4 +114,56 @@ export const diff = z.object({
   providers: record,
 });
 
+export const pmi = z.object({
+  artifact: artifactReferenceSchema,
+  coordinate_frame: coordinateFrame,
+  units: z.object({ length: z.string() }),
+  counts: z.object({
+    dimensions: z.number(),
+    geometric_tolerances: z.number(),
+    datums: z.number(),
+    presentation_skipped: z.number(),
+  }),
+  dimensions: z
+    .array(
+      z.object({
+        kind: z.string(),
+        nominal: z.number(),
+        upper_deviation: z.number().optional(),
+        lower_deviation: z.number().optional(),
+        lower_bound: z.number().optional(),
+        upper_bound: z.number().optional(),
+        entity_ids: z.array(z.string()).optional(),
+        secondary_entity_ids: z.array(z.string()).optional(),
+      }),
+    )
+    .optional(),
+  geometric_tolerances: z
+    .array(
+      z.object({
+        kind: z.string(),
+        value: z.number(),
+        zone_shape: z.string(),
+        material_requirement: z.string(),
+        zone_modifier: z.number().optional(),
+        value_resolved: z.boolean(),
+        datums: z.array(z.object({ name: z.string(), position: z.number() })).optional(),
+        entity_ids: z.array(z.string()).optional(),
+        secondary_entity_ids: z.array(z.string()).optional(),
+      }),
+    )
+    .optional(),
+  datums: z
+    .array(
+      z.object({
+        name: z.string(),
+        position: z.number(),
+        is_target: z.boolean(),
+        target_type: z.string().optional(),
+      }),
+    )
+    .optional(),
+  warnings: z.array(z.string()),
+});
+
 export { vector3 };
