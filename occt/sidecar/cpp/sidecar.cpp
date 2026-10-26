@@ -533,8 +533,8 @@ json measureGeometry(const Model& m, const json& args) {
   else if((grid&&kind!="thickness")||ray||draft) {
     if(!args.contains("directionMode")) throw std::runtime_error("direction or directionMode is required");
   }
-  const double spacing=args.value("spacingMm",2.0);
-  if(grid&&(!std::isfinite(spacing)||spacing<=0)) throw std::runtime_error("spacingMm must be finite and positive");
+  const double spacing=args.value("spacing",2.0);
+  if(grid&&(!std::isfinite(spacing)||spacing<=0)) throw std::runtime_error("spacing must be finite and positive");
   const int maxRays=args.value("maxRays",4000);
   if(grid&&(maxRays<1||maxRays>20000)) throw std::runtime_error("maxRays must be an integer from 1 to 20000");
   int totalRays=0;
@@ -641,7 +641,7 @@ json measureGeometry(const Model& m, const json& args) {
       std::sort(distances.begin(),distances.end());
       double sum=0; for(double d:distances) sum+=d;
       json stats={{"total_rays",castCount},{"hit_count",distances.size()},{"miss_count",castCount-static_cast<int>(distances.size())},
-        {"requested_spacing_mm",spacing},{"grid_size",n},{"requested_rays",requestedRays},{"max_rays",maxRays}};
+        {"requested_spacing",spacing},{"grid_size",n},{"requested_rays",requestedRays},{"max_rays",maxRays}};
       if(!distances.empty()) stats.update({{"min_distance",distances.front()},{"max_distance",distances.back()},{"avg_distance",sum/distances.size()},{"median_distance",distances[distances.size()/2]}});
       facts[kind=="thickness"?"thickness":"ray_test_grid"]={{"statistics",stats},{"hits",samples}};
     }

@@ -60,7 +60,7 @@ describe.skipIf(!enabled)('sidecar measurement integration', () => {
       kind: 'thickness',
       entityIds: ['face:0'],
       directionMode: 'inward_normal',
-      spacingMm: 1000,
+      spacing: 1000,
     });
     expect(thickness).toHaveProperty('thickness.statistics.total_rays');
     const thicknessStats = (
@@ -94,7 +94,7 @@ describe.skipIf(!enabled)('sidecar measurement integration', () => {
       kind: 'ray_grid',
       entityIds: ['face:0'],
       direction: [0, 0, 1],
-      spacingMm: 1000,
+      spacing: 1000,
     });
     expect(grid).toHaveProperty('ray_test_grid.statistics.total_rays');
 
@@ -103,7 +103,7 @@ describe.skipIf(!enabled)('sidecar measurement integration', () => {
         kind: 'ray_grid',
         entityIds: ['face:0'],
         direction: [0, 0, 1],
-        spacingMm: 0.5,
+        spacing: 0.5,
         maxRays: 100,
       }),
     ).rejects.toThrow(/max_rays=100/);
@@ -111,15 +111,15 @@ describe.skipIf(!enabled)('sidecar measurement integration', () => {
       kind: 'ray_grid',
       entityIds: ['face:0'],
       direction: [0, 0, 1],
-      spacingMm: 0.5,
+      spacing: 0.5,
       maxRays: 400,
     })) as unknown as {
       ray_test_grid: {
-        statistics: { total_rays: number; max_rays: number; requested_spacing_mm: number };
+        statistics: { total_rays: number; max_rays: number; requested_spacing: number };
       };
     };
     expect(refined.ray_test_grid.statistics.max_rays).toBe(400);
-    expect(refined.ray_test_grid.statistics.requested_spacing_mm).toBe(0.5);
+    expect(refined.ray_test_grid.statistics.requested_spacing).toBe(0.5);
     expect(refined.ray_test_grid.statistics.total_rays).toBeLessThanOrEqual(400);
 
     const points = await measure({
@@ -140,5 +140,63 @@ describe.skipIf(!enabled)('sidecar measurement integration', () => {
 
     const continuity = await measure({ kind: 'continuity', entityIds: ['edge:0'] });
     expect(continuity).toHaveProperty('continuity');
+  }, 120_000);
+
+  it('uses declared inch units for STEP sampling coordinates and distances', async () => {
+    const inchPath = fileURLToPath(
+      new URL('./fixtures/repeated-instances-inch.step', import.meta.url),
+    );
+    const opened = await client!.request('open', { path: inchPath, systemLengthUnit: 25.4 });
+    const inchModelId = opened.result.modelId;
+    try {
+      const inchInspect = await client!.request('inspect', { modelId: inchModelId });
+      const bounds = inchInspect.result.bounds;
+      expect(bounds.max[0] - bounds.min[0]).toBeCloseTo(30, 4);
+      expect(bounds.max[1] - bounds.min[1]).toBeCloseTo(10, 4);
+      expect(bounds.max[2] - bounds.min[2]).toBeCloseTo(10, 4);
+
+      const sampled = await client!.request('measureGeometry', {
+        modelId: inchModelId,
+        kind: 'ray_grid',
+        entityIds: ['face:0'],
+        direction: [1, 0, 0],
+        spacing: 0.5,
+      });
+      const sampledPayload = sampled.result as unknown as {
+        results: { results: { ray_test_grid: { statistics: unknown } } }[];
+      };
+      const stats = sampledPayload.results[0]!.results.ray_test_grid.statistics as {
+        requested_spacing: number;
+        grid_size: number;
+      };
+      expect(stats.requested_spacing).toBe(0.5);
+      expect(stats.grid_size).toBe(20);
+
+      const tooShort = await client!.request('measureGeometry', {
+        modelId: inchModelId,
+        kind: 'thickness',
+        entityIds: ['face:0'],
+        maxDistance: 9,
+      });
+      const tooShortPayload = tooShort.result as unknown as {
+        results: { results: { thickness: { statistics: { hit_count: number } } } }[];
+      };
+      expect(tooShortPayload.results[0]!.results.thickness.statistics.hit_count).toBe(0);
+      const sufficient = await client!.request('measureGeometry', {
+        modelId: inchModelId,
+        kind: 'thickness',
+        entityIds: ['face:0'],
+        maxDistance: 10.1,
+      });
+      const sufficientPayload = sufficient.result as unknown as {
+        results: { results: { thickness: { statistics: { min_distance: number } } } }[];
+      };
+      expect(sufficientPayload.results[0]!.results.thickness.statistics.min_distance).toBeCloseTo(
+        10,
+        8,
+      );
+    } finally {
+      await client!.request('close', { modelId: inchModelId });
+    }
   }, 120_000);
 });

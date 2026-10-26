@@ -168,7 +168,7 @@ export interface SidecarOps {
     origin?: readonly number[];
     originMode?: string;
     bidirectional?: boolean;
-    spacingMm?: number;
+    spacing?: number;
     maxRays?: number;
     maxDistance?: number;
     points?: readonly (readonly number[])[];

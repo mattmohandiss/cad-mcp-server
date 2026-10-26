@@ -71,10 +71,11 @@ const FIELD_HELP = {
   pull_direction_mode:
     'draft only: "axis" or "normal" shortcut for the pull direction (faces only). Mutually exclusive with pull_direction.',
   bidirectional: 'ray and ray_grid: also shoot from the origin in the opposite direction.',
-  spacing: 'ray_grid: grid pitch in millimetres, at most 1000.',
+  spacing: 'ray_grid: grid pitch in the STEP artifact’s declared length units, at most 1000.',
   max_rays:
     'ray_grid and thickness: maximum ray casts, 1 to 20000. Default 4000. Raising it allows a finer grid at proportionally higher cost.',
-  max_distance: 'ray, ray_grid and thickness: ignore hits beyond this distance in millimetres.',
+  max_distance:
+    'ray, ray_grid and thickness: ignore hits beyond this distance in the STEP artifact’s declared length units.',
   origin: 'ray and ray_grid: explicit ray origin [x, y, z]. Mutually exclusive with origin_mode.',
   origin_mode:
     'ray and ray_grid: place the origin at the entity extent instead of passing origin: extent_min, extent_center (default), or extent_max.',
@@ -378,7 +379,7 @@ export async function handler(args: z.output<typeof schema>) {
         origin: args.origin,
         originMode: args.origin_mode,
         bidirectional: args.bidirectional,
-        spacingMm: args.spacing,
+        spacing: args.spacing,
         maxRays: args.max_rays,
         maxDistance: args.max_distance,
         points: args.points,
