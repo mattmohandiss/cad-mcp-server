@@ -916,12 +916,15 @@ json pmiInventory(const Model& m) {
 
 json dispatch(const std::string& op, const json& args) {
   if (op == "hello") return {{"occt", OCC_VERSION_COMPLETE}, {"protocol",2}, {"models",models.size()},
-    // The operations this binary actually implements, so a server whose build is
-    // newer than the binary it is pointed at fails at connect time rather than
-    // mid-conversation with "Unknown operation". Keep in step with dispatch().
-    {"ops", {"open","close","inspect","pmi","findEntities","measureEntityDistances",
-             "measureGeometry","volume","meshChunk","box","memory","ping","hello",
-             "configureAllocator","allocatorSettings","releaseMemory"}},
+    // The operations this binary accepts. Two things read it: a client checking that
+    // the binary is not older than its source, and the parity test, which compares
+    // this list against the operations the request handlers actually implement.
+    // meshChunk is served by the frame loop rather than dispatch(), which is why it
+    // appears here but not in dispatch().
+    {"ops", {"allocatorSettings","benchVolume","box","cleanMesh","close",
+             "configureAllocator","distance","findEntities","hello","inspect",
+             "measureEntityDistances","measureGeometry","memory","mesh","meshChunk",
+             "open","ping","pmi","releaseMemory","volume"}},
 #if defined(__COSMOPOLITAN__)
     {"runtime","cosmopolitan"}
 #else
