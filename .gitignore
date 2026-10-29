@@ -37,7 +37,7 @@ samples/**/PDF/
 *.stp
 *.STEP
 
-# Generated fixtures: `just fixtures` writes these from
+# Generated fixtures: `just fixture` writes these from
 # occt/sidecar/tests/generate_fixtures.cpp, and the NIST files are fetched by hand with the
 # hashes recorded in tests/fixtures/README.md. A STEP file in this repository is a mistake: it
 # cannot be reviewed in a diff, and nothing regenerates it.

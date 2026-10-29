@@ -1,6 +1,6 @@
 # Test fixtures
 
-**Nothing here is committed.** The directory is a build product: `just fixtures` builds the
+**Nothing here is committed.** The directory is a build product: `just fixture` builds the
 generator that lives in this repository and runs it here, and `just test-integration`
 regenerates it before it runs.
 
