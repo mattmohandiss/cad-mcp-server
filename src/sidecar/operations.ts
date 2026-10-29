@@ -57,7 +57,13 @@ export interface SidecarPmi {
   counts: {
     dimensions: number;
     geometricTolerances: number;
-    datums: number;
+    /**
+     * Datum *references*, one per tolerance frame that names the datum, so a datum
+     * shared by three frames counts three times.
+     */
+    datumReferences: number;
+    /** Distinct datum names: how many datums the model declares. */
+    uniqueDatums: number;
     presentationSkipped: number;
   };
   dimensions: SidecarPmiDimension[];
@@ -73,6 +79,14 @@ export interface SidecarPmiDimension {
   /** OCCT's own semantic name, e.g. "diameter" or "linear distance". */
   kind: string;
   nominal: number;
+  /**
+   * False when OCCT could not resolve the magnitude and left it at 0.0. A location
+   * dimension that defines a tolerance frame has no value of its own, and reporting
+   * that as a nominal of zero makes any comparison against it look like a violation.
+   */
+  valueResolved: boolean;
+  /** Which tolerance form the callout carries: `plus-minus`, `range`, `class` or `none`. */
+  toleranceForm: string;
   upperDeviation?: number;
   lowerDeviation?: number;
   lowerBound?: number;
@@ -95,7 +109,12 @@ export interface SidecarPmiTolerance {
    * genuine zero-at-MMC callout reads true, because it carries a modifier.
    */
   valueResolved: boolean;
-  datums?: Array<{ name: string; position: number }>;
+  /**
+   * The datum references this tolerance names, in frame order. Each carries the
+   * shapes its datum is attached to, because a tolerance against a datum cannot be
+   * evaluated if the datum's own feature cannot be located.
+   */
+  datums?: Array<{ name: string; position: number; entityIds?: string[] }>;
   entityIds?: string[];
   secondaryEntityIds?: string[];
 }
@@ -106,6 +125,8 @@ export interface SidecarPmiDatum {
   position: number;
   isTarget: boolean;
   targetType?: string;
+  /** The shapes the datum is attached to, so a tolerance referencing it can be checked. */
+  entityIds?: string[];
 }
 
 /**
@@ -147,6 +168,14 @@ export interface SidecarOps {
     entityType: string;
     componentName?: string;
     entityIds?: readonly string[];
+    /**
+     * Whether to compute each entity's geometry (bounds, surface type, area, radius).
+     *
+     * Default true. `false` asks only which entities exist, and skips the bounding box and
+     * the surface integral for each of them — the difference between listing a 34 MB
+     * assembly's faces in a second and in half a minute.
+     */
+    properties?: boolean;
     filters?: Record<string, unknown>;
     limit?: number;
     offset?: number;
@@ -180,7 +209,7 @@ export interface SidecarOps {
   };
   meshChunk: {
     modelId: number;
-    faceIndices: readonly number[];
+    faceIds: readonly string[];
     deflection: number;
     angularDeflection: number;
   };

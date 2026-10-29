@@ -87,7 +87,30 @@ struct Model {
   TopoDS_Shape shape;
   occ::handle<TDocStd_Document> doc;
   std::vector<ComponentOccurrence> occurrences;
+  // Shape maps are a pure function of the model and the scope, and building one is
+  // O(shapes). Rebuilding it per request made paging quadratic: six pages of a five
+  // thousand face model re-mapped the model six times. Built once here and reused.
+  mutable std::map<std::string, NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher>> shapeMaps;
 };
+
+/**
+ * The shape map for one scope, built at most once per model.
+ * @param m - the open model, whose cache outlives the call.
+ * @param source - whole part or one occurrence.
+ * @param kind - face, edge, vertex, or body.
+ * @returns the indexed map of that scope's shapes.
+ */
+const NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher>& shapeMapOf(
+    const Model& m, const ComponentOccurrence& source, TopAbs_ShapeEnum kind) {
+  const char* tag = kind == TopAbs_FACE ? "face" : kind == TopAbs_EDGE ? "edge"
+                  : kind == TopAbs_VERTEX ? "vertex" : "body";
+  const std::string key = std::string(tag) + "@" + source.scope;
+  const auto found = m.shapeMaps.find(key);
+  if (found != m.shapeMaps.end()) return found->second;
+  NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> shapes;
+  TopExp::MapShapes(source.shape, kind, shapes);
+  return m.shapeMaps.emplace(key, std::move(shapes)).first->second;
+}
 std::map<int, Model> models;
 int nextModel = 1;
 #if defined(__COSMOPOLITAN__)
@@ -185,17 +208,44 @@ Bnd_Box computeShapeBounds(const TopoDS_Shape& shape) {
   return box;
 }
 
+// The component scope grammar, in one place. `src/utils/ids.ts` is its definition:
+// `<name>` addresses a component, `<name>#<instance>` addresses one occurrence of a
+// repeated one. Two callers used to implement this rule separately and disagreed —
+// a base name selected every instance for `component_name` and was rejected as an
+// unknown component everywhere else — so any change here must stay in one function.
+std::vector<const ComponentOccurrence*> resolveScope(const Model& m, const std::string& scope) {
+  std::vector<const ComponentOccurrence*> matched;
+  for (const auto& occurrence : m.occurrences)
+    if (occurrence.scope == scope || occurrence.scope.rfind(scope + "#", 0) == 0)
+      matched.push_back(&occurrence);
+  return matched;
+}
+
+/**
+ * The single occurrence an entity ID names.
+ *
+ * A scope that selects several occurrences cannot identify one entity, so an
+ * ambiguous name is refused with the candidates rather than resolved to whichever
+ * instance happened to come first.
+ */
+const ComponentOccurrence& resolveOneScope(const Model& m, const std::string& scope) {
+  const auto matched = resolveScope(m, scope);
+  if (matched.empty()) throw std::runtime_error("Unknown assembly component: " + scope);
+  if (matched.size() > 1)
+    throw std::runtime_error("Assembly component '" + scope + "' has " +
+                             std::to_string(matched.size()) + " occurrences; name one of " +
+                             matched.front()->scope + " ... " + matched.back()->scope);
+  return *matched.front();
+}
+
 TopoDS_Shape resolveEntity(const Model& m, const std::string& id) {
   const auto scopeStart = id.rfind("component:", 0) == 0 ? id.find('/') : std::string::npos;
-  TopoDS_Shape ownerShape = m.shape;
+  const ComponentOccurrence* owner = nullptr;
   std::string localId = id;
   if (scopeStart != std::string::npos) {
     const std::string scope = id.substr(10, scopeStart - 10);
     localId = id.substr(scopeStart + 1);
-    auto occurrence = std::find_if(m.occurrences.begin(), m.occurrences.end(),
-      [&](const ComponentOccurrence& item) { return item.scope == scope; });
-    if (occurrence == m.occurrences.end()) throw std::runtime_error("Unknown assembly component: " + scope);
-    ownerShape = occurrence->shape;
+    owner = &resolveOneScope(m, scope);
   }
   const auto separator = localId.find(':');
   if (separator == std::string::npos) throw std::runtime_error("Invalid entity id: " + id);
@@ -209,8 +259,12 @@ TopoDS_Shape resolveEntity(const Model& m, const std::string& id) {
   else if (kind == "vertex") shapeKind = TopAbs_VERTEX;
   else if (kind == "body") shapeKind = TopAbs_SOLID;
   else throw std::runtime_error("Unsupported entity id kind: " + kind);
-  NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> shapes;
-  TopExp::MapShapes(ownerShape, shapeKind, shapes);
+  // The map is cached on the model: re-mapping it here made every entity-addressed call
+  // O(model), so a 96-face mesh chunk on a five thousand face assembly mapped the model
+  // ninety-six times. That is the difference between a chunk taking milliseconds and
+  // taking seconds.
+  const ComponentOccurrence whole = {"", m.shape};
+  const auto& shapes = shapeMapOf(m, owner == nullptr ? whole : *owner, shapeKind);
   if (index >= shapes.Extent()) throw std::runtime_error("Entity id out of range: " + id);
   return shapes.FindKey(index + 1);
 }
@@ -670,6 +724,46 @@ json shapeBounds(const TopoDS_Shape& shape) {
   double x0,y0,z0,x1,y1,z1; box.Get(x0,y0,z0,x1,y1,z1);
   return {{"min",{x0,y0,z0}},{"max",{x1,y1,z1}},{"center",{(x0+x1)/2,(y0+y1)/2,(z0+z1)/2}}};
 }
+/**
+ * The geometric facts about one entity: where it is, and what it is.
+ *
+ * Split out of the listing loop so the loop can choose not to ask for them. A caller that
+ * only needs to know which entities exist asks for `properties: false`; that is the face list
+ * a viewer groups its mesh chunks from, and it needs identity and nothing else.
+ */
+json entityProperties(const TopoDS_Shape& shape, const std::string& kind) {
+  const json bounds=shapeBounds(shape);
+  json facts={{"bbox",{{"min",bounds.at("min")},{"max",bounds.at("max")}}},
+    {"bbox_center",bounds.at("center")}};
+  if(kind=="face") {
+    const TopoDS_Face face=TopoDS::Face(shape); BRepAdaptor_Surface surface(face,true);
+    GProp_GProps props; BRepGProp::SurfaceProperties(face,props);
+    facts["surface_type"]=surfaceTypeName(surface.GetType()); facts["area"]=props.Mass();
+    if(surface.GetType()==GeomAbs_Plane) {
+      gp_Dir normal=surface.Plane().Axis().Direction();
+      if(face.Orientation()==TopAbs_REVERSED) normal.Reverse();
+      facts["normal"]={normal.X(),normal.Y(),normal.Z()};
+    }
+    if(surface.GetType()==GeomAbs_Cylinder) facts["radius"]=surface.Cylinder().Radius();
+    else if(surface.GetType()==GeomAbs_Sphere) facts["radius"]=surface.Sphere().Radius();
+    else if(surface.GetType()==GeomAbs_Torus) facts["radius"]=surface.Torus().MinorRadius();
+    if(facts.contains("radius")) facts["diameter"]=2.0*facts["radius"].get<double>();
+  } else if(kind=="edge") {
+    const TopoDS_Edge edge=TopoDS::Edge(shape); BRepAdaptor_Curve curve(edge);
+    GProp_GProps props; BRepGProp::LinearProperties(edge,props);
+    facts["curve_type"]=curveTypeName(curve.GetType()); facts["length"]=props.Mass();
+    if(curve.GetType()==GeomAbs_Circle) facts["radius"]=curve.Circle().Radius();
+    const gp_Pnt a=curve.Value(curve.FirstParameter()), b=curve.Value(curve.LastParameter());
+    facts["start_point"]={a.X(),a.Y(),a.Z()}; facts["end_point"]={b.X(),b.Y(),b.Z()};
+  } else if(kind=="body") {
+    GProp_GProps props; BRepGProp::VolumeProperties(shape,props);
+    facts["volume"]=props.Mass();
+  } else {
+    const gp_Pnt point=BRep_Tool::Pnt(TopoDS::Vertex(shape));
+    facts["point"]={point.X(),point.Y(),point.Z()};
+  }
+  return facts;
+}
 json findEntities(const Model& m, const json& args) {
   const std::string kind=args.at("entityType").get<std::string>();
   const TopAbs_ShapeEnum shapeKind=kind=="face"?TopAbs_FACE:kind=="edge"?TopAbs_EDGE:kind=="vertex"?TopAbs_VERTEX:kind=="body"?TopAbs_SOLID:TopAbs_SHAPE;
@@ -677,6 +771,10 @@ json findEntities(const Model& m, const json& args) {
   const json filters=args.value("filters",json::object());
   if(!filters.is_object()) throw std::runtime_error("filters must be an object");
   const int limit=args.value("limit",100), offset=args.value("offset",0);
+  // `properties: false` asks only which entities exist, which is what a viewer needs to group
+  // its mesh chunks. Computing a face's bounds, surface and area is the expensive part of this
+  // operation, and a caller that does not need it should not pay for it.
+  const bool wantProperties=args.value("properties",true);
   if(limit<1||limit>1000||offset<0) throw std::runtime_error("Pagination must use limit 1..1000 and non-negative offset");
   std::set<std::string> requestedIds;
   const bool hasEntityIds=args.contains("entityIds");
@@ -688,9 +786,9 @@ json findEntities(const Model& m, const json& args) {
   if (args.contains("componentName")) {
     const std::string name = args.at("componentName").get<std::string>();
     if (name.empty() || name.size() > 256) throw std::runtime_error("Invalid componentName");
-    for (const auto& occurrence : m.occurrences)
-      if (occurrence.scope == name || occurrence.scope.rfind(name + "#", 0) == 0)
-        sources.push_back(occurrence);
+    // A filter, so a base name selects every occurrence of a repeated component.
+    for (const ComponentOccurrence* occurrence : resolveScope(m, name))
+      sources.push_back(*occurrence);
     if (sources.empty()) throw std::runtime_error("Unknown assembly component: " + name);
   } else {
     sources.push_back({"", m.shape});
@@ -698,42 +796,21 @@ json findEntities(const Model& m, const json& args) {
   json entities=json::array();
   int total=0;
   for (const auto& source : sources) {
-    NCollection_IndexedMap<TopoDS_Shape,TopTools_ShapeMapHasher> shapes;
-    TopExp::MapShapes(source.shape,shapeKind,shapes);
+    const auto& shapes = shapeMapOf(m, source, shapeKind);
   for(int i=1;i<=shapes.Extent();++i) {
-    const TopoDS_Shape& shape=shapes.FindKey(i); const json bounds=shapeBounds(shape);
+    const TopoDS_Shape& shape=shapes.FindKey(i);
     const std::string id=(source.scope.empty()?"":"component:"+source.scope+"/")+kind+":"+std::to_string(i-1);
-    json entity={{"id",id},
-      {"bbox",{{"min",bounds.at("min")},{"max",bounds.at("max")}}},
-      {"bbox_center",bounds.at("center")}};
-    if(kind=="face") {
-      const TopoDS_Face face=TopoDS::Face(shape); BRepAdaptor_Surface surface(face,true);
-      GProp_GProps props; BRepGProp::SurfaceProperties(face,props);
-      entity["surface_type"]=surfaceTypeName(surface.GetType()); entity["area"]=props.Mass();
-      if(surface.GetType()==GeomAbs_Plane) {
-        gp_Dir normal=surface.Plane().Axis().Direction();
-        if(face.Orientation()==TopAbs_REVERSED) normal.Reverse();
-        entity["normal"]={normal.X(),normal.Y(),normal.Z()};
-      }
-      if(surface.GetType()==GeomAbs_Cylinder) entity["radius"]=surface.Cylinder().Radius();
-      else if(surface.GetType()==GeomAbs_Sphere) entity["radius"]=surface.Sphere().Radius();
-      else if(surface.GetType()==GeomAbs_Torus) entity["radius"]=surface.Torus().MinorRadius();
-      if(entity.contains("radius")) entity["diameter"]=2.0*entity["radius"].get<double>();
-    } else if(kind=="edge") {
-      const TopoDS_Edge edge=TopoDS::Edge(shape); BRepAdaptor_Curve curve(edge);
-      GProp_GProps props; BRepGProp::LinearProperties(edge,props);
-      entity["curve_type"]=curveTypeName(curve.GetType()); entity["length"]=props.Mass();
-      if(curve.GetType()==GeomAbs_Circle) entity["radius"]=curve.Circle().Radius();
-      const gp_Pnt a=curve.Value(curve.FirstParameter()), b=curve.Value(curve.LastParameter());
-      entity["start_point"]={a.X(),a.Y(),a.Z()}; entity["end_point"]={b.X(),b.Y(),b.Z()};
-    } else if(kind=="body") {
-      GProp_GProps props; BRepGProp::VolumeProperties(shape,props);
-      entity["volume"]=props.Mass();
-    } else {
-      const gp_Pnt point=BRep_Tool::Pnt(TopoDS::Vertex(shape));
-      entity["point"]={point.X(),point.Y(),point.Z()};
-    }
-    if(hasEntityIds&&!requestedIds.count(entity.at("id").get<std::string>())) continue;
+    if(hasEntityIds&&!requestedIds.count(id)) continue;
+    // Property computation — a bounding box, a surface adaptor, an area integral — is the
+    // expensive part of this loop, and a page only needs `limit` of it. With no
+    // property-dependent filter to apply, a face outside the requested window is counted
+    // and not read. This is O(page) instead of O(model), which is the difference between a
+    // thirty-megabyte assembly listing its faces in a second and in two minutes.
+    const bool inWindow=total>=offset&&static_cast<int>(entities.size())<limit;
+    const bool needsProperties=hasEntityIds||!filters.empty()||(wantProperties&&inWindow);
+    if(!needsProperties&&!inWindow) { ++total; continue; }
+    json entity={{"id",id}};
+    if(needsProperties) entity.update(entityProperties(shape,kind));
     bool matched=true;
     const char* typeKey=kind=="face"?"surface_type":"curve_type";
     if(filters.contains(typeKey)&&entity.at(typeKey)!=filters.at(typeKey)) matched=false;

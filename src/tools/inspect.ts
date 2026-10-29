@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { stripNulls } from '../tool-schemas.js';
 import { sidecarModels } from '../sidecar/models.js';
+import { memoiseByRevision } from '../sidecar/memo.js';
 import type { Vec3 } from '../sidecar/operations.js';
 import {
   artifactLocatorSchema,
@@ -77,7 +78,12 @@ export async function handler(args: z.output<typeof schema>) {
   return sidecarModels.withModel(
     artifactPath(args.uri),
     async (client, modelId, _filePath, revision, units) => {
-      const { result } = await client.request('inspect', { modelId });
+      const result = await memoiseByRevision(
+        _filePath,
+        revision,
+        'inspect',
+        async () => (await client.request('inspect', { modelId })).result,
+      );
       const { min, max } = result.bounds;
       const [minX, minY, minZ] = min;
       const [maxX, maxY, maxZ] = max;
