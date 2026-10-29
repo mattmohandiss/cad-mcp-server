@@ -151,13 +151,19 @@ const baseSchema = z
     sources: z
       .array(shapeEntityId)
       .min(1)
-      .max(1000)
+      .max(
+        1000,
+        'sources is capped at 1000 entities per call: split it into batches and measure each',
+      )
       .optional()
       .meta({ description: FIELD_HELP.sources }),
     targets: z
       .array(shapeEntityId)
       .min(1)
-      .max(1000)
+      .max(
+        1000,
+        'targets is capped at 1000 entities per call: narrow the targets or measure in batches',
+      )
       .optional()
       .meta({ description: FIELD_HELP.targets }),
     summary: z
@@ -167,7 +173,7 @@ const baseSchema = z
     entity_ids: z
       .array(entityId)
       .min(1)
-      .max(100)
+      .max(100, 'entity_ids is capped at 100 entities per call: measure in batches')
       .optional()
       .meta({ description: FIELD_HELP.entity_ids }),
     direction: point3.optional().meta({ description: FIELD_HELP.direction }),
@@ -183,23 +189,17 @@ const baseSchema = z
     bidirectional: z.boolean().optional().meta({
       description: FIELD_HELP.bidirectional,
     }),
-    spacing: z.coerce
-      .number()
-      .positive()
-      .max(1000)
-      .optional()
-      .meta({ description: FIELD_HELP.spacing }),
+    spacing: z.coerce.number().positive().optional().meta({ description: FIELD_HELP.spacing }),
     max_rays: z.coerce
       .number()
       .int()
       .min(1)
-      .max(20000)
+      .max(20000, 'max_rays cannot exceed 20000: increase spacing so the grid asks for fewer rays')
       .optional()
       .meta({ description: FIELD_HELP.max_rays }),
     max_distance: z.coerce
       .number()
       .positive()
-      .max(1_000_000)
       .optional()
       .meta({ description: FIELD_HELP.max_distance }),
     origin: point3.optional().meta({ description: FIELD_HELP.origin }),
@@ -207,7 +207,12 @@ const baseSchema = z
       .enum(['extent_min', 'extent_center', 'extent_max'])
       .optional()
       .meta({ description: FIELD_HELP.origin_mode }),
-    points: z.array(point3).min(1).max(100).optional().meta({ description: FIELD_HELP.points }),
+    points: z
+      .array(point3)
+      .min(1)
+      .max(100, 'points is capped at 100 sample points per call: measure in batches')
+      .optional()
+      .meta({ description: FIELD_HELP.points }),
     checks: z
       .array(
         z.enum([
@@ -225,7 +230,6 @@ const baseSchema = z
     tolerance: z.coerce
       .number()
       .nonnegative()
-      .max(1000)
       .optional()
       .meta({ description: FIELD_HELP.tolerance }),
     plane_origin: point3.optional().meta({ description: FIELD_HELP.plane_origin }),
