@@ -40,7 +40,11 @@ sidecar-native:
 sidecar-native-ci:
 	python3 occt/sidecar/scripts/build.py native --jobs 2 --work occt/sidecar/build-work
 
-# Cosmopolitan (APE) sidecar: the artefact that ships (cold ~90 min on 8 cores).
+# Cosmopolitan (APE) sidecar: the artefact that ships.
+# Cold ~90 min on 8 cores; once `build-work/cosmo` exists it is incremental — a
+# sidecar.cpp change is one compile and one link. Run this before believing an
+# integration failure: those tests load this payload, not `build-work/native`, so a
+# stale payload makes correct source look broken.
 sidecar-cosmo:
 	python3 occt/sidecar/scripts/build.py cosmo --jobs {{ num_cpus() }} --work occt/sidecar/build-work
 
