@@ -74,5 +74,9 @@ subprocess.run(command,check=True)
 targets=['occt-sidecar']
 if args.variant=='native' and args.also_static:
     targets.append('occt-sidecar-static')
+# The fixture generator is a native-only tool: the Cosmopolitan build compiles the shipped
+# sidecar and has no use for a host executable.
+if args.variant=='native':
+    targets.append('generate-fixtures')
 subprocess.run(['cmake','--build',str(build),'--parallel',str(args.jobs),'--target',*targets],check=True)
 print(f'Built under {build}')

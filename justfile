@@ -13,8 +13,9 @@ build:
 test:
 	npm test
 
-# Native sidecar integration tests (require a configured CAD_MCP_SIDECAR).
-test-integration:
+# Native sidecar integration tests (require a configured CAD_MCP_SIDECAR). The fixtures are
+# regenerated first: they are build products, not sources.
+test-integration: fixtures
 	npm run test:integration
 
 typecheck:
@@ -36,6 +37,17 @@ ci: fmt-check lint typecheck sidecar-native-ci test test-integration
 
 sidecar-native:
 	python3 occt/sidecar/scripts/build.py native --jobs 8 --work occt/sidecar/build-work
+
+# Regenerate every synthetic fixture from the generator that describes it.
+#
+# Nothing under `tests/fixtures/` is committed, so a fixture cannot drift from the test that
+# asserts about it and cannot become an orphan; the shapes live in
+# `occt/sidecar/tests/generate_fixtures.cpp` and are built by the same native target as the
+# sidecar. The `nist_ctc_*` files are deliberately not generated — they carry a real exporter's
+# semantic, graphical, and tessellated PMI, and testing our reader against our own writer would
+# prove nothing. See `tests/fixtures/README.md`.
+fixtures: sidecar-native
+	./occt/sidecar/build-work/native/generate-fixtures tests/fixtures
 
 sidecar-native-ci:
 	python3 occt/sidecar/scripts/build.py native --jobs 2 --work occt/sidecar/build-work
