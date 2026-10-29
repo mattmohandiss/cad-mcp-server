@@ -10,9 +10,15 @@ generated locally and is covered by `occt/sidecar/tests/`.
 | `repeated-instances.step`        | An assembly: one 10 mm cube instanced twice, the second translated +20 along x. Exercises occurrence-scoped IDs, and makes a cross-component measurement have a known answer (`body:0` ↔ `body:1` is 10). |
 | `repeated-instances-inch.step`   | The same assembly written in inches. Exercises unit handling.                                                                                                                                             |
 | `repeated-instances-metre.step`  | The same assembly written in metres. Exercises unit handling at the other extreme.                                                                                                                        |
-| `nist_ctc_01_asme1_ap242-e1.stp` | Real semantic PMI. The only file here that declares dimensions, geometric tolerances, and datums.                                                                                                         |
+| `nist_ctc_01_asme1_ap242-e1.stp` | Real semantic PMI. The only file here that declares dimensions, geometric tolerances, and datums. **Fetched, not committed** — see below.                                                                 |
 
 ## `nist_ctc_01_asme1_ap242-e1.stp`
+
+**It is not in the repository.** `*.stp` is ignored, so the PMI reader and join have no
+committed fixture and their integration tests skip when it is absent — the tests are written
+to skip rather than to pass without it. Fetch the file, check the SHA-256 below, and place it
+here; the AP203 twins used by the graphical-only test are in the same download
+(`AP203 with PMI/nist_ctc_01_asme1_ap203.stp` and `AP203 geometry only/nist_ctc_01_asme1_rd.stp`).
 
 Provenance: the NIST MBE PMI Validation and Conformance Testing project, "NIST PMI STEP
 Files" (https://www.nist.gov/document/nist-pmi-step-files), file
