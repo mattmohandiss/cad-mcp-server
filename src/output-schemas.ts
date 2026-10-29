@@ -131,10 +131,20 @@ export const pmi = z.object({
   coordinate_frame: coordinateFrame,
   unit_note: z.string().optional(),
   units: z.object({ length: z.string() }),
+  /**
+   * `semantic` — readable callouts; `graphical-only` — callouts that exist only as
+   * graphics; `none` — nothing declared. An empty section means something different in
+   * each case, and conflating the last two is how a drawn requirement gets reported as no
+   * requirement at all.
+   */
+  pmi_kind: z.enum(['semantic', 'graphical-only', 'none']),
   counts: z.object({
     dimensions: z.number(),
     geometric_tolerances: z.number(),
-    datums: z.number(),
+    /** Datum references: one per tolerance frame that names the datum. */
+    datum_references: z.number(),
+    /** Distinct datum names, which is how many datums the model declares. */
+    unique_datums: z.number(),
     presentation_skipped: z.number(),
   }),
   dimensions: z
@@ -142,6 +152,13 @@ export const pmi = z.object({
       z.object({
         kind: z.string(),
         nominal: z.number(),
+        /**
+         * False when the magnitude could not be read and is reported as 0.0. A caller
+         * must not compare a measurement against `nominal` when this is false.
+         */
+        value_resolved: z.boolean(),
+        /** `plus-minus`, `range`, `class`, or `none`. */
+        tolerance_form: z.string(),
         upper_deviation: z.number().optional(),
         lower_deviation: z.number().optional(),
         lower_bound: z.number().optional(),
@@ -160,7 +177,17 @@ export const pmi = z.object({
         material_requirement: z.string(),
         zone_modifier: z.number().optional(),
         value_resolved: z.boolean(),
-        datums: z.array(z.object({ name: z.string(), position: z.number() })).optional(),
+        datums: z
+          .array(
+            z.object({
+              name: z.string(),
+              position: z.number(),
+              entity_ids: z.array(z.string()).optional(),
+            }),
+          )
+          .optional(),
+        /** Datum references the reader could not attach to geometry, by name. */
+        unlocated_datums: z.array(z.string()).optional(),
         entity_ids: z.array(z.string()).optional(),
         secondary_entity_ids: z.array(z.string()).optional(),
       }),
@@ -173,6 +200,32 @@ export const pmi = z.object({
         position: z.number(),
         is_target: z.boolean(),
         target_type: z.string().optional(),
+        /** The shapes this datum is attached to, so a tolerance referencing it can be checked. */
+        entity_ids: z.array(z.string()).optional(),
+      }),
+    )
+    .optional(),
+  characteristics: z
+    .array(
+      z.object({
+        requirement: z.string(),
+        state: z.enum(['satisfied', 'violated', 'unresolved', 'conflicting', 'not-applicable']),
+        entity_ids: z.array(z.string()),
+        nominal: z.number().optional(),
+        measured: z.number().optional(),
+        deviation: z.number().optional(),
+        reason: z
+          .enum([
+            'value-unresolved',
+            'basic-dimension',
+            'no-tolerance',
+            'unsupported-surface',
+            'needs-frame',
+            'faces-disagree',
+            'duplicate-disagrees',
+          ])
+          .optional(),
+        note: z.string().optional(),
       }),
     )
     .optional(),

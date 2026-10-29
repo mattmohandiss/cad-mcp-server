@@ -869,13 +869,31 @@ json pmiInventory(const Model& m) {
         object->GetSemanticName().IsNull() ? "" : object->GetSemanticName()->ToCString();
     if (kind.rfind("DGT:", 0) == 0) { ++presentationSkipped; continue; }
 
-    json entry{{"type", static_cast<int>(object->GetType())}, {"kind", kind}};
-    entry["nominal"] = object->GetValue();
-    if (object->IsDimWithPlusMinusTolerance()) {
+    // A dimension whose magnitude could not be read leaves every field at its
+    // default, which is the same 0.0 a genuine zero callout reports. Tolerances
+    // carry a `valueResolved` flag for exactly this reason; a dimension needs one
+    // too, because a caller that compares a measurement against an unread nominal
+    // reports a confident violation. A location dimension that defines a tolerance
+    // frame legitimately has no value of its own, so it is reported unresolved
+    // rather than as a nominal of zero.
+    const double nominal = object->GetValue();
+    const bool plusMinus = object->IsDimWithPlusMinusTolerance();
+    const bool withRange = object->IsDimWithRange();
+    const bool withClass = object->IsDimWithClassOfTolerance();
+
+    json entry{{"type", static_cast<int>(object->GetType())},
+               {"kind", kind},
+               {"nominal", nominal},
+               {"toleranceForm", plusMinus   ? "plus-minus"
+                                 : withRange ? "range"
+                                 : withClass ? "class"
+                                             : "none"},
+               {"valueResolved", nominal != 0.0 || plusMinus || withRange || withClass}};
+    if (plusMinus) {
       entry["upperDeviation"] = object->GetUpperTolValue();
       entry["lowerDeviation"] = object->GetLowerTolValue();
     }
-    if (object->IsDimWithRange()) {
+    if (withRange) {
       entry["lowerBound"] = object->GetLowerBound();
       entry["upperBound"] = object->GetUpperBound();
     }
@@ -899,6 +917,12 @@ json pmiInventory(const Model& m) {
       continue;
     const auto object = attribute->GetObject();
     if (object.IsNull()) continue;
+    // The graphical layer carries its own callouts here too, and counting one as
+    // machine-readable is worse than missing it: it would report a graphic nobody can parse
+    // as a declared requirement, and every check built on it would be checking a drawing.
+    const std::string toleranceName =
+        object->GetSemanticName().IsNull() ? "" : object->GetSemanticName()->ToCString();
+    if (toleranceName.rfind("DGT:", 0) == 0) { ++presentationSkipped; continue; }
 
     const int modifier = static_cast<int>(object->GetMaterialRequirementModifier());
     const int zoneShape = static_cast<int>(object->GetTypeOfValue());
@@ -913,9 +937,20 @@ json pmiInventory(const Model& m) {
         continue;
       const auto datum = datumAttribute->GetObject();
       if (datum.IsNull()) continue;
-      datums.push_back(
-          {{"name", datum->GetName().IsNull() ? "" : datum->GetName()->ToCString()},
-           {"position", datum->GetPosition()}});
+      json reference{{"name", datum->GetName().IsNull() ? "" : datum->GetName()->ToCString()},
+                     {"position", datum->GetPosition()}};
+      // A tolerance that references a datum is only checkable if the datum's own
+      // feature can be located, so the reference carries the shapes the datum is
+      // attached to. Without this no position, profile or perpendicularity callout
+      // can be evaluated, whatever else is known about it.
+      NCollection_Sequence<TDF_Label> datumShapesFirst, datumShapesSecond;
+      if (XCAFDoc_DimTolTool::GetRefShapeLabel(datumRefs.Value(d), datumShapesFirst,
+                                               datumShapesSecond)) {
+        auto ids =
+            pmiEntityIds(shapeTool, faces, edges, datumShapesFirst, unresolvedReferences);
+        if (!ids.empty()) reference["entityIds"] = ids;
+      }
+      datums.push_back(std::move(reference));
     }
 
     json entry{{"type", static_cast<int>(object->GetType())},
@@ -942,17 +977,29 @@ json pmiInventory(const Model& m) {
     tolerances.push_back(std::move(entry));
   }
 
+  // One entry per datum *reference*. A tolerance frame names its references
+  // individually, so A, B and C appear once per frame that uses them; the count of
+  // distinct names is reported separately so neither number has to be guessed at.
   json datums = json::array();
+  std::set<std::string> datumNames;
   for (int i = 1; i <= datumLabels.Length(); ++i) {
+    const TDF_Label& datumLabel = datumLabels.Value(i);
     occ::handle<XCAFDoc_Datum> attribute;
-    if (!datumLabels.Value(i).FindAttribute(XCAFDoc_Datum::GetID(), attribute) ||
-        attribute.IsNull())
+    if (!datumLabel.FindAttribute(XCAFDoc_Datum::GetID(), attribute) || attribute.IsNull())
       continue;
     const auto object = attribute->GetObject();
     if (object.IsNull()) continue;
-    json entry{{"name", object->GetName().IsNull() ? "" : object->GetName()->ToCString()},
+    const std::string name =
+        object->GetName().IsNull() ? "" : object->GetName()->ToCString();
+    if (!name.empty()) datumNames.insert(name);
+    json entry{{"name", name},
                {"position", object->GetPosition()},
                {"isTarget", static_cast<bool>(object->IsDatumTarget())}};
+    NCollection_Sequence<TDF_Label> datumShapesFirst, datumShapesSecond;
+    if (XCAFDoc_DimTolTool::GetRefShapeLabel(datumLabel, datumShapesFirst, datumShapesSecond)) {
+      auto ids = pmiEntityIds(shapeTool, faces, edges, datumShapesFirst, unresolvedReferences);
+      if (!ids.empty()) entry["entityIds"] = ids;
+    }
     if (object->IsDatumTarget()) {
       switch (static_cast<int>(object->GetDatumTargetType())) {
         case 1: entry["targetType"] = "point"; break;
@@ -976,13 +1023,22 @@ json pmiInventory(const Model& m) {
   if (unresolvedValues > 0)
     warnings.push_back(std::to_string(unresolvedValues) +
                        " geometric tolerance value(s) could not be read and are reported as 0.0");
+  const int unresolvedDimensionValues = static_cast<int>(
+      std::count_if(dimensions.begin(), dimensions.end(),
+                    [](const json& d) { return !d.at("valueResolved").get<bool>(); }));
+  if (unresolvedDimensionValues > 0)
+    warnings.push_back(
+        std::to_string(unresolvedDimensionValues) +
+        " dimension value(s) could not be read and are reported as 0.0; a location dimension "
+        "that defines a tolerance frame has no value of its own");
 
   return {{"units", {{"length", "mm"},
                      {"note", "GD&T values are reported in millimetres; convert to the "
                               "unit reported for measurements"}}},
           {"counts", {{"dimensions", dimensions.size()},
                       {"geometricTolerances", tolerances.size()},
-                      {"datums", datums.size()},
+                      {"datumReferences", datums.size()},
+                      {"uniqueDatums", datumNames.size()},
                       {"presentationSkipped", presentationSkipped}}},
           {"dimensions", dimensions},
           {"geometricTolerances", tolerances},
@@ -1104,7 +1160,7 @@ json dispatch(const std::string& op, const json& args) {
       if(pool->NbThreads()!=threads)pool->Init(threads);
       pool->SetNbDefaultThreadsToLaunch(threads);
     }
-    BRepMesh_IncrementalMesh mesher(m.shape,deflection,false,0.5,args.value("parallel",false));
+    BRepMesh_IncrementalMesh mesher(m.shape,deflection,false,0.5,args.value("parallel",true));
     if (!mesher.IsDone()) throw std::runtime_error("Meshing failed");
     int triangles=0;
     for(TopExp_Explorer ex(m.shape,TopAbs_FACE);ex.More();ex.Next()) {
@@ -1155,26 +1211,33 @@ void appendFloat32(std::string& output, float value) {
 }
 std::string meshChunk(const json& args) {
   Model& m = model(args);
-  const auto faceIndices = args.at("faceIndices").get<std::vector<int>>();
-  if (faceIndices.empty() || faceIndices.size() > 96)
-    throw std::runtime_error("faceIndices must contain 1..96 faces");
+  // Faces are addressed by ID, not by index. An index only means anything inside one
+  // numbering of one shape, so an assembly's occurrences would be flattened into the
+  // root's numbering and a highlighted face would stop being the face a measurement
+  // named. `resolveEntity` is the one implementation of that grammar.
+  const auto faceIds = args.at("faceIds").get<std::vector<std::string>>();
+  if (faceIds.empty() || faceIds.size() > 96)
+    throw std::runtime_error("faceIds must contain 1..96 faces");
   const double deflection = args.value("deflection", 0.2);
   const double angular = args.value("angularDeflection", 0.35);
   if (!std::isfinite(deflection) || deflection <= 0 || !std::isfinite(angular) || angular <= 0 || angular > 3.141592653589793)
     throw std::runtime_error("Invalid mesh deflection");
 
-  NCollection_IndexedMap<TopoDS_Shape, TopTools_ShapeMapHasher> faceMap;
-  TopExp::MapShapes(m.shape, TopAbs_FACE, faceMap);
-  std::set<int> uniqueIndices;
+  std::set<std::string> uniqueIds;
+  std::vector<TopoDS_Face> faces;
   TopoDS_Compound selected;
   BRep_Builder builder;
   builder.MakeCompound(selected);
-  for (const int index : faceIndices) {
-    if (index < 0 || index >= faceMap.Extent() || !uniqueIndices.insert(index).second)
-      throw std::runtime_error("faceIndices contains an invalid or repeated face");
-    builder.Add(selected, faceMap(index + 1));
+  for (const std::string& id : faceIds) {
+    if (!uniqueIds.insert(id).second)
+      throw std::runtime_error("faceIds contains a repeated face: " + id);
+    const TopoDS_Shape resolved = resolveEntity(m, id);
+    if (resolved.IsNull() || resolved.ShapeType() != TopAbs_FACE)
+      throw std::runtime_error("Not a face: " + id);
+    faces.push_back(TopoDS::Face(resolved));
+    builder.Add(selected, resolved);
   }
-  BRepMesh_IncrementalMesh mesher(selected, deflection, false, angular, args.value("parallel", false));
+  BRepMesh_IncrementalMesh mesher(selected, deflection, false, angular, args.value("parallel", true));
   if (!mesher.IsDone()) throw std::runtime_error("Mesh chunk generation failed");
 
   std::vector<float> positions;
@@ -1182,8 +1245,8 @@ std::string meshChunk(const json& args) {
   std::vector<std::uint32_t> indices;
   std::vector<std::uint32_t> triangleToFace;
   std::uint64_t estimatedBytes = 32;
-  for (std::size_t faceSlot = 0; faceSlot < faceIndices.size(); ++faceSlot) {
-    const TopoDS_Face face = TopoDS::Face(faceMap(faceIndices[faceSlot] + 1));
+  for (std::size_t faceSlot = 0; faceSlot < faces.size(); ++faceSlot) {
+    const TopoDS_Face& face = faces[faceSlot];
     TopLoc_Location location;
     const auto triangulation = BRep_Tool::Triangulation(face, location);
     if (triangulation.IsNull()) throw std::runtime_error("Selected face has no triangulation");

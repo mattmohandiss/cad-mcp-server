@@ -38,9 +38,14 @@ export function comparePmi(baseline: SidecarPmi, candidate: SidecarPmi) {
   const summarise = (pmi: SidecarPmi) => ({
     dimensions: pmi.counts.dimensions,
     geometric_tolerances: pmi.counts.geometricTolerances,
-    datums: pmi.counts.datums,
-    unresolved_values: pmi.geometricTolerances.filter((tolerance) => !tolerance.valueResolved)
-      .length,
+    datums: pmi.counts.uniqueDatums,
+    datum_references: pmi.counts.datumReferences,
+    // A count is only as good as what could be read: a callout whose magnitude did
+    // not resolve exists but cannot be compared, so counting it as present would
+    // overstate the comparison.
+    unresolved_values:
+      pmi.geometricTolerances.filter((tolerance) => !tolerance.valueResolved).length +
+      pmi.dimensions.filter((dimension) => !dimension.valueResolved).length,
   });
   const before = summarise(baseline);
   const after = summarise(candidate);
@@ -51,6 +56,7 @@ export function comparePmi(baseline: SidecarPmi, candidate: SidecarPmi) {
       dimensions: after.dimensions - before.dimensions,
       geometric_tolerances: after.geometric_tolerances - before.geometric_tolerances,
       datums: after.datums - before.datums,
+      datum_references: after.datum_references - before.datum_references,
     },
   };
 }

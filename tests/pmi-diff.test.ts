@@ -8,7 +8,7 @@ import type { SidecarPmi, SidecarPmiTolerance } from '../src/sidecar/operations.
  * a tolerance is *met* is not a file fact.
  */
 function pmi(
-  counts: { dimensions: number; tolerances: number; datums: number },
+  counts: { dimensions: number; tolerances: number; datums: number; datumReferences?: number },
   tolerances: SidecarPmiTolerance[] = [],
 ): SidecarPmi {
   return {
@@ -16,7 +16,8 @@ function pmi(
     counts: {
       dimensions: counts.dimensions,
       geometricTolerances: counts.tolerances,
-      datums: counts.datums,
+      datumReferences: counts.datumReferences ?? counts.datums,
+      uniqueDatums: counts.datums,
       presentationSkipped: 0,
     },
     dimensions: [],
@@ -44,6 +45,7 @@ describe('PMI revision comparison', () => {
       dimensions: 1,
       geometric_tolerances: -2,
       datums: 1,
+      datum_references: 1,
     });
     expect(comparison.baseline).toMatchObject({ geometric_tolerances: 2 });
     expect(comparison.candidate).toMatchObject({ geometric_tolerances: 0 });

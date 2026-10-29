@@ -108,10 +108,13 @@ export const TOOL_REGISTRY: ToolSpec[] = [
     name: 'describe_pmi',
     title: 'Describe Model PMI and GD&T',
     description:
-      'Report the dimensions, geometric tolerances, and datums that a STEP artifact declares, as data: nominal and deviations for each dimension, and value, zone shape, material requirement, and datum references for each geometric tolerance, with the entity IDs each annotation applies to. ' +
-      'These are the callouts the file carries, not a verdict: whether a tolerance is met, whether a stack closes, and what to change are engineering judgements. ' +
-      'A tolerance whose magnitude could not be read is marked value_resolved: false rather than reported as 0, because a genuine zero-at-MMC callout also reads 0. ' +
-      'Values are in the declared unit, the same unit this server uses for measurements. An empty section means the file declares no PMI, which is the common case for a model exported without annotations. ' +
+      'Report the dimensions, geometric tolerances, and datums that a STEP artifact declares, as data: nominal, deviations, and tolerance form for each dimension; value, zone shape, material requirement, and datum references for each geometric tolerance; and the entity IDs each annotation applies to. ' +
+      '`characteristics` checks each dimensional callout against the faces it controls, and reports satisfied or violated where that is arithmetic — a diameter read from the cylindrical faces the callout names — and unresolved with a reason everywhere else, so a callout that was not checked cannot be mistaken for one that was. ' +
+      'Check value_resolved before comparing anything yourself. It is false when the magnitude could not be read and is reported as 0.0, which is what a genuine zero callout also reports; a location dimension defining a tolerance frame has no value of its own. ' +
+      'A basic dimension comes back not-applicable: it defines a tolerance frame and states no limit of its own. An angle or a location callout comes back unresolved with needs-frame, because the angle between two faces and a location dimension direction both depend on the frame the callout is stated in. ' +
+      'A datum reference carries the entity IDs of the shapes its datum is attached to. Without them a tolerance naming that datum cannot be evaluated, so report the datum as unlocated rather than treating the tolerance as met. `unlocated_datums` names those references for you; a tolerance that carries it is not checkable, and saying which datum is missing is the useful answer.' +
+      'Counts report both datum references and distinct datums, because a frame names its references one by one and the same datum appears once per frame. ' +
+      'Values are in the declared unit, the same unit this server uses for measurements. Read pmi_kind before describing what a file does or does not declare: `semantic` means the callouts are readable data; `graphical-only` means the file does show requirements, drawn rather than encoded, so say they must come from the drawing or the engineer instead of saying the model declares none; `none` means it declares nothing at all. ' +
       'Use the artifact reference from inspect; entity IDs are valid only for that revision.',
     purpose: 'Declared dimensions, geometric tolerances, and datums (PMI/GD&T).',
     inputSchema: describePmi.schema,

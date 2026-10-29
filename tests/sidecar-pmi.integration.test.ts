@@ -57,7 +57,36 @@ describe.skipIf(!enabled)('sidecar PMI integration', () => {
         expect(tolerance.valueResolved).toBe(true);
       }
     }
-    const unresolved = result.geometricTolerances.filter((t) => !t.valueResolved);
-    expect(result.warnings.length).toBe(unresolved.length > 0 ? 1 : 0);
+    const unresolvedTolerances = result.geometricTolerances.filter((t) => !t.valueResolved);
+    const unresolvedDimensions = result.dimensions.filter((d) => !d.valueResolved);
+    expect(result.counts.datumReferences).toBeGreaterThanOrEqual(result.counts.uniqueDatums);
+    if (unresolvedTolerances.length + unresolvedDimensions.length > 0) {
+      expect(result.warnings.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('never leaves a dimension value looking resolved when there is nothing to compare against', async () => {
+    const { result } = await client!.request('pmi', { modelId: modelId! });
+    for (const dimension of result.dimensions) {
+      // The flag is the only thing standing between a caller and a comparison
+      // against a nominal that was never read: an unread magnitude and a genuine
+      // zero callout are the same 0.0 on the wire.
+      const readable = dimension.nominal !== 0 || dimension.toleranceForm !== 'none';
+      expect(dimension.valueResolved).toBe(readable);
+      expect(['plus-minus', 'range', 'class', 'none']).toContain(dimension.toleranceForm);
+    }
+  });
+
+  it('locates the shapes a datum is attached to, so a tolerance naming it can be checked', async () => {
+    const { result } = await client!.request('pmi', { modelId: modelId! });
+    for (const tolerance of result.geometricTolerances) {
+      for (const datum of tolerance.datums ?? []) {
+        expect(typeof datum.name).toBe('string');
+        expect(datum.position).toBeGreaterThan(0);
+        // A datum that could not be placed is reported without entity IDs rather
+        // than with a guess, so this only checks what is present is well formed.
+        for (const id of datum.entityIds ?? []) expect(id).toMatch(/^(face|edge):\d+$/);
+      }
+    }
   });
 });
