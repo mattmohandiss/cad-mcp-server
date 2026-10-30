@@ -42,12 +42,24 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # RELEASE_PLEASE_TOKEN is a classic PAT with contents:write and
-      # pull_requests:write scopes. Needed so release-please PRs trigger CI.
+      # Preferred: a GitHub App installation token — short-lived, nothing to
+      # rotate, and not subject to PAT org policies. Falls back to
+      # RELEASE_PLEASE_TOKEN, then GITHUB_TOKEN, so it is safe to adopt before the
+      # App secrets exist.
+      - uses: actions/create-github-app-token@v3
+        id: app-token
+        continue-on-error: true
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      # The token must belong to a user or app, never GITHUB_TOKEN: PRs created
+      # with GITHUB_TOKEN do not trigger CI, so the release PR could never pass
+      # the required `check`.
       - uses: googleapis/release-please-action@v5
         id: release
         with:
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          token: ${{ steps.app-token.outputs.token || secrets.RELEASE_PLEASE_TOKEN || github.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
