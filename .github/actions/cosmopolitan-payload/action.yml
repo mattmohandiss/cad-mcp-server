@@ -1,9 +1,10 @@
 name: Restore or build Cosmopolitan payload
 description: >
-  Resolve the compiled OCCT Cosmopolitan payload in three tiers: exact-key
-  Actions cache, published payload release asset, then an incremental build.
-  The OCCT build tree is cached separately from the sidecar sources, so editing
-  sidecar.cpp recompiles one translation unit instead of the whole kernel.
+  Resolve the compiled OCCT Cosmopolitan payload from one of three sources —
+  exact-key Actions cache, published payload release asset, or a fresh build — and
+  record which one in a single step. The OCCT build tree is cached separately from
+  the sidecar sources, so editing sidecar.cpp recompiles one translation unit
+  instead of the whole kernel.
 
 inputs:
   cache-key:
@@ -27,29 +28,49 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Restore built Cosmopolitan payload
+    - name: Restore payload from cache
       id: payload-cache
       uses: actions/cache/restore@v6
       with:
         path: cosmo-payload.tar.gz
         key: ${{ inputs.cache-key }}
 
-    # Actions caches are scoped to the branch that created them, so a payload
-    # built in a pull request is invisible to main. The release asset is the
-    # branch-independent copy: https://github.com/${{ github.repository }}/releases/tag/payload
-    - name: Download published payload
-      id: payload-asset
-      if: steps.payload-cache.outputs.cache-hit != 'true'
-      continue-on-error: true
+    # One decision, consumed by every step below. Actions caches are scoped to the
+    # branch that created them, so a payload built in a pull request is invisible
+    # to main; the release asset is the branch-independent copy:
+    # https://github.com/${{ github.repository }}/releases/tag/payload
+    - name: Resolve the payload source
+      id: resolve
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
+        CACHE_HIT: ${{ steps.payload-cache.outputs.cache-hit }}
+        ASSET: ${{ inputs.asset-key }}.tar.gz
       run: |
-        gh release download payload --pattern "${{ inputs.asset-key }}.tar.gz" --dir . --clobber
-        mv "${{ inputs.asset-key }}.tar.gz" cosmo-payload.tar.gz
+        if [ "$CACHE_HIT" = "true" ]; then
+          mode=cache
+        elif names=$(gh release view payload --json assets --jq '.assets[].name' 2>/dev/null) \
+             && printf '%s\n' "$names" | grep -qx "$ASSET"; then
+          mode=asset
+        else
+          mode=build
+        fi
+        echo "mode=$mode" >> "$GITHUB_OUTPUT"
+        echo "Payload source: $mode"
 
+    - name: Download payload asset
+      if: steps.resolve.outputs.mode == 'asset'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ASSET: ${{ inputs.asset-key }}.tar.gz
+      run: |
+        gh release download payload --pattern "$ASSET" --dir . --clobber
+        mv "$ASSET" cosmo-payload.tar.gz
+
+    # Everything below runs only when the payload has to be built.
     - name: Cache pinned build inputs
-      if: steps.payload-cache.outputs.cache-hit != 'true' && steps.payload-asset.outcome != 'success'
+      if: steps.resolve.outputs.mode == 'build'
       uses: actions/cache@v6
       with:
         path: |
@@ -63,38 +84,31 @@ runs:
     # ninja recompiles sidecar.cpp and relinks against the cached OCCT objects.
     - name: Restore OCCT build tree
       id: tree-cache
-      if: steps.payload-cache.outputs.cache-hit != 'true' && steps.payload-asset.outcome != 'success'
+      if: steps.resolve.outputs.mode == 'build'
       uses: actions/cache/restore@v6
       with:
         path: occt/sidecar/build-work/cosmo
         key: ${{ inputs.tree-key }}
 
     - name: Install native build tools
-      if: steps.payload-cache.outputs.cache-hit != 'true' && steps.payload-asset.outcome != 'success'
+      if: steps.resolve.outputs.mode == 'build'
       shell: bash
       run: sudo apt-get update && sudo apt-get install -y cmake ninja-build g++ python3
 
-    - name: Report runner capacity
-      if: steps.payload-cache.outputs.cache-hit != 'true' && steps.payload-asset.outcome != 'success'
-      shell: bash
-      run: |
-        echo "CPUs: $(nproc)"
-        echo "OCCT tree restored: ${{ steps.tree-cache.outputs.cache-hit == 'true' }}"
-        free -h || true
-
     - name: Build Cosmopolitan sidecar
-      if: steps.payload-cache.outputs.cache-hit != 'true' && steps.payload-asset.outcome != 'success'
+      if: steps.resolve.outputs.mode == 'build'
       shell: bash
       run: |
         jobs="${{ inputs.jobs }}"
         if [ -z "$jobs" ]; then jobs="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"; fi
-        echo "Building with --jobs $jobs"
-        du -sh occt/sidecar/build-work/cosmo 2>/dev/null || true
+        echo "CPUs: $(nproc); building with --jobs $jobs; OCCT tree restored: ${{ steps.tree-cache.outputs.cache-hit == 'true' }}"
         time python3 occt/sidecar/scripts/build.py cosmo --jobs "$jobs" --work occt/sidecar/build-work
         python3 occt/sidecar/scripts/package_cosmopolitan_payload.py --work occt/sidecar/build-work --output cosmo-payload.tar.gz
 
-    - name: Cache built Cosmopolitan payload
-      if: steps.payload-cache.outputs.cache-hit != 'true'
+    # Save whatever we ended up with — a download is worth caching too — so the
+    # next run on this branch takes the cache path.
+    - name: Save payload to cache
+      if: steps.resolve.outputs.mode != 'cache'
       uses: actions/cache/save@v6
       with:
         path: cosmo-payload.tar.gz
@@ -103,7 +117,7 @@ runs:
     # A large cache can exceed the repository cache budget; failing to store it
     # must not fail an otherwise good build.
     - name: Cache OCCT build tree
-      if: steps.tree-cache.outcome == 'success' && steps.tree-cache.outputs.cache-hit != 'true'
+      if: steps.resolve.outputs.mode == 'build' && steps.tree-cache.outputs.cache-hit != 'true'
       continue-on-error: true
       uses: actions/cache/save@v6
       with:
@@ -111,16 +125,17 @@ runs:
         key: ${{ inputs.tree-key }}
 
     - name: Publish payload asset
-      if: inputs.publish == 'true' && steps.payload-cache.outputs.cache-hit != 'true' && steps.payload-asset.outcome != 'success'
+      if: inputs.publish == 'true' && steps.resolve.outputs.mode == 'build'
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
+        ASSET: ${{ inputs.asset-key }}.tar.gz
       run: |
         if ! gh release view payload >/dev/null 2>&1; then
           gh release create payload --prerelease \
             --title "CI payload cache" \
             --notes "Compiled OCCT Cosmopolitan payloads reused by CI across branches. Managed automatically; safe to ignore."
         fi
-        cp cosmo-payload.tar.gz "${{ inputs.asset-key }}.tar.gz"
-        gh release upload payload "${{ inputs.asset-key }}.tar.gz" --clobber
-        echo "Published ${{ inputs.asset-key }}.tar.gz"
+        cp cosmo-payload.tar.gz "$ASSET"
+        gh release upload payload "$ASSET" --clobber
+        echo "Published $ASSET"
