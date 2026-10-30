@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -7,11 +8,7 @@ const smokeRoot = resolve('smoke');
 const require = createRequire(join(smokeRoot, 'package.json'));
 const packageRoot = join(smokeRoot, 'node_modules/cad-mcp-server');
 const server = join(packageRoot, 'dist/src/index.js');
-const fixture = resolve('tests/fixtures/repeated-instances.step');
-const inchFixture = resolve('tests/fixtures/repeated-instances-inch.step');
-assert.ok(require('node:fs').existsSync(server), `Packed server missing: ${server}`);
-assert.ok(require('node:fs').existsSync(fixture), `STEP fixture missing: ${fixture}`);
-assert.ok(require('node:fs').existsSync(inchFixture), `Inch fixture missing: ${inchFixture}`);
+assert.ok(existsSync(server), `Packed server missing: ${server}`);
 
 delete process.env.CAD_MCP_SIDECAR;
 delete process.env.OCCT_SIDECAR;
@@ -21,13 +18,22 @@ delete process.env.OCCT_LAUNCHER;
 const { Client } = require('@modelcontextprotocol/client');
 const { StdioClientTransport } = require('@modelcontextprotocol/client/stdio');
 
+const EXPECTED_TOOLS = 5;
+
 /**
  * Exercise the packaged artifact the way real hosts do: once with the current
  * protocol pinned, and once with a default client, which negotiates the
- * 2025-era handshake. Both must expose the tools and measure the fixture. The
- * second case also passes a plain filesystem path, not a file: URI.
+ * 2025-era handshake. Both must launch, expose every tool, and — when a fixture
+ * is present — measure it. The second case also passes a plain filesystem path,
+ * not a file: URI.
+ *
+ * Launch, protocol negotiation, and the tool surface are always checked. The
+ * measurement assertions need a generated STEP fixture, which exists only where
+ * the native fixture generator has run (`just fixture`, or `just test-integration`
+ * in a full dev shell). They are skipped, not silently passed, when it is
+ * absent — the same rule the PMI integration tests follow.
  */
-async function smoke({ label, clientOptions, uri, unit }) {
+async function smoke({ label, clientOptions, uri, unit, fixture }) {
   const client = new Client({ name: 'cad-mcp-pack-smoke', version: '1.0.0' }, clientOptions);
   const transport = new StdioClientTransport({
     command: process.execPath,
@@ -38,7 +44,17 @@ async function smoke({ label, clientOptions, uri, unit }) {
   try {
     await client.connect(transport);
     const { tools } = await client.listTools();
-    assert.equal(tools.length, 4, `${label}: expected four tools`);
+    assert.equal(tools.length, EXPECTED_TOOLS, `${label}: expected ${EXPECTED_TOOLS} tools`);
+
+    const protocol = `${client.getNegotiatedProtocolVersion()} (${client.getProtocolEra()})`;
+    if (!existsSync(fixture)) {
+      console.log(
+        `${label}: protocol ${protocol}, tools ${tools.length} — measurement skipped ` +
+          `(${fixture} absent; run \`just fixture\`)`,
+      );
+      return;
+    }
+
     const result = await client.callTool({ name: 'inspect', arguments: { uri } });
     assert.equal(result.isError, undefined, `${label}: ${JSON.stringify(result)}`);
     const size = result.structuredContent?.size;
@@ -74,29 +90,35 @@ async function smoke({ label, clientOptions, uri, unit }) {
       `${label}: thickness measured ${stats.min_distance}`,
     );
     console.log(
-      `${label}: protocol ${client.getNegotiatedProtocolVersion()} (${client.getProtocolEra()}), ` +
-        `tools ${tools.length}, 30x10x10 ${unit} fixture, thickness ${stats.min_distance} ${unit}`,
+      `${label}: protocol ${protocol}, tools ${tools.length}, ` +
+        `30x10x10 ${unit} fixture, thickness ${stats.min_distance} ${unit}`,
     );
   } finally {
     await client.close();
   }
 }
 
+const mm = resolve('tests/fixtures/repeated-instances.step');
+const inch = resolve('tests/fixtures/repeated-instances-inch.step');
+
 await smoke({
   label: 'modern pinned',
   clientOptions: { versionNegotiation: { mode: { pin: '2026-07-28' } } },
-  uri: pathToFileURL(fixture).href,
+  uri: pathToFileURL(mm).href,
   unit: 'mm',
+  fixture: mm,
 });
 await smoke({
   label: 'stock client',
   clientOptions: undefined,
-  uri: fixture,
+  uri: mm,
   unit: 'mm',
+  fixture: mm,
 });
 await smoke({
   label: 'stock client, inch model',
   clientOptions: undefined,
-  uri: inchFixture,
+  uri: inch,
   unit: 'in',
+  fixture: inch,
 });
