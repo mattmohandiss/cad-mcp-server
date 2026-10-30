@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.9.0](https://github.com/ottonic/cad-mcp-server/compare/cad-mcp-server-v0.8.1...cad-mcp-server-v0.9.0) (2026-10-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* measure and report in the model's declared length unit
+* streamline tool contracts for LLM consumers
+
+### Features
+
+* accept local paths and serve the 2025-era MCP handshake ([1ff1231](https://github.com/ottonic/cad-mcp-server/commit/1ff12314caa42d164a4d0dcb3c4e1223530796d8))
+* coerce numeric tool inputs ([6505890](https://github.com/ottonic/cad-mcp-server/commit/6505890fa8e2ce40cae1be0dfd723473dbac3461))
+* **geometry:** address faces per occurrence and read a listing without its geometry ([89ad70b](https://github.com/ottonic/cad-mcp-server/commit/89ad70b1ee1fb433aaf45aa807be54c99c91ba89))
+* **geometry:** fail at connect when the sidecar payload lacks an operation ([379f1b9](https://github.com/ottonic/cad-mcp-server/commit/379f1b95b812361be180657b784e3f6482a6d84f))
+* **geometry:** read declared PMI and join dimensions against measurements ([9dd93d0](https://github.com/ottonic/cad-mcp-server/commit/9dd93d0b163ed0285b76ded8577710bc7a5b2f6c))
+* **geometry:** report declared PMI and GD&T (describe_pmi) ([75839a0](https://github.com/ottonic/cad-mcp-server/commit/75839a04e9465f9333916cfff6da3918a476053d))
+* measure and report in the model's declared length unit ([2969969](https://github.com/ottonic/cad-mcp-server/commit/296996919b5871065d840ecebec485c44325db0c))
+
+
+### Bug Fixes
+
+* **geometry:** make the advertised sidecar operations match the implementation ([0d08f97](https://github.com/ottonic/cad-mcp-server/commit/0d08f97ffa0472e2ad7679827bbde7695aa49f8d))
+* **geometry:** report source units and conservative bounds ([4b4e508](https://github.com/ottonic/cad-mcp-server/commit/4b4e508900c384ea59243d5182ec037cc5ba30d1))
+* **geometry:** use STEP units for ray sampling ([d855d91](https://github.com/ottonic/cad-mcp-server/commit/d855d914a08102dfd60f3faf1f3d82ca4c502976))
+* **measure:** say what to do when a work cap is hit ([de70b99](https://github.com/ottonic/cad-mcp-server/commit/de70b9938d1654a0649110b7bf7681b6cd6b68f8))
+* **sidecar:** report ray distances from the original surface point ([745f820](https://github.com/ottonic/cad-mcp-server/commit/745f820612f48cb1986409af542bc1f67fac6564))
+* **sidecar:** set the system length unit through ChangeReader ([84b55e8](https://github.com/ottonic/cad-mcp-server/commit/84b55e8961816d35fa11b303339a34e17572a423))
+
+
+### Miscellaneous
+
+* **geometry:** count PMI from the real inventory in diff ([b44ea44](https://github.com/ottonic/cad-mcp-server/commit/b44ea4437b79b9cbc61bc006f2591d7aacdf715e))
+* **sidecar:** filter near-origin ray hits instead of offsetting the origin ([11b6b66](https://github.com/ottonic/cad-mcp-server/commit/11b6b66e1758962acceb9ae8b92d2732eac21920))
+* streamline tool contracts for LLM consumers ([35bbd4e](https://github.com/ottonic/cad-mcp-server/commit/35bbd4ed685b676135986cde1c69fa482cf78970))
+
 ## [0.8.1](https://github.com/mattmohandiss/cad-mcp-server/compare/cad-mcp-server-v0.8.0...cad-mcp-server-v0.8.1) (2026-10-19)
 
 
