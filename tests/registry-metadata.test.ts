@@ -30,6 +30,6 @@ describe('server.json registry metadata', () => {
     expect(serverJson.repository.url.replace(/\.git$/, '')).toBe(
       packageJson.repository.url.replace(/^git\+/, '').replace(/\.git$/, ''),
     );
-    expect(serverJson.websiteUrl).toContain('github.com/mattmohandiss/cad-mcp-server');
+    expect(serverJson.websiteUrl).toContain('github.com/ottonic/cad-mcp-server');
   });
 });

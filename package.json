@@ -1,7 +1,7 @@
 {
   "name": "cad-mcp-server",
   "version": "0.8.1",
-  "mcpName": "io.github.mattmohandiss/cad-mcp-server",
+  "mcpName": "io.github.ottonic/cad-mcp-server",
   "description": "Measure STEP CAD files with your AI assistant: dimensions, wall thickness, clearance, draft, and revision diffs. Local, read-only, no CAD license.",
   "type": "module",
   "main": "dist/src/index.js",
@@ -84,13 +84,13 @@
     "access": "public",
     "registry": "https://registry.npmjs.org"
   },
-  "homepage": "https://github.com/mattmohandiss/cad-mcp-server#readme",
+  "homepage": "https://github.com/ottonic/cad-mcp-server#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mattmohandiss/cad-mcp-server.git"
+    "url": "git+https://github.com/ottonic/cad-mcp-server.git"
   },
   "bugs": {
-    "url": "https://github.com/mattmohandiss/cad-mcp-server/issues"
+    "url": "https://github.com/ottonic/cad-mcp-server/issues"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.3.1",
