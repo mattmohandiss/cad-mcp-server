@@ -8,7 +8,7 @@ Ninja, and a C++ compiler. A Nix flake provides the toolchain: `.envrc` runs
 and `nix develop .#checks` is the lightweight shell without the native toolchain.
 
 ```sh
-git clone https://github.com/mattmohandiss/cad-mcp-server.git
+git clone https://github.com/ottonic/cad-mcp-server.git
 cd cad-mcp-server
 just setup
 just check

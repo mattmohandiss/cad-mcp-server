@@ -1,14 +1,14 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.mattmohandiss/cad-mcp-server",
-  "title": "CAD MCP Server",
+  "name": "io.github.ottonic/cad-mcp-server",
+  "title": "Ottogeo — CAD MCP Server",
   "description": "Measure STEP CAD files with your AI assistant: walls, clearances, draft, and revision diffs.",
   "repository": {
-    "url": "https://github.com/mattmohandiss/cad-mcp-server",
+    "url": "https://github.com/ottonic/cad-mcp-server",
     "source": "github",
     "id": "1277384942"
   },
-  "websiteUrl": "https://github.com/mattmohandiss/cad-mcp-server#readme",
+  "websiteUrl": "https://github.com/ottonic/cad-mcp-server#readme",
   "version": "0.8.1",
   "packages": [
     {

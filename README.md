@@ -2,8 +2,8 @@
 
 [![npm version](https://img.shields.io/npm/v/cad-mcp-server?logo=npm)](https://npmjs.com/package/cad-mcp-server)
 [![npm downloads](https://img.shields.io/npm/dm/cad-mcp-server)](https://npmjs.com/package/cad-mcp-server)
-[![license](https://img.shields.io/npm/l/cad-mcp-server)](https://github.com/mattmohandiss/cad-mcp-server/blob/main/LICENSE)
-[![CI](https://github.com/mattmohandiss/cad-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/mattmohandiss/cad-mcp-server/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/cad-mcp-server)](https://github.com/ottonic/cad-mcp-server/blob/main/LICENSE)
+[![CI](https://github.com/ottonic/cad-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/ottonic/cad-mcp-server/actions/workflows/ci.yml)
 
 Give any AI assistant the ability to measure real CAD geometry. The server opens
 STEP files with the Open CASCADE kernel and answers the questions an engineer
@@ -41,7 +41,7 @@ Works with any MCP client — Claude Desktop, Cursor, VS Code, and the rest.
 - "What changed between revision A and revision B?"
 
 More examples, including DFM-style review prompts, are in
-[docs/EXAMPLE_PROMPTS.md](https://github.com/mattmohandiss/cad-mcp-server/blob/main/docs/EXAMPLE_PROMPTS.md).
+[docs/EXAMPLE_PROMPTS.md](https://github.com/ottonic/cad-mcp-server/blob/main/docs/EXAMPLE_PROMPTS.md).
 
 ## Tools
 
@@ -94,7 +94,7 @@ IDs and revision it came from.
 ## Development
 
 Source setup, checks, packaging, and releases are in
-[docs/DEVELOPMENT.md](https://github.com/mattmohandiss/cad-mcp-server/blob/main/docs/DEVELOPMENT.md).
+[docs/DEVELOPMENT.md](https://github.com/ottonic/cad-mcp-server/blob/main/docs/DEVELOPMENT.md).
 The server targets Windows x64, macOS ARM64, and Linux x64, and builds its native
 sidecar from the pinned OCCT revision.
 
@@ -106,11 +106,11 @@ the tarball to check the `cad-mcp-server` executable with a compatible MCP clien
 
 ## Documentation
 
-- [Example prompts](https://github.com/mattmohandiss/cad-mcp-server/blob/main/docs/EXAMPLE_PROMPTS.md)
-- [Architecture](https://github.com/mattmohandiss/cad-mcp-server/blob/main/docs/ARCHITECTURE.md) — tools, workflow, and limits
-- [Security](https://github.com/mattmohandiss/cad-mcp-server/blob/main/docs/SECURITY.md) — local processing and handling CAD files as sensitive input
-- [Changelog](https://github.com/mattmohandiss/cad-mcp-server/blob/main/CHANGELOG.md)
+- [Example prompts](https://github.com/ottonic/cad-mcp-server/blob/main/docs/EXAMPLE_PROMPTS.md)
+- [Architecture](https://github.com/ottonic/cad-mcp-server/blob/main/docs/ARCHITECTURE.md) — tools, workflow, and limits
+- [Security](https://github.com/ottonic/cad-mcp-server/blob/main/docs/SECURITY.md) — local processing and handling CAD files as sensitive input
+- [Changelog](https://github.com/ottonic/cad-mcp-server/blob/main/CHANGELOG.md)
 
 ## License
 
-MIT. Third-party licenses: [THIRD_PARTY_NOTICES.md](https://github.com/mattmohandiss/cad-mcp-server/blob/main/THIRD_PARTY_NOTICES.md).
+MIT. Third-party licenses: [THIRD_PARTY_NOTICES.md](https://github.com/ottonic/cad-mcp-server/blob/main/THIRD_PARTY_NOTICES.md).
