@@ -13,9 +13,11 @@ opencode.json
 TODO.md
 test_prompts.md
 
-# Internal planning (not for public repo)
-docs/PROPOSED_TOOLS.md
+# Internal planning and records (not for the public repo)
 .planning/
+docs/PROPOSED_TOOLS.md
+docs/records/
+*-ledger.md
 
 # Editor / dev env
 .nvim.lua
