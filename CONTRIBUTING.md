@@ -40,3 +40,17 @@ and grant Matt Mohandiss a perpetual, worldwide, non-exclusive, royalty-free,
 irrevocable, sublicensable license to use, reproduce, modify, distribute, and
 relicense your contribution, including under different terms. You retain
 copyright to your contribution.
+
+## Releasing
+
+Releases are automated with
+[release-please](https://github.com/googleapis/release-please) from conventional
+commits on `main`: it opens a release PR that bumps `package.json` and
+`server.json`; merging it tags the release and publishes to npm and the MCP
+registry.
+
+release-please authenticates as a **GitHub App**, not `GITHUB_TOKEN` — PRs created
+with `GITHUB_TOKEN` do not trigger CI, so a release PR could never pass the
+required `check`. The App needs **Contents: Read and write** and **Pull requests:
+Read and write**, installed on the `ottonic` organization; its credentials are the
+organization secrets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`.
