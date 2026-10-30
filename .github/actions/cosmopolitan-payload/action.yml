@@ -29,7 +29,7 @@ runs:
   steps:
     - name: Restore built Cosmopolitan payload
       id: payload-cache
-      uses: actions/cache/restore@v6.1.0
+      uses: actions/cache/restore@v6
       with:
         path: cosmo-payload.tar.gz
         key: ${{ inputs.cache-key }}
@@ -50,7 +50,7 @@ runs:
 
     - name: Cache pinned build inputs
       if: steps.payload-cache.outputs.cache-hit != 'true' && steps.payload-asset.outcome != 'success'
-      uses: actions/cache@v6.1.0
+      uses: actions/cache@v6
       with:
         path: |
           occt/sidecar/build-work/occt-8.0.1-source.tar.gz
@@ -64,7 +64,7 @@ runs:
     - name: Restore OCCT build tree
       id: tree-cache
       if: steps.payload-cache.outputs.cache-hit != 'true' && steps.payload-asset.outcome != 'success'
-      uses: actions/cache/restore@v6.1.0
+      uses: actions/cache/restore@v6
       with:
         path: occt/sidecar/build-work/cosmo
         key: ${{ inputs.tree-key }}
@@ -95,7 +95,7 @@ runs:
 
     - name: Cache built Cosmopolitan payload
       if: steps.payload-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v6.1.0
+      uses: actions/cache/save@v6
       with:
         path: cosmo-payload.tar.gz
         key: ${{ inputs.cache-key }}
@@ -105,7 +105,7 @@ runs:
     - name: Cache OCCT build tree
       if: steps.tree-cache.outcome == 'success' && steps.tree-cache.outputs.cache-hit != 'true'
       continue-on-error: true
-      uses: actions/cache/save@v6.1.0
+      uses: actions/cache/save@v6
       with:
         path: occt/sidecar/build-work/cosmo
         key: ${{ inputs.tree-key }}
