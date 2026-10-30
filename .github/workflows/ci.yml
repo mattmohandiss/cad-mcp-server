@@ -57,7 +57,7 @@ jobs:
         run: |
           # Always emit a valid, non-empty matrix: GitHub evaluates the matrix
           # before a job-level `if`, so an empty one is rejected outright.
-          three='{"include":[{"name":"Linux x64","runner":"ubuntu-24.04","run":true},{"name":"macOS ARM64","runner":"macos-14","run":true},{"name":"Windows x64","runner":"windows-2022","run":true}]}'
+          three='{"include":[{"name":"Linux x64","runner":"ubuntu-24.04","run":true},{"name":"macOS ARM64","runner":"macos-15","run":true},{"name":"Windows x64","runner":"windows-2022","run":true}]}'
           one='{"include":[{"name":"Linux x64","runner":"ubuntu-24.04","run":true}]}'
           none='{"include":[{"name":"skipped","runner":"ubuntu-24.04","run":false}]}'
           if [ "$NATIVE" = "true" ] || [ "$FULL_LABEL" = "true" ]; then
