@@ -1,6 +1,8 @@
 # Example Prompts
 
-These prompts are useful when `cad-mcp` is connected to an MCP host. The server returns deterministic geometry facts. A separate domain capability may interpret those facts as DFM, materials, FEA, or commercial recommendations.
+Drop-in prompts for `cad-mcp` in any MCP host. The server returns deterministic
+geometry facts; a domain capability — or you — can build DFM, materials, FEA, or
+commercial recommendations on top of them.
 
 ## Model Overview
 

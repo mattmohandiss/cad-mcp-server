@@ -1,11 +1,15 @@
-# CAD MCP Server
+# Ottogeo — CAD MCP Server
 
 [![npm version](https://img.shields.io/npm/v/cad-mcp-server?logo=npm)](https://npmjs.com/package/cad-mcp-server)
 [![npm downloads](https://img.shields.io/npm/dm/cad-mcp-server)](https://npmjs.com/package/cad-mcp-server)
 [![license](https://img.shields.io/npm/l/cad-mcp-server)](https://github.com/mattmohandiss/cad-mcp-server/blob/main/LICENSE)
 [![CI](https://github.com/mattmohandiss/cad-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/mattmohandiss/cad-mcp-server/actions/workflows/ci.yml)
 
-An MCP server that measures STEP CAD files for an AI assistant: overall size and volume, hole and boss diameters, wall thickness, clearance, draft, cross-sections, and differences between two revisions. Measurements are computed by the Open CASCADE kernel from the model's own geometry.
+Give any AI assistant the ability to measure real CAD geometry. The server opens
+STEP files with the Open CASCADE kernel and answers the questions an engineer
+actually asks — overall size and volume, hole and boss diameters, wall thickness,
+clearance, draft, cross-sections, and what changed between two revisions — with
+numbers computed from the model's own B-rep, not estimated from a screenshot.
 
 ![The assistant measures a pocket floor to cross-bore distance of 0.8 mm, sections the model to confirm it, and verifies 3.0 mm in the revised STEP file.](docs/images/geometry-measured-demo.webp)
 
@@ -24,9 +28,9 @@ Add the server to your MCP client, then point your assistant at a STEP file:
 }
 ```
 
-Works with any MCP client, including Claude Desktop, Cursor, and VS Code.
+Works with any MCP client — Claude Desktop, Cursor, VS Code, and the rest.
 
-## Example prompts
+## Ask it anything about a part
 
 - "What are the overall dimensions and volume of this part?"
 - "Find the cylindrical faces and list their diameters and axes."
@@ -36,7 +40,8 @@ Works with any MCP client, including Claude Desktop, Cursor, and VS Code.
 - "Cut a section through this body at X = 40."
 - "What changed between revision A and revision B?"
 
-More examples, including DFM-style review prompts, are in [docs/EXAMPLE_PROMPTS.md](https://github.com/mattmohandiss/cad-mcp-server/blob/main/docs/EXAMPLE_PROMPTS.md).
+More examples, including DFM-style review prompts, are in
+[docs/EXAMPLE_PROMPTS.md](https://github.com/mattmohandiss/cad-mcp-server/blob/main/docs/EXAMPLE_PROMPTS.md).
 
 ## Tools
 
@@ -48,30 +53,62 @@ More examples, including DFM-style review prompts, are in [docs/EXAMPLE_PROMPTS.
 | `describe_pmi`  | Declared dimensions (nominal with deviations or bounds), geometric tolerances (value, zone, material modifier, datums), and datums, each with the entity IDs it applies to. |
 | `diff`          | Dimension, volume, area, and topology deltas between two STEP revisions, declared PMI counts, and parsed STEP metadata.                                                     |
 
-Measurement kinds are `distance`, `thickness`, `draft`, `ray`, `ray_grid`, `point_analysis`, `section`, and `continuity`. Lengths are reported in the file's declared unit, which is labelled on every result; angles are in degrees. Bounding boxes are conservative envelopes, and `volume` is null when the file has no solid material.
+Measurement kinds are `distance`, `thickness`, `draft`, `ray`, `ray_grid`,
+`point_analysis`, `section`, and `continuity`. Lengths come back in the file's
+**declared unit**, labelled on every result, so an inch model stays in inches and
+nothing has to be converted by hand. Angles are in degrees.
 
-Results are reproducible: the server returns the entity IDs and the SHA-256 revision each measurement came from, and rejects stale IDs when a file changes underneath a session. It reports geometry; whether a part is manufacturable remains an engineering judgment.
+## Why the numbers hold up
+
+- **Computed by Open CASCADE, not guessed.** The same file and the same query
+  return the same numbers, every time.
+- **Revision-bound and self-verifying.** Every result carries the entity IDs and
+  the SHA-256 revision it came from, and stale IDs are rejected when a file changes
+  underneath a session — so an answer can never be attached to the wrong geometry.
+- **Reads the model's own callouts.** `describe_pmi` reports the dimensions,
+  geometric tolerances, and datums a file declares, each bound to the entities it
+  applies to, so declared requirements can be checked against the geometry.
+- **Local and private.** It runs over stdio and reads files by path. It is
+  read-only and never uploads or writes your CAD data.
 
 ## Requirements
 
 - Node.js 24+
 - Windows x64, macOS ARM64 (Apple Silicon), or Linux x64
-- STEP files, as exported by SolidWorks, Fusion 360, Onshape, FreeCAD, CATIA, or any other CAD system
+- STEP files, as exported by SolidWorks, Fusion 360, Onshape, FreeCAD, CATIA, or
+  any other CAD system
 
 ## FAQ
 
-**Does it need CAD software installed?** No. It reads STEP files directly, so it works on a machine without a CAD application or license.
+**Does it need CAD software installed?** No. It reads STEP files directly, so it
+works on a machine without a CAD application or license.
 
-**Do my files leave my machine?** No. The server runs locally over stdio and reads files by path. It is read-only and never writes to your CAD data.
+**Do my files leave my machine?** No. The server runs locally over stdio and reads
+files by path. It is read-only and never writes to your CAD data.
 
-**How is this different from asking an assistant to look at a screenshot?** Measurements are computed from the model's B-rep geometry by Open CASCADE, so the same file and query return the same numbers. Each result also carries the entity IDs and revision it came from.
+**How is this different from asking an assistant to look at a screenshot?**
+Measurements are computed from the model's B-rep geometry by Open CASCADE, so the
+same file and query return the same numbers. Each result also carries the entity
+IDs and revision it came from.
+
+## Development
+
+Source setup, checks, packaging, and releases are in
+[docs/DEVELOPMENT.md](https://github.com/mattmohandiss/cad-mcp-server/blob/main/docs/DEVELOPMENT.md).
+The server targets Windows x64, macOS ARM64, and Linux x64, and builds its native
+sidecar from the pinned OCCT revision.
+
+## Packaging
+
+`npm pack` builds first and includes the compiled server, the native sidecar, this
+README, and the third-party notices. Tests and source maps are excluded. Install
+the tarball to check the `cad-mcp-server` executable with a compatible MCP client.
 
 ## Documentation
 
 - [Example prompts](https://github.com/mattmohandiss/cad-mcp-server/blob/main/docs/EXAMPLE_PROMPTS.md)
 - [Architecture](https://github.com/mattmohandiss/cad-mcp-server/blob/main/docs/ARCHITECTURE.md) — tools, workflow, and limits
 - [Security](https://github.com/mattmohandiss/cad-mcp-server/blob/main/docs/SECURITY.md) — local processing and handling CAD files as sensitive input
-- [Development](https://github.com/mattmohandiss/cad-mcp-server/blob/main/docs/DEVELOPMENT.md) — source setup, checks, packaging, and releases
 - [Changelog](https://github.com/mattmohandiss/cad-mcp-server/blob/main/CHANGELOG.md)
 
 ## License
