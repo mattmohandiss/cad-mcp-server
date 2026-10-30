@@ -166,7 +166,7 @@ jobs:
           - name: Linux x64
             runner: ubuntu-24.04
           - name: macOS ARM64
-            runner: macos-14
+            runner: macos-15
           - name: Windows x64
             runner: windows-2022
     name: Release smoke (${{ matrix.name }})
