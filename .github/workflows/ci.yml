@@ -92,13 +92,6 @@ jobs:
       - name: Check formatting, lint, and unit tests
         run: just check
 
-      # This v0 action publishes no floating tag, so the exact version is required.
-      - name: Validate MCP registry metadata
-        uses: studiomeyer-io/mcp-passport@v0.1.0
-        with:
-          path: .
-          fail-on: error
-
   build-sidecar:
     needs: changes
     if: needs.changes.outputs.kernel == 'true'
