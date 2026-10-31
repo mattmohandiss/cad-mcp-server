@@ -26,8 +26,8 @@ jobs:
       - name: Restore, download, or build Cosmopolitan payload
         uses: ./.github/actions/cosmopolitan-payload
         with:
-          cache-key: ${{ runner.os }}-cosmo-payload-v1-${{ hashFiles('occt/**', 'CMakeLists.txt', 'cmake/**', 'vendor/**', 'scripts/patch_occt.py', '.github/actions/cosmopolitan-payload/action.yml', '.github/workflows/ci.yml') }}
-          asset-key: ${{ runner.os }}-cosmo-occt-v1-${{ hashFiles('occt/**', 'CMakeLists.txt', 'cmake/**', 'vendor/**', 'scripts/patch_occt.py') }}
+          cache-key: ${{ runner.os }}-cosmo-payload-v1-${{ hashFiles('occt/**', 'vendor/**', '.github/actions/cosmopolitan-payload/action.yml', '.github/workflows/ci.yml') }}
+          asset-key: ${{ runner.os }}-cosmo-occt-v1-${{ hashFiles('occt/**', 'vendor/**') }}
           tree-key: ${{ runner.os }}-cosmo-tree-v1-${{ hashFiles('occt/sidecar/CMakeLists.txt', 'occt/sidecar/cmake/**', 'occt/sidecar/scripts/patch_occt.py', 'occt/sidecar/scripts/build.py', 'vendor/**') }}
           publish: 'true'
 
@@ -69,8 +69,8 @@ jobs:
       - name: Restore, download, or build Cosmopolitan payload
         uses: ./.github/actions/cosmopolitan-payload
         with:
-          cache-key: ${{ runner.os }}-cosmo-payload-v1-${{ hashFiles('occt/**', 'CMakeLists.txt', 'cmake/**', 'vendor/**', 'scripts/patch_occt.py', '.github/actions/cosmopolitan-payload/action.yml', '.github/workflows/ci.yml') }}
-          asset-key: ${{ runner.os }}-cosmo-occt-v1-${{ hashFiles('occt/**', 'CMakeLists.txt', 'cmake/**', 'vendor/**', 'scripts/patch_occt.py') }}
+          cache-key: ${{ runner.os }}-cosmo-payload-v1-${{ hashFiles('occt/**', 'vendor/**', '.github/actions/cosmopolitan-payload/action.yml', '.github/workflows/ci.yml') }}
+          asset-key: ${{ runner.os }}-cosmo-occt-v1-${{ hashFiles('occt/**', 'vendor/**') }}
           tree-key: ${{ runner.os }}-cosmo-tree-v1-${{ hashFiles('occt/sidecar/CMakeLists.txt', 'occt/sidecar/cmake/**', 'occt/sidecar/scripts/patch_occt.py', 'occt/sidecar/scripts/build.py', 'vendor/**') }}
 
       - name: Upload release sidecar payload
