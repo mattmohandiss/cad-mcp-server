@@ -107,9 +107,11 @@ Release-please and npm trusted publishing automate releases:
    Failed downstream jobs can be rerun after correcting their cause.
 
 Npm authentication uses OIDC trusted publishing configured for
-`.github/workflows/release-please.yml`. `RELEASE_PLEASE_TOKEN` is a repository
-secret used to create release PRs that trigger CI. Never commit token values.
-Dependabot maintains npm and GitHub Actions dependency updates.
+`.github/workflows/release-please.yml`. release-please authenticates as a GitHub
+App (`ottonic-release`) so its release PRs trigger CI; its credentials are the
+organization secrets `RELEASE_APP_CLIENT_ID` and `RELEASE_APP_PRIVATE_KEY`. Never
+commit token values. Dependabot maintains npm and GitHub Actions dependency
+updates.
 
 The runtime target matrix, shared with Simulation MCP, is Windows x64,
 macOS ARM64 (Apple Silicon), and Linux x64. Intel macOS, Linux ARM64, and

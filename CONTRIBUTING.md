@@ -53,4 +53,4 @@ release-please authenticates as a **GitHub App**, not `GITHUB_TOKEN` — PRs cre
 with `GITHUB_TOKEN` do not trigger CI, so a release PR could never pass the
 required `check`. The App needs **Contents: Read and write** and **Pull requests:
 Read and write**, installed on the `ottonic` organization; its credentials are the
-organization secrets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`.
+organization secrets `RELEASE_APP_CLIENT_ID` and `RELEASE_APP_PRIVATE_KEY`.
