@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/ottonic/cad-mcp-server/compare/cad-mcp-server-v0.10.0...cad-mcp-server-v0.10.1) (2026-10-31)
+
+
+### Bug Fixes
+
+* **ci:** use a POSIX shell for the packed-artifact install step ([#92](https://github.com/ottonic/cad-mcp-server/issues/92)) ([fe24fd2](https://github.com/ottonic/cad-mcp-server/commit/fe24fd2dd0e284b5fdf61b01911ec0b380868c7b))
+
 ## [0.10.0](https://github.com/ottonic/cad-mcp-server/compare/cad-mcp-server-v0.9.0...cad-mcp-server-v0.10.0) (2026-10-31)
 
 
