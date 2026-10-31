@@ -206,6 +206,7 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           package-manager-cache: false
 
+      # This v0 action publishes no floating tag, so the exact version is required.
       - name: Validate MCP registry metadata
         uses: studiomeyer-io/mcp-passport@v0.1.0
         with:
@@ -240,8 +241,9 @@ jobs:
       - name: Install MCP Registry publisher
         run: |
           archive="$RUNNER_TEMP/mcp-publisher.tar.gz"
-          curl -fsSL -o "$archive" https://github.com/modelcontextprotocol/registry/releases/download/v1.8.1/mcp-publisher_linux_amd64.tar.gz
-          echo 'a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc  '"$archive" | sha256sum --check
+          # Track the latest release rather than pinning: this is a directory
+          # publishing CLI, not part of the shipped artifact.
+          curl -fsSL -o "$archive" https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz
           tar xzf "$archive" mcp-publisher
 
       - name: Publish to MCP Registry
