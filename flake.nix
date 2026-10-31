@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/331800de5053fcebacf6813adb5db9c9dca22a0c";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
 
   outputs =
@@ -46,7 +46,7 @@
           checks = pkgs.mkShell {
             packages = with pkgs; [
               just
-              nodejs_24
+              nodejs_26
             ];
             shellHook = ''
               export PATH="$PWD/node_modules/.bin:$PATH"
@@ -57,7 +57,7 @@
           default = pkgs.mkShell {
             buildInputs = with pkgs; [
               just
-              nodejs_24
+              nodejs_26
               cmake
               ninja
               ccache

@@ -73,7 +73,7 @@ nothing has to be converted by hand. Angles are in degrees.
 
 ## Requirements
 
-- Node.js 24+
+- Node.js 26+
 - Windows x64, macOS ARM64 (Apple Silicon), or Linux x64
 - STEP files, as exported by SolidWorks, Fusion 360, Onshape, FreeCAD, CATIA, or
   any other CAD system

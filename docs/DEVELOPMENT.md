@@ -2,7 +2,7 @@
 
 ## Environment and commands
 
-Requires Node.js 24+ and npm. Native sidecar builds also need Python 3, CMake,
+Requires Node.js 26+ and npm. Native sidecar builds also need Python 3, CMake,
 Ninja, and a C++ compiler. A Nix flake provides the toolchain: `.envrc` runs
 `use flake` (run `direnv allow` after changes), `nix develop` is the full shell,
 and `nix develop .#checks` is the lightweight shell without the native toolchain.
