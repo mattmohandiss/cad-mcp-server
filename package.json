@@ -1,6 +1,6 @@
 {
   "name": "cad-mcp-server",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "mcpName": "io.github.ottonic/cad-mcp-server",
   "description": "Measure STEP CAD files with your AI assistant: dimensions, wall thickness, clearance, draft, and revision diffs. Local, read-only, no CAD license.",
   "type": "module",
