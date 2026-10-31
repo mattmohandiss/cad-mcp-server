@@ -213,6 +213,8 @@ jobs:
           path: packed
 
       - name: Install packed npm artifact
+        # `run` defaults to PowerShell on Windows; the version lookup below needs a POSIX shell.
+        shell: bash
         run: |
           client=$(node -p "require('./package.json').devDependencies['@modelcontextprotocol/client']")
           npm install --prefix smoke --no-save --ignore-scripts ./packed/package.tgz "@modelcontextprotocol/client@$client"
