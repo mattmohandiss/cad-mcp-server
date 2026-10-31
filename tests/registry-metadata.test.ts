@@ -2,13 +2,16 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 /**
- * The MCP Registry validates server.json against its published schema. Its
- * description limit is not enforced by the passport check that runs in CI, so
- * a long description only fails at publish time. Guard the fields the registry
- * cares about here, where the failure is cheap.
+ * The MCP Registry validates server.json against its published schema at publish
+ * time, which is late and needs the network. `mcp-publisher validate` is the
+ * authoritative gate in the release workflow; this test guards the same fields
+ * where a failure is cheap and blocks the pull request instead.
  */
 const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 const serverJson = JSON.parse(readFileSync(new URL('../server.json', import.meta.url), 'utf8'));
+
+// package.json carries a `git+https://…git` URL; server.json wants the plain form.
+const repositoryUrl = packageJson.repository.url.replace(/^git\+/, '').replace(/\.git$/, '');
 
 describe('server.json registry metadata', () => {
   it('uses a description the registry accepts', () => {
@@ -24,12 +27,11 @@ describe('server.json registry metadata', () => {
     expect(serverJson.packages[0].identifier).toBe(packageJson.name);
     expect(serverJson.packages[0].version).toBe(packageJson.version);
     expect(serverJson.packages[0].registryType).toBe('npm');
+    expect(serverJson.packages[0].transport).toEqual({ type: 'stdio' });
   });
 
   it('points at the published npm package and repository', () => {
-    expect(serverJson.repository.url.replace(/\.git$/, '')).toBe(
-      packageJson.repository.url.replace(/^git\+/, '').replace(/\.git$/, ''),
-    );
-    expect(serverJson.websiteUrl).toContain('github.com/ottonic/cad-mcp-server');
+    expect(serverJson.repository.url.replace(/\.git$/, '')).toBe(repositoryUrl);
+    expect(serverJson.websiteUrl).toContain(repositoryUrl);
   });
 });

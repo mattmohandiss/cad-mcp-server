@@ -206,12 +206,16 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           package-manager-cache: false
 
-      # This v0 action publishes no floating tag, so the exact version is required.
+      - name: Install MCP Registry publisher
+        run: |
+          archive="$RUNNER_TEMP/mcp-publisher.tar.gz"
+          # Track the latest release rather than pinning: this is a directory
+          # publishing CLI, not part of the shipped artifact.
+          curl -fsSL -o "$archive" https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz
+          tar xzf "$archive" mcp-publisher
+
       - name: Validate MCP registry metadata
-        uses: studiomeyer-io/mcp-passport@v0.1.0
-        with:
-          path: .
-          fail-on: error
+        run: ./mcp-publisher validate
 
       - uses: actions/download-artifact@v8
         with:
@@ -238,20 +242,14 @@ jobs:
             npm publish "$PACKAGE_TARBALL"
           fi
 
-      - name: Install MCP Registry publisher
-        run: |
-          archive="$RUNNER_TEMP/mcp-publisher.tar.gz"
-          # Track the latest release rather than pinning: this is a directory
-          # publishing CLI, not part of the shipped artifact.
-          curl -fsSL -o "$archive" https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz
-          tar xzf "$archive" mcp-publisher
-
+      # The registry validates that the npm version exists, and npm's CDN can lag
+      # the publish by minutes, so the budget is generous.
       - name: Publish to MCP Registry
         run: |
-          max=5
+          max=10
           for n in $(seq 0 $((max - 1))); do
             if [ "$n" -gt 0 ]; then
-              wait=$((2 ** (n - 1) * 15))
+              wait=$((n <= 5 ? n * 30 : 300))
               echo "Retry $n/$((max - 1)) in ${wait}s..."
               sleep "$wait"
             fi
