@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.10.0](https://github.com/ottonic/cad-mcp-server/compare/cad-mcp-server-v0.9.0...cad-mcp-server-v0.10.0) (2026-10-31)
+
+
+### ⚠ BREAKING CHANGES
+
+* require Node 26 and move to MCP SDK 2.4.0 ([#89](https://github.com/ottonic/cad-mcp-server/issues/89))
+
+### Features
+
+* require Node 26 and move to MCP SDK 2.4.0 ([#89](https://github.com/ottonic/cad-mcp-server/issues/89)) ([93ec9b5](https://github.com/ottonic/cad-mcp-server/commit/93ec9b5f90c5cb69333ccf11fd597e8ee1ea34e9))
+
 ## [0.9.0](https://github.com/ottonic/cad-mcp-server/compare/cad-mcp-server-v0.8.1...cad-mcp-server-v0.9.0) (2026-10-30)
 
 
