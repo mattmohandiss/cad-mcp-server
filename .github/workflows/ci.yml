@@ -216,7 +216,9 @@ jobs:
           path: packed
 
       - name: Install packed npm artifact
-        run: npm install --prefix smoke --no-save --ignore-scripts ./packed/package.tgz @modelcontextprotocol/client@2.3.1
+        run: |
+          client=$(node -p "require('./package.json').devDependencies['@modelcontextprotocol/client']")
+          npm install --prefix smoke --no-save --ignore-scripts ./packed/package.tgz "@modelcontextprotocol/client@$client"
 
       - name: Launch packaged sidecar and inspect STEP fixture
         run: node scripts/smoke-packed-cli.mjs
